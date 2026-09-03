@@ -404,3 +404,44 @@ export class DeviceSessionEntity {
   @CreateDateColumn()
   createdAt: Date;
 }
+
+@Entity('cash_closures')
+@Index(['event', 'status'])
+export class CashClosureEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'uuid' })
+  eventId: string;
+
+  @Column({ type: 'uuid' })
+  openedById: string;
+
+  @Column({ type: 'timestamp' })
+  openedAt: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  closedAt?: Date;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  openingBalance: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  closingBalance?: number;
+
+  @Column({
+    type: 'enum',
+    enum: ['open', 'closed'],
+    default: 'open',
+  })
+  status: string;
+
+  @Column({ nullable: true, type: 'text' })
+  notes?: string;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
