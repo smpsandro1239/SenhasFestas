@@ -2,12 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrderEntity } from '../../entities';
+import { OrderGateway } from '../../websocket/order.gateway';
 
 @Injectable()
 export class PublicScreenService {
   constructor(
     @InjectRepository(OrderEntity)
     private readonly orderRepository: Repository<OrderEntity>,
+    private readonly orderGateway: OrderGateway,
   ) {}
 
   async obterPedidosProntos(): Promise<any[]> {
@@ -54,6 +56,11 @@ export class PublicScreenService {
       throw new Error('Pedido não está pronto para entrega');
     }
     pedido.status = 'delivered';
-    return this.orderRepository.save(pedido);
+    const pedidoAtualizado = await this.orderRepository.save(pedido);
+    
+    // Emitir evento WebSocket para o ecrã público
+    this.orderGateway.emitOrderUpdate(pedidoAtualizado.id, pedidoAtualizado.status);
+    
+    return pedidoAtualizado;
   }
 }

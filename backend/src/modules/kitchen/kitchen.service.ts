@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrderEntity } from '../../entities';
+import { OrderGateway } from '../../websocket/order.gateway';
 
 export interface FiltrosKDS {
   status?: string;
@@ -14,6 +15,7 @@ export class KitchenService {
   constructor(
     @InjectRepository(OrderEntity)
     private readonly orderRepository: Repository<OrderEntity>,
+    private readonly orderGateway: OrderGateway,
   ) {}
 
   async obterPedidos(filtros: FiltrosKDS): Promise<any[]> {
@@ -55,7 +57,12 @@ export class KitchenService {
     }
 
     pedido.status = novoEstado;
-    return this.orderRepository.save(pedido);
+    const pedidoAtualizado = await this.orderRepository.save(pedido);
+    
+    // Emitir evento WebSocket para a cozinha
+    this.orderGateway.emitOrderUpdate(pedidoAtualizado.id, pedidoAtualizado.status);
+    
+    return pedidoAtualizado;
   }
 
   async obterEstatisticas(): Promise<any> {

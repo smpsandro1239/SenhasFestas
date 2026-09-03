@@ -7,22 +7,22 @@ import { KitchenService } from './kitchen.service';
 export class KitchenController {
   constructor(private readonly kitchenService: KitchenService) {}
 
-  @Get('pedidos')
-  async obterPedidos(@Query() filtros: { status?: string; estacao?: string }) {
-    return this.kitchenService.obterPedidos(filtros);
+  @Get('orders')
+  async getOrders(@Query() filters: { status?: string; station?: string }) {
+    return this.kitchenService.obterPedidos(filters);
   }
 
-  @Patch('pedidos/:id Estado')
-  async atualizarEstado(
+  @Patch('orders/:id/status')
+  async updateStatus(
     @Param('id') id: string,
-    @Query('estado') estado: string,
+    @Query('status') status: string,
     @Request() req: any,
   ) {
-    return this.kitchenService.atualizarEstado(id, estado, req.user.id);
+    return this.kitchenService.atualizarEstado(id, status, req.user.id);
   }
 
-  @Get('estatisticas')
-  async obterEstatisticas() {
+  @Get('stats')
+  async getStats() {
     return this.kitchenService.obterEstatisticas();
   }
 }
