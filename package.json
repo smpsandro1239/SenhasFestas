@@ -1,31 +1,43 @@
 {
-  "name": "senhasfestas",
+  "name": "senhasfestas-monorepo",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "SaaS para gestão de senhas/tokens para consumo em festas de aldeia",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run start:dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "start": "cd backend && npm run start:prod",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:build": "docker-compose build",
+    "lint": "cd backend && npm run lint && cd ../frontend && npm run lint",
+    "test": "cd backend && npm test",
+    "test:e2e": "cd backend && npm run test:e2e"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/smpsandro1239/SenhasFestas.git"
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/smpsandro1239/SenhasFestas/issues"
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   },
-  "homepage": "https://github.com/smpsandro1239/SenhasFestas#readme",
-  "dependencies": {
-    "@nestjs/cli": "^12.0.0",
-    "@nestjs/common": "^12.0.1",
-    "@nestjs/config": "^12.0.0",
-    "@nestjs/platform-express": "^12.0.1",
-    "class-transformer": "^0.5.1",
-    "class-validator": "^0.15.1",
-    "reflect-metadata": "^0.2.2",
-    "uuid": "^14.0.2"
-  }
+  "keywords": [
+    "saas",
+    "festa",
+    "senhas",
+    "pedidos",
+    "kds",
+    "pos",
+    "qr",
+    "eventos"
+  ],
+  "license": "MIT"
 }
