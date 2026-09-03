@@ -1,0 +1,82 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20.x]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: |
+        npm install
+        cd backend && npm install
+        cd ../frontend && npm install
+    
+    - name: Lint code
+      run: |
+        cd backend && npm run lint
+        cd ../frontend && npm run lint
+    
+    - name: Run tests
+      run: |
+        cd backend && npm test
+        # Frontend tests would go here when implemented
+    
+    - name: Build Docker images
+      if: github.ref == 'refs/heads/main'
+      run: |
+        docker-compose build
+    
+    - name: Deploy to staging
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "Deploy to staging would happen here"
+        # Add your deployment logic (e.g., to AWS, DigitalOcean, etc.)
+
+  build-and-test:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20.x
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: |
+        npm install
+        cd backend && npm install
+        cd ../frontend && npm install
+    
+    - name: Build applications
+      run: |
+        cd backend && npm run build
+        cd ../frontend && npm run build
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts
+        path: |
+          backend/dist/
+          frontend/.next/
