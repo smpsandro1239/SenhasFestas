@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { DatabaseSeederService } from './seeds/database.seeder';
+import { ProductSeederService } from './seeds/product.seeder';
 import { ConfigService } from '@nestjs/config';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
@@ -31,11 +32,16 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
   if (configService.get<string>('NODE_ENV') === 'development') {
-    const seeder = app.get(DatabaseSeederService);
-    await seeder.seed();
+    const dbSeeder = app.get(DatabaseSeederService);
+    await dbSeeder.seed();
+
+    const productSeeder = app.get(ProductSeederService);
+    await productSeeder.seed();
   }
 
   await app.listen(process.env.PORT || 3000);
+  console.log(`[Bootstrap] API a correr em http://localhost:${process.env.PORT || 3000}`);
+  console.log(`[Bootstrap] Swagger: http://localhost:${process.env.PORT || 3000}/api/docs`);
 }
 
 bootstrap();
