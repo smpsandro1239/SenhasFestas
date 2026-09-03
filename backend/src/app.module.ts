@@ -13,6 +13,7 @@ import { CashClosureModule } from './modules/cash-closure/cash-closure.module';
 import { UserModule } from './modules/user/user.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [
@@ -46,7 +47,7 @@ import { AppService } from './app.service';
     CashClosureModule,
     UserModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, HealthController],
   providers: [AppService],
 })
 export class AppModule {}
