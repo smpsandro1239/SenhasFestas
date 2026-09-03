@@ -3,8 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrderEntity, OrderItemEntity, BalanceEntity, BalanceMovementEntity, ProductEntity } from '../../entities';
 import { CreateOrderDto, UpdateOrderStatusDto } from './dto';
-import { QRCodeService } from '../qr-code/qr-code.service';
+import { QRCodeService } from '../../services/qr-code.service';
 import { OrderGateway } from '../../websocket/order.gateway';
+import { NotificationService } from '../../services/notification.service';
 
 @Injectable()
 export class OrderService {
@@ -21,6 +22,7 @@ export class OrderService {
     private readonly productRepository: Repository<ProductEntity>,
     private readonly qrCodeService: QRCodeService,
     private readonly orderGateway: OrderGateway,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async create(user: any, dto: CreateOrderDto): Promise<any> {
@@ -59,6 +61,9 @@ export class OrderService {
 
     // Emit WebSocket event for real-time updates
     this.orderGateway.emitOrderUpdate(savedOrder.id, savedOrder.status);
+
+    // Send notification for new order
+    await this.notificationService.notifyNewOrder(savedOrder.id);
 
     const result = await this.findOne(savedOrder.id);
     return { ...result, qrCode };
@@ -111,6 +116,27 @@ export class OrderService {
       throw new NotFoundException('Pedido não encontrado');
     }
     order.status = status;
-    return this.orderRepository.save(order);
+    const savedOrder = await this.orderRepository.save(order);
+    
+    // Send notification based on new status
+    switch (status) {
+      case 'preparing':
+        await this.notificationService.notifyOrderPrepared(savedOrder.id);
+        break;
+      case 'ready':
+        await this.notificationService.notifyOrderReady(savedOrder.id);
+        break;
+      case 'delivered':
+        await this.notificationService.notifyOrderDelivered(savedOrder.id);
+        break;
+      default:
+        // For received and other statuses, no specific notification needed
+        break;
+    }
+    
+    // Also emit WebSocket event for real-time updates
+    this.orderGateway.emitOrderUpdate(savedOrder.id, status);
+    
+    return savedOrder;
   }
 }
