@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrderEntity, OrderItemEntity, BalanceEntity, BalanceMovementEntity, ProductEntity } from '../../entities';
 import { CreateOrderDto, UpdateOrderStatusDto } from './dto';
+import { QRCodeService } from '../qr-code/qr-code.service';
+import { OrderGateway } from '../../websocket/order.gateway';
 
 @Injectable()
 export class OrderService {
@@ -17,6 +19,8 @@ export class OrderService {
     private readonly movementRepository: Repository<BalanceMovementEntity>,
     @InjectRepository(ProductEntity)
     private readonly productRepository: Repository<ProductEntity>,
+    private readonly qrCodeService: QRCodeService,
+    private readonly orderGateway: OrderGateway,
   ) {}
 
   async create(user: any, dto: CreateOrderDto): Promise<any> {
@@ -50,7 +54,14 @@ export class OrderService {
       await this.consumeBalance(dto.balanceId, dto.balanceUsed, savedOrder.id);
     }
 
-    return this.findOne(savedOrder.id);
+    // Generate QR code for the order
+    const qrCode = await this.qrCodeService.generateOrderQRCode(savedOrder.id);
+
+    // Emit WebSocket event for real-time updates
+    this.orderGateway.emitOrderUpdate(savedOrder.id, savedOrder.status);
+
+    const result = await this.findOne(savedOrder.id);
+    return { ...result, qrCode };
   }
 
   async consumeBalance(balanceId: string, amount: number, orderId: string): Promise<void> {
