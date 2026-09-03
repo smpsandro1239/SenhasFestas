@@ -2,7 +2,8 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BalanceEntity, OrderEntity } from '../../entities';
-import { CreateBalanceDto, LoadBalanceDto } from '../../modules/balance/dto';
+import { CreateBalanceDto, LoadBalanceDto } from './dto';
+import { OrderGateway } from '../../websocket/order.gateway';
 
 @Injectable()
 export class BalanceService {
@@ -11,6 +12,7 @@ export class BalanceService {
     private readonly balanceRepository: Repository<BalanceEntity>,
     @InjectRepository(OrderEntity)
     private readonly orderRepository: Repository<OrderEntity>,
+    private readonly orderGateway: OrderGateway,
   ) {}
 
   async create(user: any, dto: CreateBalanceDto): Promise<BalanceEntity> {
@@ -19,7 +21,9 @@ export class BalanceService {
       currentBalance: dto.amount,
       createdAt: new Date(),
     });
-    return this.balanceRepository.save(balance);
+    const savedBalance = await this.balanceRepository.save(balance);
+    this.orderGateway.emitOrderUpdate(savedBalance.id, 'balance_updated');
+    return savedBalance;
   }
 
   async loadBalance(userId: string, dto: LoadBalanceDto): Promise<BalanceEntity> {
@@ -50,7 +54,10 @@ export class BalanceService {
     });
     await this.orderRepository.save(order);
 
-    const newBalance = this.loadBalance(userId, dto);
+    balance.currentBalance -= amount;
+    const newBalance = await this.balanceRepository.save(balance);
+    this.orderGateway.emitOrderUpdate(newBalance.id, 'balance_consumed');
+
     return { success: true, remaining: newBalance.currentBalance };
   }
 
