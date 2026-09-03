@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: senhasfestas-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: senhas_festas
+      POSTGRES_PASSWORD: senhas_festas
+      POSTGRES_DB: senhas_festas
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U senhas_festas"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: senhasfestas-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: senhasfestas-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: senhas_festas
+      DB_PASSWORD: senhas_festas
+      DB_NAME: senhas_festas
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-super-secret-key-change-in-production}
+      FRONTEND_URL: http://localhost:3001
+    ports:
+      - "3000:3000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: senhasfestas-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+    ports:
+      - "3001:3000"
+
+volumes:
+  postgres_data:
+  redis_data:
