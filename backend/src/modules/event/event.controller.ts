@@ -11,7 +11,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { EventService } from './event.service';
 import { EventEntity } from '../../entities';
-import { CreateEventDto, UpdateEventDto } from './dto';
+import { CreateEventDto, UpdateEventDto, UpdateEventStatusDto } from './dto';
 
 @Controller('events')
 @UseGuards(AuthGuard('jwt'))
@@ -46,8 +46,8 @@ export class EventController {
   async updateStatus(
     @Param('id') id: string,
     @Request() req: any,
-    @Body() body: { status: string },
+    @Body() dto: UpdateEventStatusDto,
   ) {
-    return this.eventService.updateStatus(id, req.user, body.status);
+    return this.eventService.updateStatus(id, req.user, dto.status);
   }
 }

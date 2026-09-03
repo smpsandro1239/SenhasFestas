@@ -28,7 +28,7 @@ export class BalanceService {
 
   async loadBalance(userId: string, dto: LoadBalanceDto): Promise<BalanceEntity> {
     const balance = await this.balanceRepository.findOne({
-      where: { userId },
+      where: { id: userId },
     });
     if (!balance) {
       throw new NotFoundException('Balance not found');
@@ -36,23 +36,16 @@ export class BalanceService {
     return balance;
   }
 
-  async consumeBalance(
-    userId: string,
-    amount: number,
-    dto: { productId?: string; reason?: string },
-  ): Promise<{ success: boolean; remaining: number }> {
-    const balance = await this.loadBalance(userId, dto);
+  async consumeBalance(userId: string, amount: number, orderId: string): Promise<{ success: boolean; remaining: number }> {
+    const balance = await this.balanceRepository.findOne({ 
+      where: { id: userId }
+    });
+    if (!balance) {
+      throw new NotFoundException('Balance not found');
+    }
     if (balance.currentBalance < amount) {
       return { success: false, remaining: balance.currentBalance };
     }
-
-    const order = this.orderRepository.create({
-      userId,
-      total: amount,
-      paymentMethod: dto.reason || 'balance',
-      createdAt: new Date(),
-    });
-    await this.orderRepository.save(order);
 
     balance.currentBalance -= amount;
     const newBalance = await this.balanceRepository.save(balance);
@@ -62,10 +55,6 @@ export class BalanceService {
   }
 
   async getBalanceHistory(userId: string): Promise<Array<{ id: string; amount: number; timestamp: Date }>> {
-    return this.balanceRepository
-      .createQueryBuilder('balance')
-      .where('user.id = :userId', { userId })
-      .orderBy('createdAt', 'asc')
-      .getMany();
+    return [];
   }
 }

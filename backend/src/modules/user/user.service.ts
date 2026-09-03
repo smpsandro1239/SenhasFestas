@@ -11,16 +11,16 @@ export class UserService {
     private readonly userRepository: Repository<UserEntity>,
   ) {}
 
-  async findAll(): Promise<UserEntity[]> {
+  async findAll(): Promise<Partial<UserEntity>[]> {
     return this.userRepository.find({
-      select: ['id', 'email', 'name', 'role', 'phone', 'isActive', 'createdAt', 'updatedAt'],
+      select: { id: true, email: true, name: true, role: true, phone: true, isActive: true, createdAt: true, updatedAt: true },
     });
   }
 
-  async findOne(id: string): Promise<UserEntity> {
+  async findOne(id: string): Promise<Partial<UserEntity>> {
     const user = await this.userRepository.findOne({
       where: { id },
-      select: ['id', 'email', 'name', 'role', 'phone', 'isActive', 'createdAt', 'updatedAt'],
+      select: { id: true, email: true, name: true, role: true, phone: true, isActive: true, createdAt: true, updatedAt: true },
     });
     if (!user) {
       throw new NotFoundException('Utilizador não encontrado');
@@ -28,15 +28,23 @@ export class UserService {
     return user;
   }
 
-  async update(id: string, dto: UpdateUserDto): Promise<UserEntity> {
+  async update(id: string, dto: UpdateUserDto): Promise<Partial<UserEntity>> {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('Utilizador não encontrado');
     }
     Object.assign(user, dto);
     const savedUser = await this.userRepository.save(user);
-    const { password, ...userWithoutPassword } = savedUser;
-    return userWithoutPassword;
+    return {
+      id: savedUser.id,
+      email: savedUser.email,
+      name: savedUser.name,
+      role: savedUser.role,
+      phone: savedUser.phone,
+      isActive: savedUser.isActive,
+      createdAt: savedUser.createdAt,
+      updatedAt: savedUser.updatedAt,
+    };
   }
 
   async remove(id: string): Promise<void> {

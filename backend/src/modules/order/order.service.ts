@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { OrderEntity, OrderItemEntity, BalanceEntity, BalanceMovementEntity, ProductEntity } from '../../entities';
+import { OrderEntity, OrderItemEntity, BalanceEntity, BalanceMovementEntity, ProductEntity, EventEntity } from '../../entities';
 import { CreateOrderDto, UpdateOrderStatusDto } from './dto';
 import { QRCodeService } from '../../services/qr-code.service';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { NotificationService } from '../../services/notification.service';
+import { MovementType } from '../../entities';
 
 @Injectable()
 export class OrderService {
@@ -20,15 +21,23 @@ export class OrderService {
     private readonly movementRepository: Repository<BalanceMovementEntity>,
     @InjectRepository(ProductEntity)
     private readonly productRepository: Repository<ProductEntity>,
+    @InjectRepository(EventEntity)
+    private readonly eventRepository: Repository<EventEntity>,
     private readonly qrCodeService: QRCodeService,
     private readonly orderGateway: OrderGateway,
     private readonly notificationService: NotificationService,
   ) {}
 
   async create(user: any, dto: CreateOrderDto): Promise<any> {
+    // Create event reference
+    const event = await this.eventRepository.findOne({ where: { id: dto.eventId } });
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
     const order = this.orderRepository.create({
       source: dto.source,
-      eventId: dto.eventId,
+      event: event,
       status: 'received',
       tableNumber: dto.tableNumber,
       station: dto.station,
@@ -82,8 +91,8 @@ export class OrderService {
     await this.balanceRepository.save(balance);
 
     const movement = this.movementRepository.create({
-      balance,
-      type: 'consume',
+      balance: { id: balanceId } as any,
+      type: MovementType.CONSUME,
       amount,
       orderId,
     });
@@ -97,17 +106,32 @@ export class OrderService {
       .orderBy('order.createdAt', 'DESC');
 
     if (eventId) {
-      query.where('order.eventId = :eventId', { eventId });
+      query.where('order.event.id = :eventId', { eventId });
     }
 
     return query.getMany();
   }
 
   async findOne(id: string): Promise<any> {
-    return this.orderRepository.findOne({
-      where: { id },
-      relations: ['items', 'items.product'],
-    });
+    return this.orderRepository.createQueryBuilder('order')
+      .leftJoinAndSelect('order.items', 'items')
+      .leftJoinAndSelect('items.product', 'product')
+      .where('order.id = :id', { id })
+      .getOne();
+  }
+
+  async cancelOrder(id: string, userId: string): Promise<any> {
+    const order = await this.orderRepository.findOne({ where: { id } });
+    if (!order) {
+      throw new NotFoundException('Pedido não encontrado');
+    }
+    order.status = 'cancelled';
+    const savedOrder = await this.orderRepository.save(order);
+    
+    // Emit WebSocket event for real-time updates
+    this.orderGateway.emitOrderUpdate(savedOrder.id, savedOrder.status);
+    
+    return savedOrder;
   }
 
   async updateStatus(id: string, status: string): Promise<any> {
@@ -115,7 +139,7 @@ export class OrderService {
     if (!order) {
       throw new NotFoundException('Pedido não encontrado');
     }
-    order.status = status;
+    order.status = status as 'received' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
     const savedOrder = await this.orderRepository.save(order);
     
     // Send notification based on new status
@@ -130,7 +154,6 @@ export class OrderService {
         await this.notificationService.notifyOrderDelivered(savedOrder.id);
         break;
       default:
-        // For received and other statuses, no specific notification needed
         break;
     }
     

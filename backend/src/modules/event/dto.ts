@@ -1,3 +1,9 @@
+import {
+  IsString,
+  IsOptional,
+  IsDateString,
+} from 'class-validator';
+
 export class CreateEventDto {
   @IsString()
   name: string;
@@ -45,4 +51,9 @@ export class UpdateEventDto {
   @IsString()
   @IsOptional()
   organization?: string;
+}
+
+export class UpdateEventStatusDto {
+  @IsString()
+  status: 'draft' | 'active' | 'closed';
 }
