@@ -168,13 +168,13 @@ export default function CaixaPage() {
                         <label className="block text-sm font-medium text-slate-400 mb-2">
                           Observações (opcional)
                         </label>
-                        <textarea
-                          value={formData.observacoes}
-                          onChange={(e) => setFormData({...formData, observacoes: e.target.value})}
-                          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                          rows="3"
-                          placeholder="Observações sobre o fundo de troco..."
-                        />
+<textarea
+                           value={formData.observacoes}
+                           onChange={(e) => setFormData({...formData, observacoes: e.target.value})}
+                           className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                           rows={3}
+                           placeholder="Observações sobre o fundo de troco..."
+                         />
                       </div>
                       <button
                         type="submit"
@@ -239,7 +239,7 @@ export default function CaixaPage() {
                               value={fechoData.observacoes}
                               onChange={(e) => setFechoData({...fechoData, observacoes: e.target.value})}
                               className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                              rows="3"
+                              rows={3}
                               placeholder="Observações sobre o fechamento..."
                             />
                           </div>

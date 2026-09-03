@@ -201,7 +201,7 @@ export default function QROrderPage() {
             <div className="bg-slate-800 rounded-2xl p-8 w-full max-w-md">
               <h2 className="text-2xl font-bold mb-6 text-center text-green-400">
                 ✅ Pedido Confirmado
-              </div>
+              </h2>
               <p className="text-center text-slate-400 mb-6">
                 Seu pedido foi enviado para a cozinha!
               </p>
