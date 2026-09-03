@@ -259,6 +259,9 @@ export class OrderEntity {
   @ManyToOne(() => EventEntity)
   event: EventEntity;
 
+  @OneToMany(() => OrderItemEntity, (item) => item.order, { cascade: true })
+  items: OrderItemEntity[];
+
   @Column({
     type: 'enum',
     enum: ['qr', 'pos'],

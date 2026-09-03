@@ -1,0 +1,80 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { OrderEntity } from '../../entities';
+
+export interface FiltrosKDS {
+  status?: string;
+  estacao?: string;
+  categoria?: string;
+}
+
+@Injectable()
+export class KitchenService {
+  constructor(
+    @InjectRepository(OrderEntity)
+    private readonly orderRepository: Repository<OrderEntity>,
+  ) {}
+
+  async obterPedidos(filtros: FiltrosKDS): Promise<any[]> {
+    const query = this.orderRepository
+      .createQueryBuilder('pedido')
+      .leftJoinAndSelect('pedido.items', 'itens')
+      .leftJoinAndSelect('itens.produto', 'produto')
+      .orderBy('pedido.createdAt', 'ASC');
+
+    if (filtros.status) {
+      query.andWhere('pedido.status = :status', { status: filtros.status });
+    } else {
+      query.andWhere('pedido.status IN (:...status)', {
+        status: ['received', 'preparing'],
+      });
+    }
+
+    if (filtros.estacao) {
+      query.andWhere('pedido.station = :estacao', { estacao: filtros.estacao });
+    }
+
+    return query.getMany();
+  }
+
+  async atualizarEstado(id: string, novoEstado: string, utilizadorId: string): Promise<any> {
+    const pedido = await this.orderRepository.findOne({ where: { id } });
+    if (!pedido) {
+      throw new NotFoundException('Pedido não encontrado');
+    }
+
+    const transicoesValidas: Record<string, string[]> = {
+      received: ['preparing', 'cancelled'],
+      preparing: ['ready', 'cancelled'],
+      ready: ['delivered'],
+    };
+
+    if (!transicoesValidas[pedido.status]?.includes(novoEstado)) {
+      throw new Error(`Transição inválida: ${pedido.status} -> ${novoEstado}`);
+    }
+
+    pedido.status = novoEstado;
+    return this.orderRepository.save(pedido);
+  }
+
+  async obterEstatisticas(): Promise<any> {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const [recebidos, emPreparacao, prontos, entregues] = await Promise.all([
+      this.orderRepository.count({ where: { status: 'received' } }),
+      this.orderRepository.count({ where: { status: 'preparing' } }),
+      this.orderRepository.count({ where: { status: 'ready' } }),
+      this.orderRepository.count({ where: { status: 'delivered', createdAt: hoje } }),
+    ]);
+
+    return {
+      recebidos,
+      emPreparacao,
+      prontos,
+      entregues,
+      total: recebidos + emPreparacao + prontos,
+    };
+  }
+}
