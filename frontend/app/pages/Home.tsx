@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
-import { useNavigate } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 // Mock data for demonstration
 const mockOrders = [
@@ -10,7 +10,7 @@ const mockOrders = [
 
 function Home() {
   const [currentPage, setCurrentPage] = useState('orders');
-  const navigate = useNavigate();
+  const router = useRouter();
 
   return (
     <div className="container">
@@ -27,7 +27,7 @@ function Home() {
               <h3>{order.id}</h3>
               <span className={`status-${order.status}`}>{order.status}</span>
               <p>Valor: R$ {order.total.toFixed(2)}</p>
-              <button onClick={() => navigate(`/orders/${order.id}/details`)}>Detalhes</button>
+              <button onClick={() => router.push(`/orders/${order.id}/details`)}>Detalhes</button>
             </div>
           ))}
         </div>
@@ -45,9 +45,9 @@ function Home() {
       {currentPage === 'reports' && (
         <div className="reports-section">
           <h2>Relatórios</h2>
-          <button onClick={() => navigate('/reports/orders')}>Ordens</button>
-          <button onClick={() => navigate('/reports/saldo')}>Saldo</button>
-          <button onClick={() => navigate('/reports/top-products')}>Top Products</button>
+          <button onClick={() => router.push('/reports/orders')}>Ordens</button>
+          <button onClick={() => router.push('/reports/saldo')}>Saldo</button>
+          <button onClick={() => router.push('/reports/top-products')}>Top Products</button>
         </div>
       )}
     </div>
