@@ -52,7 +52,7 @@ export default function HomePage() {
               🍷 SenhasFestas
             </h1>
             <p className="text-xl text-slate-300">
-              Sistema de gestão de pedidos para festas de aldeia
+              Sistema de gestão de pedidos para festas de aldeia - v1.1
             </p>
           </header>
 
