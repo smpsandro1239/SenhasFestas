@@ -1,5 +1,5 @@
-import { NextPage } from 'next';
-import Head from 'next/head';
+'use client';
+
 import { useState, useEffect } from 'react';
 
 interface Order {
@@ -82,9 +82,7 @@ export default function CozinhaPage() {
 
   return (
     <>
-      <Head>
-        <title>Cozinha/KDS - SenhasFestas</title>
-      </Head>
+      <title>Cozinha/KDS - SenhasFestas</title>
 
       <main className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 text-white p-8">
         <div className="max-w-6xl mx-auto">

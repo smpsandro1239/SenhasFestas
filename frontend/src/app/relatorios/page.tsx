@@ -1,5 +1,5 @@
-import { NextPage } from 'next';
-import Head from 'next/head';
+'use client';
+
 import { useState } from 'react';
 
 export default function RelatoriosPage() {
@@ -7,9 +7,7 @@ export default function RelatoriosPage() {
 
   return (
     <>
-      <Head>
-        <title>Relatórios - SenhasFestas</title>
-      </Head>
+      <title>Relatórios - SenhasFestas</title>
 
       <main className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 text-white p-8">
         <div className="max-w-6xl mx-auto">

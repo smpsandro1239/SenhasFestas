@@ -1,7 +1,7 @@
-import { NextPage } from 'next';
-import Head from 'next/head';
-import Link from 'next/link';
+'use client';
+
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 interface Pedido {
   id: string;
@@ -43,11 +43,7 @@ export default function HomePage() {
 
   return (
     <>
-      <Head>
-        <title>SenhasFestas - Gestão de Pedidos</title>
-        <meta name="description" content="Sistema de gestão de pedidos para festas" />
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
+      <title>SenhasFestas - Gestão de Pedidos</title>
 
       <main className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 text-white p-8">
         <div className="max-w-6xl mx-auto">

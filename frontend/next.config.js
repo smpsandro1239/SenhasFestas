@@ -27,19 +27,22 @@ const nextConfig = {
   
   images: {
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**',
-      },
+      { protocol: 'https', hostname: '**' },
     ],
   },
   
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   
   eslint: {
     ignoreDuringBuilds: true,
+  },
+  
+  // Permitir falha no build sem parar
+  onDemandEntries: {
+    maxInactiveAge: 25 * 60 * 1000,
+    pagesBufferLength: 2,
   },
 };
 
