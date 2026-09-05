@@ -64,7 +64,60 @@ Com `NODE_ENV=development`, o backend insere utilizadores de teste:
 `admin@senhasfestas.com / admin123` (superadmin) e `organizer@senhasfestas.com / organizer123`,
 etc. **Não usar em produção.**
 
-## 3. Backend (Docker)
+## 3. Duas possibilidades de execução
+
+O projeto pode correr **com Docker** ou **sem Docker** (nativo). As duas partilham a
+mesma base de código e o mesmo ficheiro `.env`.
+
+### 3.1 Com Docker — stack completa em containers
+
+Sobe Postgres + Redis + backend + frontend tudo em containers:
+
+```bash
+npm run docker:up          # docker compose up -d --build
+```
+
+| App        | URL                          |
+| ---        | ---                          |
+| Frontend   | http://localhost:3001        |
+| API        | http://localhost:3000/api    |
+| Swagger    | http://localhost:3000/api/docs |
+
+- Parar: `npm run docker:down` — Logs: `npm run docker:logs`.
+- O `frontend/Dockerfile` recebe `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_WS_URL` como
+  **build args** (o Next.js congela estas variáveis no build; passá-las apenas em
+  runtime não tem efeito).
+- Credenciais da BD e segredos podem ser sobrescritos num `.env` na raiz (ver
+  `.env.example` na raiz).
+
+### 3.2 Sem Docker — infra nativa + apps locais (híbrido)
+
+Apps correm no host; apenas Postgres e Redis sobem em containers:
+
+```bash
+npm run docker:infra        # docker compose up -d postgres redis
+# numa segunda janela:
+npm run dev                 # backend :3000 + frontend :3001
+```
+
+### 3.3 Sem Docker em lado nenhum (nativo total)
+
+Postgres e Redis instalados localmente (sem qualquer Docker):
+
+```bash
+cp .env.example .env        # na raiz, para o compose (opcional)
+cp backend/.env.example backend/.env
+npm run dev
+```
+
+Ajuste `backend/.env` com o host/porta das suas instâncias locais
+(`DB_HOST`, `DB_PORT`, `REDIS_URL`) e corra a migração/dependências:
+
+```bash
+cd backend && npm install && npm run migration:run
+```
+
+## 4. Backend (Docker) — imagem isolada
 
 ```bash
 cd backend
@@ -75,13 +128,7 @@ docker run -d --name senhasfestas-backend \
   senhasfestas-backend
 ```
 
-Ou via `docker compose` na raiz (sobe Postgres + Redis + backend + frontend:
-
-```bash
-docker compose up -d --build
-```
-
-## 4. Frontend (Vercel)
+## 5. Frontend (Vercel)
 
 1. Importar o repositório na Vercel.
 2. Diretório raiz: `frontend`; comando build: `npm run build`; output: padrão (Next.js).
@@ -91,20 +138,20 @@ docker compose up -d --build
 > A Vercel aloja apenas o frontend; backend, PostgreSQL e Redis correm fora
 > (VPS, CloudRun, etc.) — use o domínio da API em `NEXT_PUBLIC_API_URL`.
 
-## 5. RBAC
+## 6. RBAC
 
 - `POST /auth/register` cria sempre utilizadores com role `client`.
 - Contas de staff (`organizer`, `cashier`, `bar`, `kitchen`, `treasurer`, `superadmin`)
   são criadas pelo admin em `POST /users` (requer `superadmin`/`organizer`).
 - Endpoints de escrita de catálogo/eventos exigem `superadmin`/`organizer`.
 
-## 6. Verificação pós-deploy
+## 7. Verificação pós-deploy
 
 - `GET /api/health` → deve responder 200.
 - Swagger: `https://<api>/api/docs`.
 - Testar login de um utilizador e criação de pedido.
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Sintoma | Causa provável | Solução |
 | --- | --- | --- |

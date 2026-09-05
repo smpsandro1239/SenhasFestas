@@ -237,10 +237,29 @@ recebido → a preparar → pronto → entregue
 - [Documentação de API (Swagger)](http://localhost:3000/api/docs)
 - [README do Backend](backend/README.md)
 
-Para começar rapidamente, execute:
+Para começar rapidamente, pode usar **Docker** ou **nativo** — as duas possibilidades:
+
+```bash
+# Opção A — Docker (stack completa: Postgres + Redis + backend + frontend)
+npm run docker:up
+#    Frontend: http://localhost:3001   API: http://localhost:3000/api
+
+# Opção B — sem Docker (Postgres e Redis instalados localmente)
+npm run dev
+#    Backend: http://localhost:3000/api   Frontend: http://localhost:3001
+
+# Opção B1 — híbrido (infra em Docker, apps locais)
+npm run docker:infra   # sobe só postgres e redis
+npm run dev            # apps nativas
+```
+
+Para desenvolvimento manual:
 ```bash
 ./scripts/dev.sh        # Linux/macOS (e Windows com Git Bash)
 .\scripts\dev.ps1       # Windows PowerShell
+#        dev.ps1 auto    → infra em Docker + apps locais (híbrido)
+#        dev.ps1 docker  → stack completa em containers
+#        dev.ps1 nativo  → tudo local (sem Docker)
 ```
 
 Para testes de integração:
