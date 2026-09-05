@@ -1,4 +1,6 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+const API_URL = rawApiUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+const API_BASE = API_URL ? `${API_URL}/api` : '/api';
 
 export async function apiRequest<T>(
   endpoint: string,
@@ -22,7 +24,7 @@ export async function apiRequest<T>(
     },
   };
 
-  const response = await fetch(`${API_URL}${endpoint}`, config);
+  const response = await fetch(`${API_BASE}${endpoint}`, config);
 
   if (!response.ok) {
     const error = await response.json();
