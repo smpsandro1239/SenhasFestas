@@ -1,162 +1,108 @@
-# Bacana Project Structure
+# SenhasFestas — Estrutura do projeto
 
-## Backend (NestJS)
+## Backend (NestJS + TypeORM + Socket.IO)
 ```
 backend/
 ├── src/
-│   ├── app.module.ts
-│   ├── main.ts
-│   ├── entities/
-│   │   └── index.ts
+│   ├── app.module.ts            # Módulo raiz (autoLoadEntities, synchronize: false)
+│   ├── main.ts                  # Bootstrap, global prefix /api, seeders
+│   ├── entities/index.ts        # Todas as entidades
 │   ├── modules/
-│   │   ├── auth/
-│   │   │   ├── auth.module.ts
-│   │   │   ├── auth.controller.ts
-│   │   │   ├── auth.service.ts
-│   │   │   └── jwt.strategy.ts
+│   │   ├── auth/                # Login, refresh tokens, JWT strategy, rate limit
+│   │   ├── user/
 │   │   ├── event/
-│   │   ├── catalog/
+│   │   ├── catalog/             # Categorias e produtos (paginado)
 │   │   ├── balance/
-│   │   ├── order/
-│   │   ├── kitchen/
-│   │   ├── public-screen/
+│   │   ├── order/               # Orders + items (paginado; locks pessimistas)
+│   │   ├── kitchen/             # KDS com WebSocket (rooms por evento)
+│   │   ├── public-screen/       # Balcão público via WebSocket
 │   │   ├── reports/
 │   │   ├── cash-closure/
-│   │   └── user/
-│   ├── common/
-│   ├── guards/
+│   │   └── public/
+│   ├── common/                  # DTOs de paginação (PaginationQueryDto), etc.
+│   ├── guards/                  # AuthGuard, RolesGuard
 │   ├── decorators/
-│   ├── dto/
-│   ├── interfaces/
-│   ├── schemas/
-│   ├── services/
+│   ├── services/                # QR-code, WebSocket gateway, notificações
 │   └── utils/
-├── test/
+├── database/
+│   ├── data-source.ts           # Configuração TypeORM (data-source)
+│   └── migrations/              # Migrações (ex.: 1789000000000-HardeningIndexes.ts)
+├── test/                        # Testes e2e (auth, app)
 ├── .env.example
-└── tsconfig.json
+├── Dockerfile
+├── vitest.config.ts             # Testes unitários
+└── vitest.config.e2e.ts         # Testes e2e
 ```
 
-## Frontend (Next.js + Tailwind CSS)
+## Frontend (Next.js 14 App Router + Tailwind)
 ```
 frontend/
-├── app/
-│   ├── auth/
-│   │   ├── login/
-│   │   └── register/
-│   ├── pos/
-│   │   ├── page.tsx
-│   │   └── components/
-│   ├── kds/
-│   │   ├── page.tsx
-│   │   └── components/
-│   ├── public/
-│   │   ├── page.tsx
-│   │   └── components/
-│   ├── admin/
-│   │   ├── events/
-│   │   ├── products/
-│   │   └── reports/
-│   └── layout.tsx
-├── components/
-│   ├── ui/
-│   └── shared/
-├── hooks/
-├── lib/
-│   ├── api/
-│   ├── auth/
-│   └── utils/
-├── types/
-└── tailwind.config.ts
+├── src/
+│   ├── middleware.ts            # Guard server-side (auth e roles por cookies)
+│   ├── layout/sidebar.tsx       # Sidebar responsiva (roles por evento)
+│   ├── components/
+│   │   └── ui/                  # tabs, card, spinner, icons, etc. (ARIA)
+│   ├── app/
+│   │   ├── auth/login/          # Página pública de login
+│   │   ├── auth/register/
+│   │   ├── admin/               # Gestão de eventos e utilizadores
+│   │   ├── caixa/               # Abertura/fecho de caixa, saldo
+│   │   ├── cozinha/             # KDS (WebSocket)
+│   │   ├── pedidos/             # Lista de pedidos
+│   │   ├── perfil/
+│   │   ├── publico/             # Balcão público
+│   │   ├── qr-order/            # Pedido por QR code
+│   │   ├── relatorios/
+│   │   ├── saldo/
+│   │   └── layout.tsx           # Providers (Auth, SW register, metadata)
+│   └── lib/
+│       ├── api.ts               # Cliente HTTP com refresh tokens e cookies de sessão
+│       ├── auth-context.tsx     # Sessão (persistSession/destroySession)
+│       ├── use-current-event.ts # Evento ativo selecionado
+│       └── cn.ts
+├── public/
+│   ├── sw.js                    # Service worker (precache estável, network-first)
+│   ├── manifest.webmanifest
+│   └── icon-*.png
+├── next.config.js               # standalone, security headers, remotePatterns por env
+├── .eslintrc.json
+├── .env.example
+└── Dockerfile
 ```
 
-## Database Schema
-The database uses PostgreSQL with the following main tables:
-1. `users` - All users of the system
-2. `events` - Festival events
-3. `event_users` - Many-to-many relation for event-specific roles
-4. `categories` - Menu categories
-5. `products` - Menu products
-6. `balances` - User balances per event
-7. `balance_movements` - History of balance changes
-8. `orders` - Orders (both QR and POS)
-9. `order_items` - Items in orders
-10. `stations` - Bar/cashier stations
-11. `audit_logs` - Audit trail
-12. `device_sessions` - Device tracking
+## Infraestrutura e deploy
+```
+├── .github/workflows/ci.yml     # CI: lint/build/testes; e2e com Postgres+Redis; deploy ssh
+├── docker-compose.yml           # postgres, redis, backend, frontend (JWT obrigatório)
+├── scripts/deploy.sh            # Deploy local: testes → build → migrações (aborta em falha)
+├── .env.example                 # Variáveis raiz (JWT_SECRET obrigatório)
+└── PROJECT_STRUCTURE.md
+```
 
-## Sprints
+## Base de dados (PostgreSQL)
+Tabelas principais:
+1. `users` — utilizadores do sistema
+2. `events` — eventos/festas
+3. `event_users` — relações evento/role por utilizador
+4. `categories` — categorias do menu
+5. `products` — produtos do menu
+6. `balances` — saldos por utilizador/evento
+7. `balance_movements` — histórico de movimentos de saldo
+8. `orders` — pedidos (QR e balcão)
+9. `order_items` — itens dos pedidos
+10. `stations` — bares/caixas
+11. `cash_closures` — fechos de caixa
+12. `refresh_tokens` — tokens de renovação (hash, família, revogação)
+13. `audit_logs` — trilho de auditoria
 
-### Sprint 1: Foundation
-- Auth module: JWT login/register, role-based access
-- User entity and CRUD
-- Event module: CRUD with settings
-- Catalog: Categories and products
+Migrações: `cd backend && npm run migration:run` (aborta o deploy em caso de falha).
 
-### Sprint 2: Balance and QR Orders
-- Balance module: Top up, check balance
-- QR code generation (uuid-based)
-- Order creation via QR (client selects items)
-- Balance validation
+## Fluxo de autenticação
+- Login/refresh devolvem `{ token, refreshToken, user }`.
+- O frontend persiste a sessão (localStorage) e faz rotação do refresh token num 401.
+- `middleware.ts` valida cookies (`sf_token`, `sf_role`, `sf_user`) para proteger `/admin`, `/relatorios` e `/caixa`.
 
-### Sprint 3: POS, KDS, Public Screen
-- POS module: Create orders manually
-- KDS: Real-time order list with WebSocket
-- Public screen: Live order status display
-
-### Sprint 4: Reports and Cash Closure
-- Reports module: Sales, products, time stats
-- Cash closure: Reconciliation
-- Admin panel
-
-## API Endpoints
-
-### Public
-- `POST /auth/login` - Login
-- `POST /auth/register` - Register (superadmin only)
-
-### Auth Routes (with JWT)
-- `GET /users/me` - Current user
-- `GET /users` - List users (admin only)
-
-### Event Routes
-- `GET /events` - List events
-- `POST /events` - Create event
-- `GET /events/:id` - Get event
-- `PATCH /events/:id` - Update event
-- `DELETE /events/:id` - Delete event
-
-### Catalog Routes
-- `GET /products` - List products
-- `POST /products` - Create product
-- `GET /products/:id` - Get product
-- `PATCH /products/:id` - Update product
-
-### Balance Routes
-- `GET /balances/:userId` - Get balance
-- `POST /balances/loads` - Load balance
-- `GET /balances/:userId/movements` - History
-
-### Order Routes
-- `POST /orders` - Create order
-- `GET /orders` - List orders
-- `GET /orders/:id` - Get order
-- `PATCH /orders/:id/status` - Update status
-- `GET /qr/:id` - Load order by QR code
-
-### Kitchen Routes
-- `GET /kitchen/orders?status=received` - Pending orders
-- `PATCH /kitchen/orders/:id/status` - Update status
-
-### Public Screen Routes
-- `GET /public/orders?status=ready` - Ready orders
-- `GET /public/orders?status=preparing` - Preparing orders
-
-### Reports Routes
-- `GET /reports/sales` - Sales report
-- `GET /reports/products` - Product report
-- `GET /reports/caixa` - Cash report
-
-### Cash Closure Routes
-- `POST /cash-closure` - Create closure
-- `GET /cash-closure` - List closures
-- `GET /cash-closure/:id` - Get closure
+## Testes
+- Unitários: `cd backend && npm test` (Vitest, 15 specs).
+- E2E: `cd backend && npm run test:e2e` (requer Postgres/Redis; em CI via `services`).
+- Frontend: `cd frontend && npm run lint && npm run build`.
