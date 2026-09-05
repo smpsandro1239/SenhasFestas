@@ -434,7 +434,7 @@ export class RefreshTokenEntity {
 }
 
 @Entity('cash_closures')
-@Index(['event', 'status'])
+@Index(['eventId', 'status'])
 export class CashClosureEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;

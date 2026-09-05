@@ -13,6 +13,9 @@ import { CashClosureModule } from './modules/cash-closure/cash-closure.module';
 import { UserModule } from './modules/user/user.module';
 import { RedisModule } from './common/redis/redis.module';
 import { WebSocketModule } from './websocket/websocket.module';
+import { DatabaseSeederService } from './seeds/database.seeder';
+import { ProductSeederService } from './seeds/product.seeder';
+import { UserEntity, CategoryEntity, ProductEntity } from './entities';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HealthController } from './health/health.controller';
@@ -39,6 +42,7 @@ import {
         username: configService.get<string>('DB_USERNAME'),
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_NAME'),
+        ssl: configService.get<string>('DB_SSL') === 'true' ? { rejectUnauthorized: false } : undefined,
         migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
         migrationsRun: configService.get<string>('NODE_ENV') === 'production',
         synchronize: false,
@@ -48,6 +52,7 @@ import {
     }),
     RedisModule,
     WebSocketModule,
+    TypeOrmModule.forFeature([UserEntity, CategoryEntity, ProductEntity]),
     AuthModule,
     EventModule,
     CatalogModule,
@@ -60,7 +65,7 @@ import {
     UserModule,
   ],
   controllers: [AppController, HealthController],
-  providers: [AppService],
+  providers: [AppService, DatabaseSeederService, ProductSeederService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

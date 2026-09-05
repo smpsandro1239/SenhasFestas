@@ -18,8 +18,8 @@ export class ProductSeederService {
   }
 
   async seedCategories(): Promise<void> {
-    const categoriesExist = await this.categoryRepository.findOne({});
-    if (categoriesExist) {
+    const categoriesExist = await this.categoryRepository.find({ take: 1 });
+    if (categoriesExist.length > 0) {
       console.log('[ProductSeeder] Categorias ja existem, a saltar...');
       return;
     }
@@ -40,8 +40,8 @@ export class ProductSeederService {
   }
 
   async seedProducts(): Promise<void> {
-    const productsExist = await this.productRepository.findOne({});
-    if (productsExist) {
+    const productsExist = await this.productRepository.find({ take: 1 });
+    if (productsExist.length > 0) {
       console.log('[ProductSeeder] Produtos ja existem, a saltar...');
       return;
     }
