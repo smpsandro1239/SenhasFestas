@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Patch, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Param, Patch } from '@nestjs/common';
 import { PublicScreenService } from './public-screen.service';
 
 @Controller('public')
@@ -26,7 +26,7 @@ export class PublicScreenController {
   }
 
   @Patch('pedidos/:id/entregue')
-  async entregar(@Param('id') id: string, @Request() req: any) {
+  async entregar(@Param('id') id: string) {
     return this.publicScreenService.marcarEntregue(id);
   }
 }

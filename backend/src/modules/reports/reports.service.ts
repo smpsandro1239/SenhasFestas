@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrderEntity } from '../../entities';
@@ -47,7 +47,7 @@ export class ReportsService {
     return query.getMany();
   }
 
-  async topProducts(filtros: any) {
+  async topProducts(_filtros: any) {
     const query = this.productRepository
       .createQueryBuilder('produto')
       .where('produto.isActive = :active', { active: true })

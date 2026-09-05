@@ -1,4 +1,3 @@
-import { Inject } from '@nestjs/common';
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
