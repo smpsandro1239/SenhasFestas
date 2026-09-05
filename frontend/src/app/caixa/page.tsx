@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { Card } from '@/components/ui/card';
@@ -10,37 +10,62 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs } from '@/components/ui/tabs';
 import { Alert } from '@/components/ui/alert';
-import { EmptyState } from '@/components/ui/empty-state';
-import { CashIcon, CheckIcon } from '@/components/ui/icons';
+import { CashIcon } from '@/components/ui/icons';
+import { useAuth } from '@/lib/auth-context';
+import { useCurrentEvent } from '@/lib/use-current-event';
+import { getOpenCash, openCash, closeCash, getCashByEvent } from '@/lib/api';
 
-export default function CaixaPage() {
+function formatDateTime(value: string | Date): string {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  if (isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('pt-PT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatEuro(value: number): string {
+  return Number(value).toFixed(2);
+}
+
+function CaixaPage() {
+  const { user } = useAuth();
+  const { event, error: eventError } = useCurrentEvent();
   const [activeTab, setActiveTab] = useState('fecho');
   const [caixaAberta, setCaixaAberta] = useState<any>(null);
   const [formData, setFormData] = useState({ valorInicial: '', observacoes: '' });
   const [fechoData, setFechoData] = useState({ totalReal: '', observacoes: '' });
+  const [movements, setMovements] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(eventError);
   const [success, setSuccess] = useState('');
 
-  const carregarCaixaAberta = async () => {
+  const carregarCaixaAberta = useCallback(async () => {
+    if (!event) return;
     setLoading(true);
+    setError('');
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      setCaixaAberta({
-        id: 'cx-001',
-        operador: 'João Silva',
-        evento: 'Festa de Aldeia',
-        abertoEm: '15/08/2026 20:00',
-        valorInicial: 50.0,
-      });
-    } catch {
-      setError('Erro ao carregar estado do caixa');
+      const data = await getOpenCash(event.id);
+      setCaixaAberta(data && data.id ? {
+        id: data.id,
+        operador: user?.name ?? '',
+        evento: event.name,
+        abertoEm: formatDateTime(data.openedAt),
+        valorInicial: Number(data.openingBalance || 0),
+      } : null);
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao carregar estado do caixa');
     } finally {
       setLoading(false);
     }
-  };
+  }, [event, user?.name]);
 
   const fecharCaixa = async () => {
+    if (!caixaAberta) return;
     setLoading(true);
     setError('');
     setSuccess('');
@@ -53,19 +78,23 @@ export default function CaixaPage() {
     }
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await closeCash(caixaAberta.id, {
+        totalActual: totalReal,
+        notes: fechoData.observacoes || undefined,
+      });
       setSuccess('Caixa fechado com sucesso!');
       setFechoData({ totalReal: '', observacoes: '' });
       setCaixaAberta(null);
       setTimeout(() => setSuccess(''), 3000);
-    } catch {
-      setError('Erro ao fechar o caixa');
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao fechar o caixa');
     } finally {
       setLoading(false);
     }
   };
 
   const abrirCaixa = async () => {
+    if (!event) return;
     setLoading(true);
     setError('');
     setSuccess('');
@@ -78,37 +107,63 @@ export default function CaixaPage() {
     }
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await openCash({
+        eventId: event.id,
+        openingBalance: valorInicial,
+        notes: formData.observacoes || undefined,
+      });
       setSuccess('Caixa aberto com sucesso!');
       setFormData({ valorInicial: '', observacoes: '' });
       await carregarCaixaAberta();
       setTimeout(() => setSuccess(''), 3000);
-    } catch {
-      setError('Erro ao abrir o caixa');
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao abrir o caixa');
     } finally {
       setLoading(false);
     }
   };
 
+  const carregarHistorico = useCallback(async () => {
+    if (!event) return;
+    try {
+      const list = await getCashByEvent(event.id);
+      setMovements(
+        list
+          .filter((c) => c.status === 'closed')
+          .map((c) => ({
+            hora: formatDateTime(c.openedAt),
+            tipo: 'Entrada',
+            valor: `+€${formatEuro(c.closingBalance ?? 0)}`,
+            operador: user?.name ?? '',
+            obs: c.notes ?? '',
+          })),
+      );
+      setHistory(
+        list.map((c) => ({
+          numero: `#${c.id?.slice(0, 8) ?? '000'}`,
+          status: c.status === 'closed' ? 'Fechado' : 'Aberto',
+          desc: `${formatDateTime(c.openedAt)} • Início: €${formatEuro(c.openingBalance || 0)}`,
+          variant: c.status === 'closed' ? ('success' as const) : ('primary' as const),
+        })),
+      );
+    } catch {
+      setMovements([]);
+      setHistory([]);
+    }
+  }, [event, user?.name]);
+
   useEffect(() => {
-    carregarCaixaAberta();
-  }, []);
+    if (event) {
+      setError('');
+      carregarCaixaAberta();
+      carregarHistorico();
+    }
+  }, [event, carregarCaixaAberta, carregarHistorico]);
 
   const tabs = [
     { id: 'fecho', label: 'Fecho de Caixa' },
     { id: 'movimentacoes', label: 'Movimentações' },
     { id: 'historico', label: 'Histórico' },
-  ];
-
-  const movements = [
-    { hora: '20:15', tipo: 'Entrada', valor: '+€150', operador: 'João Silva', obs: 'Venda de senhas' },
-    { hora: '21:30', tipo: 'Saída', valor: '-€45', operador: 'Maria Costa', obs: 'Compra de gelo' },
-    { hora: '22:45', tipo: 'Entrada', valor: '+€89', operador: 'João Silva', obs: 'Venda de bebidas' },
-  ];
-
-  const history = [
-    { numero: '#001', status: 'Fechado' as const, desc: '15/08/2026 • 02:30 • Diferença: +€5.20', variant: 'success' as const },
-    { numero: '#000', status: 'Fechado' as const, desc: '14/08/2026 • 02:15 • Diferença: -€3.80', variant: 'danger' as const },
   ];
 
   return (
@@ -263,5 +318,13 @@ export default function CaixaPage() {
         )}
       </AppShell>
     </>
+  );
+}
+
+export default function CaixaPageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <CaixaPage />
+    </Suspense>
   );
 }

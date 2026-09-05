@@ -1,22 +1,37 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/cn';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { MinusIcon, PlusIcon, QrIcon, ArrowLeftIcon, CheckIcon } from '@/components/ui/icons';
+import { useAuth } from '@/lib/auth-context';
+import { getProducts, getBalance, createOrder } from '@/lib/api';
 
-const TABLE_NUMBER = 'A05';
-const BALANCE = 15.5;
+export default function QROrderPageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <QROrderPage />
+    </Suspense>
+  );
+}
 
-export default function QROrderPage() {
+function QROrderPage() {
+  const searchParams = useSearchParams();
+  const eventId = searchParams.get('event') ?? '';
+  const tableNumber = searchParams.get('mesa') ?? 'A05';
+  const { user } = useAuth();
   const [products, setProducts] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
+  const [balance, setBalance] = useState<{ id?: string; currentBalance?: number } | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [placing, setPlacing] = useState(false);
+  const [orderPlaced, setOrderPlaced] = useState(false);
+  const [lastOrder, setLastOrder] = useState<any[]>([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const router = useRouter();
 
@@ -24,12 +39,18 @@ export default function QROrderPage() {
     fetchProducts();
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    getBalance(user.id)
+      .then((b) => setBalance(b ?? null))
+      .catch(() => setBalance(null));
+  }, [user]);
+
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const data = await fetch('/api/products');
-      const json = await data.json();
-      setProducts(json);
+      const data = await getProducts();
+      setProducts(Array.isArray(data) ? data : data?.items ?? []);
     } catch {
       setError('Erro ao carregar produtos');
     } finally {
@@ -61,13 +82,45 @@ export default function QROrderPage() {
 
   const getCartTotal = () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const usableBalance = Math.min(balance?.currentBalance ?? 0, getCartTotal());
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) {
       setError('Adicione pelo menos um item ao carrinho');
       return;
     }
-    setShowPaymentModal(true);
+    if (!eventId) {
+      setError('Evento não identificado no QR code');
+      return;
+    }
+    const snapshot = [...cart];
+    setPlacing(true);
+    setError('');
+    try {
+      await createOrder({
+        eventId,
+        source: 'qr',
+        tableNumber,
+        paymentMethod: 'balance',
+        balanceId: balance?.id,
+        balanceUsed: balance?.id ? usableBalance : 0,
+        items: snapshot.map((item) => ({
+          productId: item.id,
+          quantity: item.quantity,
+        })),
+      });
+      setOrderPlaced(true);
+      setLastOrder(snapshot);
+      setCart([]);
+      setShowPaymentModal(true);
+      setBalance((prev) =>
+        prev ? { ...prev, currentBalance: Math.max((prev.currentBalance ?? 0) - usableBalance, 0) } : prev,
+      );
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao criar o pedido');
+    } finally {
+      setPlacing(false);
+    }
   };
 
   return (
@@ -84,7 +137,7 @@ export default function QROrderPage() {
             </Link>
             <div className="flex-1 text-center">
               <h1 className="font-bold text-zinc-50 tracking-tight">Menu da Festa</h1>
-              <p className="text-[11px] text-zinc-500">Bem-vindo à mesa {TABLE_NUMBER}</p>
+              <p className="text-[11px] text-zinc-500">Bem-vindo à mesa {tableNumber}</p>
             </div>
             <div className="w-9" />
           </div>
@@ -95,14 +148,16 @@ export default function QROrderPage() {
               <QrIcon className="h-4 w-4 text-brand" />
               <div className="flex-1">
                 <div className="text-[10px] text-zinc-500">Mesa</div>
-                <div className="text-sm font-semibold text-zinc-100">{TABLE_NUMBER}</div>
+                <div className="text-sm font-semibold text-zinc-100">{tableNumber}</div>
               </div>
             </div>
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-border">
               <span className="text-brand text-base leading-none">€</span>
               <div className="flex-1">
                 <div className="text-[10px] text-zinc-500">Saldo</div>
-                <div className="text-sm font-semibold text-emerald-400">{BALANCE.toFixed(2)}</div>
+                <div className="text-sm font-semibold text-emerald-400">
+                  {(balance?.currentBalance ?? 0).toFixed(2)}
+                </div>
               </div>
             </div>
           </div>
@@ -193,9 +248,10 @@ export default function QROrderPage() {
         <div className="max-w-lg mx-auto px-4 pb-[env(safe-area-inset-bottom)]">
           <button
             onClick={handlePlaceOrder}
-            className="w-full mb-1 bg-brand hover:bg-brand-hover text-black font-bold py-4 rounded-2xl shadow-glow flex items-center justify-between px-6 transition-colors"
+            disabled={placing}
+            className="w-full mb-1 bg-brand hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed text-black font-bold py-4 rounded-2xl shadow-glow flex items-center justify-between px-6 transition-colors"
           >
-            <span>{cartCount} item{cartCount === 1 ? '' : 's'}</span>
+            <span>{placing ? 'A enviar...' : `${cartCount} item${cartCount === 1 ? '' : 's'}`}</span>
             <span className="text-lg">€{getCartTotal().toFixed(2)}</span>
           </button>
         </div>
@@ -203,18 +259,24 @@ export default function QROrderPage() {
 
       {/* Payment modal */}
       {showPaymentModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pedido-confirmado-title"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+        >
           <div className="w-full sm:max-w-md bg-surface-solid border border-border rounded-t-3xl sm:rounded-3xl p-6 animate-slide-up">
             <div className="flex items-start justify-between mb-6">
               <div>
                 <div className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-emerald-500/15 text-emerald-400 mb-4">
                   <CheckIcon className="h-5 w-5" />
                 </div>
-                <h2 className="text-2xl font-bold text-zinc-50">Pedido Confirmado</h2>
+                <h2 id="pedido-confirmado-title" className="text-2xl font-bold text-zinc-50">Pedido Confirmado</h2>
                 <p className="text-zinc-500 text-sm mt-1">A sua encomenda foi enviada para a cozinha!</p>
               </div>
               <button
                 onClick={() => setShowPaymentModal(false)}
+                aria-label="Fechar diálogo"
                 className="p-2 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-surface"
               >
                 <QrIcon className="h-4 w-4" />
@@ -222,7 +284,7 @@ export default function QROrderPage() {
             </div>
 
             <div className="max-h-56 overflow-y-auto space-y-2 mb-5">
-              {cart.map((item: any) => (
+              {(lastOrder.length ? lastOrder : cart).map((item: any) => (
                 <div key={item.id} className="flex justify-between text-sm text-zinc-300">
                   <span>
                     <span className="text-zinc-500">{item.quantity}x</span> {item.name}
@@ -234,7 +296,7 @@ export default function QROrderPage() {
 
             <div className="flex justify-between items-center pt-4 border-t border-border">
               <span className="text-zinc-500 font-medium">Total</span>
-              <span className="text-2xl font-bold text-brand">€{getCartTotal().toFixed(2)}</span>
+              <span className="text-2xl font-bold text-brand">€{getCartTotal().toFixed(2) || (orderPlaced ? '—' : '0.00')}</span>
             </div>
 
             <Button
@@ -242,7 +304,8 @@ export default function QROrderPage() {
               className="w-full mt-6"
               onClick={() => {
                 setShowPaymentModal(false);
-                setCart([]);
+                setOrderPlaced(false);
+                setLastOrder([]);
                 router.push('/');
               }}
             >

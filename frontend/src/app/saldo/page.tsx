@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AuthLayout } from '@/components/layout/auth-layout';
@@ -9,17 +9,29 @@ import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { WalletIcon, ArrowLeftIcon } from '@/components/ui/icons';
 import { cn } from '@/lib/cn';
+import { useAuth } from '@/lib/auth-context';
+import { getBalance, loadBalance } from '@/lib/api';
 
 const QUICK_AMOUNTS = [5, 10, 20, 50];
 
 export default function BalancePage() {
+  const { user } = useAuth();
+  const [currentBalance, setCurrentBalance] = useState<number | null>(null);
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  useEffect(() => {
+    if (!user) return;
+    getBalance(user.id)
+      .then((b) => setCurrentBalance(Number(b?.currentBalance ?? 0)))
+      .catch(() => {});
+  }, [user]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     setLoading(true);
     setError('');
 
@@ -30,10 +42,17 @@ export default function BalancePage() {
       return;
     }
 
-    setTimeout(() => {
+    try {
+      await loadBalance(user.id, numericAmount);
+      const updated = await getBalance(user.id);
+      setCurrentBalance(Number(updated?.currentBalance ?? 0));
+      setAmount('');
+      router.refresh();
+    } catch (err: any) {
+      setError(err?.message ?? 'Não foi possível carregar o saldo');
+    } finally {
       setLoading(false);
-      router.push('/');
-    }, 1000);
+    }
   };
 
   return (
@@ -50,6 +69,13 @@ export default function BalancePage() {
             <p className="text-sm text-zinc-500">Escolha um valor</p>
           </div>
         </div>
+
+        {currentBalance !== null && (
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-surface border border-border">
+            <span className="text-sm text-zinc-500">Saldo atual</span>
+            <span className="text-lg font-bold text-emerald-400">€{currentBalance.toFixed(2)}</span>
+          </div>
+        )}
 
         {error && <Alert variant="error" message={error} />}
 

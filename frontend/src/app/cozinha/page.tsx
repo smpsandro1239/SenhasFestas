@@ -65,8 +65,9 @@ export default function CozinhaPage() {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const data = await fetchWithAuth<Order[]>('/kitchen/pedidos');
-      const sorted = [...data].sort(
+      const data = await fetchWithAuth<any>('/kitchen/pedidos');
+      const list = data?.items ?? [];
+      const sorted = [...list].sort(
         (a, b) => statusOrder[a.status] - statusOrder[b.status]
       );
       setOrders(sorted);

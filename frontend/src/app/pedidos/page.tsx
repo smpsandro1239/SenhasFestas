@@ -46,8 +46,8 @@ export default function PedidosPage() {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const data = await fetchWithAuth<Order[]>('/orders');
-      setOrders(data);
+      const data = await fetchWithAuth<any>('/orders');
+      setOrders(data?.items ?? []);
       setError('');
     } catch {
       setError('Erro ao carregar pedidos');
