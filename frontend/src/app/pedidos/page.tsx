@@ -1,7 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { fetchWithAuth } from '@/lib/api';
+import { AppShell } from '@/components/layout/app-shell';
+import { PageHeader } from '@/components/layout/page-header';
+import { Badge, type BadgeVariant } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Tabs } from '@/components/ui/tabs';
+import { Alert } from '@/components/ui/alert';
+import { Spinner } from '@/components/ui/spinner';
+import { EmptyState } from '@/components/ui/empty-state';
+import {
+  ClipboardIcon,
+  RefreshIcon,
+  CheckIcon,
+  CloseIcon,
+  ChefHatIcon,
+} from '@/components/ui/icons';
+import { cn } from '@/lib/cn';
 
 interface Order {
   id: string;
@@ -13,28 +30,37 @@ interface Order {
   source: 'qr' | 'pos';
 }
 
+const statusMeta: Record<string, { label: string; variant: BadgeVariant }> = {
+  received: { label: 'Recebido', variant: 'warning' },
+  preparing: { label: 'A Preparar', variant: 'brand' },
+  ready: { label: 'Pronto', variant: 'success' },
+  delivered: { label: 'Entregue', variant: 'info' },
+  cancelled: { label: 'Cancelado', variant: 'danger' },
+};
+
 export default function PedidosPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('active');
 
-  useEffect(() => {
-    fetchOrders();
-    const interval = setInterval(fetchOrders, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       const data = await fetchWithAuth<Order[]>('/orders');
       setOrders(data);
-    } catch (err) {
+      setError('');
+    } catch {
       setError('Erro ao carregar pedidos');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 5000);
+    return () => clearInterval(interval);
+  }, [fetchOrders]);
 
   const updateStatus = async (orderId: string, newStatus: string) => {
     try {
@@ -42,172 +68,155 @@ export default function PedidosPage() {
         method: 'PATCH',
         body: JSON.stringify({ status: newStatus }),
       });
-      fetchOrders();
-    } catch (err) {
+      await fetchOrders();
+    } catch {
       setError('Erro ao atualizar estado');
     }
   };
 
-  const filteredOrders = orders.filter(order => {
+  const filteredOrders = orders.filter((order) => {
     if (filter === 'all') return true;
     if (filter === 'active') return ['received', 'preparing', 'ready'].includes(order.status);
     return ['delivered', 'cancelled'].includes(order.status);
   });
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'received': return 'bg-yellow-500';
-      case 'preparing': return 'bg-orange-500';
-      case 'ready': return 'bg-green-500';
-      case 'delivered': return 'bg-blue-500';
-      case 'cancelled': return 'bg-red-500';
-      default: return 'bg-gray-500';
-    }
-  };
+  const count = (status: string) => orders.filter((o) => o.status === status).length;
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'received': return 'Recebido';
-      case 'preparing': return 'A Preparar';
-      case 'ready': return 'Pronto';
-      case 'delivered': return 'Entregue';
-      case 'cancelled': return 'Cancelado';
-      default: return status;
-    }
+  const tabs = [
+    { id: 'active', label: 'Ativos', count: count('received') + count('preparing') + count('ready') },
+    { id: 'completed', label: 'Concluídos', count: count('delivered') + count('cancelled') },
+    { id: 'all', label: 'Todos', count: orders.length },
+  ];
+
+  const orderActions: Record<string, { next: string; label: string; icon: React.ReactNode }[]> = {
+    received: [{ next: 'preparing', label: 'A Preparar', icon: <ChefHatIcon className="h-4 w-4" /> }],
+    preparing: [{ next: 'ready', label: 'Pronto', icon: <CheckIcon className="h-4 w-4" /> }],
+    ready: [{ next: 'delivered', label: 'Entregar', icon: <CheckIcon className="h-4 w-4" /> }],
   };
 
   return (
     <>
       <title>Pedidos - SenhasFestas</title>
 
-      <main className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 text-white p-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex justify-between items-center mb-8">
-            <h1 className="text-4xl font-bold text-amber-400">
-              📋 Gestão de Pedidos
-            </h1>
-            <button
-              onClick={fetchOrders}
-              className="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg"
-            >
-              🔄 Atualizar
-            </button>
-          </div>
+      <AppShell>
+        <PageHeader
+          title="Gestão de Pedidos"
+          subtitle="Acompanhe e atualize o estado de cada pedido"
+          icon={<ClipboardIcon className="h-5 w-5" />}
+          actions={
+            <Button variant="secondary" onClick={fetchOrders} icon={<RefreshIcon className="h-4 w-4" />}>
+              Atualizar
+            </Button>
+          }
+        />
 
-          <div className="flex space-x-4 mb-6">
-            <button
-              onClick={() => setFilter('active')}
-              className={`px-4 py-2 rounded-lg ${filter === 'active' ? 'bg-amber-600' : 'bg-slate-700'}`}
-            >
-              Ativos ({orders.filter(o => ['received', 'preparing', 'ready'].includes(o.status)).length})
-            </button>
-            <button
-              onClick={() => setFilter('completed')}
-              className={`px-4 py-2 rounded-lg ${filter === 'completed' ? 'bg-amber-600' : 'bg-slate-700'}`}
-            >
-              Concluídos ({orders.filter(o => ['delivered', 'cancelled'].includes(o.status)).length})
-            </button>
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-4 py-2 rounded-lg ${filter === 'all' ? 'bg-amber-600' : 'bg-slate-700'}`}
-            >
-              Todos ({orders.length})
-            </button>
-          </div>
+        {error && <div className="mb-6"><Alert variant="error" message={error} /></div>}
 
-          {loading && (
-            <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-amber-400 border-t-transparent"></div>
-            </div>
-          )}
+        <Tabs items={tabs} activeTab={filter} onChange={(id) => setFilter(id as any)} className="mb-6" />
 
-          {error && (
-            <div className="bg-red-900/20 border border-red-500 rounded-lg p-4 mb-6">
-              {error}
-            </div>
-          )}
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredOrders.map(order => (
-              <div key={order.id} className="bg-slate-800 rounded-xl p-4 border-l-4" style={{
-                borderLeftColor: order.status === 'received' ? '#eab308' :
-                                order.status === 'preparing' ? '#f97316' :
-                                order.status === 'ready' ? '#22c55e' : '#64748b'
-              }}>
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <span className="font-bold text-lg">#{order.id.slice(-4)}</span>
-                    {order.tableNumber && (
-                      <span className="ml-2 text-slate-400">Mesa {order.tableNumber}</span>
-                    )}
-                  </div>
-                  <span className={`${getStatusColor(order.status)} px-3 py-1 rounded-full text-xs font-bold`}>
-                    {getStatusLabel(order.status)}
-                  </span>
-                </div>
-
-                <div className="space-y-1 mb-4">
-                  {order.items?.map((item: any, idx: number) => (
-                    <div key={idx} className="text-sm text-slate-300">
-                      {item.quantity}x {item.name || item.product?.name}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex justify-between items-center pt-3 border-t border-slate-700">
-                  <span className="text-xl font-bold text-amber-400">
-                    €{order.total.toFixed(2)}
-                  </span>
-                  <span className="text-xs text-slate-400">
-                    {new Date(order.createdAt).toLocaleTimeString('pt-PT')}
-                  </span>
-                </div>
-
-                <div className="flex gap-2 mt-3">
-                  {order.status === 'received' && (
-                    <button
-                      onClick={() => updateStatus(order.id, 'preparing')}
-                      className="flex-1 bg-orange-600 hover:bg-orange-700 py-2 rounded-lg text-sm font-bold"
-                    >
-                      🔥 A Preparar
-                    </button>
-                  )}
-                  {order.status === 'preparing' && (
-                    <button
-                      onClick={() => updateStatus(order.id, 'ready')}
-                      className="flex-1 bg-green-600 hover:bg-green-700 py-2 rounded-lg text-sm font-bold"
-                    >
-                      ✅ Pronto
-                    </button>
-                  )}
-                  {order.status === 'ready' && (
-                    <button
-                      onClick={() => updateStatus(order.id, 'delivered')}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg text-sm font-bold"
-                    >
-                      📦 Entregar
-                    </button>
-                  )}
-                  {order.status !== 'delivered' && order.status !== 'cancelled' && (
-                    <button
-                      onClick={() => updateStatus(order.id, 'cancelled')}
-                      className="bg-red-600/50 hover:bg-red-700 px-3 py-2 rounded-lg text-sm"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {filteredOrders.length === 0 && !loading && (
-            <div className="text-center py-12 text-slate-400">
-              <p className="text-xl">Nenhum pedido encontrado</p>
-            </div>
-          )}
+        {/* Column header for status legend */}
+        <div className="hidden sm:flex gap-3 mb-4 text-xs text-zinc-500">
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-orange-400" /> Recebido</span>
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand" /> A Preparar</span>
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Pronto</span>
         </div>
-      </main>
+
+        {loading ? (
+          <div className="py-16"><Spinner label="A carregar pedidos..." /></div>
+        ) : filteredOrders.length === 0 ? (
+          <Card className="mt-4">
+            <EmptyState
+              icon={<ClipboardIcon className="h-6 w-6" />}
+              title="Nenhum pedido encontrado"
+              description={
+                filter === 'active'
+                  ? 'Não há pedidos ativos neste momento.'
+                  : 'Não há pedidos concluídos para mostrar.'
+              }
+            />
+          </Card>
+        ) : (
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filteredOrders.map((order, idx) => {
+              const meta = statusMeta[order.status];
+              const actions = orderActions[order.status];
+              const canCancel = !['delivered', 'cancelled'].includes(order.status);
+
+              return (
+                <div key={order.id} className={`animate-fade-in stagger-${(idx % 6) + 1}`}>
+                  <Card hover className="h-full">
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-lg text-zinc-50">
+                          #{order.id.slice(-4)}
+                        </span>
+                        {order.tableNumber && (
+                          <span className="text-xs px-2 py-0.5 rounded-md bg-surface text-zinc-400 border border-border">
+                            Mesa {order.tableNumber}
+                          </span>
+                        )}
+                      </div>
+                      <Badge variant={meta.variant} dot>
+                        {meta.label}
+                      </Badge>
+                    </div>
+
+                    {/* Items */}
+                    <div className="space-y-1 mb-4">
+                      {order.items?.map((item: any, itemIdx: number) => (
+                        <div key={itemIdx} className="text-sm text-zinc-400 flex justify-between gap-2">
+                          <span className="truncate">
+                            <span className="text-zinc-500 font-medium">{item.quantity}x</span>{' '}
+                            {item.name || item.product?.name}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex items-center justify-between pt-3 border-t border-border">
+                      <span className="text-xl font-bold text-brand tracking-tight">
+                        €{Number(order.total).toFixed(2)}
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        {new Date(order.createdAt).toLocaleTimeString('pt-PT')}
+                      </span>
+                    </div>
+
+                    {/* Actions */}
+                    {(actions || canCancel) && (
+                      <div className="flex gap-2 mt-3">
+                        {actions?.map((action) => (
+                          <Button
+                            key={action.next}
+                            onClick={() => updateStatus(order.id, action.next)}
+                            className="flex-1"
+                            icon={action.icon}
+                            variant={action.next === 'delivered' ? 'success' : 'secondary'}
+                          >
+                            {action.label}
+                          </Button>
+                        ))}
+                        {canCancel && (
+                          <Button
+                            onClick={() => updateStatus(order.id, 'cancelled')}
+                            variant="danger"
+                            className={cn(!actions && 'flex-1')}
+                            aria-label="Cancelar pedido"
+                          >
+                            <CloseIcon className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </Card>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </AppShell>
     </>
   );
 }

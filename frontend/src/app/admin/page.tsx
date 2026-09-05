@@ -1,112 +1,118 @@
 'use client';
 
 import { useState } from 'react';
+import { AppShell } from '@/components/layout/app-shell';
+import { PageHeader } from '@/components/layout/page-header';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Tabs } from '@/components/ui/tabs';
+import { SettingsIcon, CalendarIcon, UserIcon, InfoIcon } from '@/components/ui/icons';
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('eventos');
 
+  const tabs = [
+    { id: 'eventos', label: 'Eventos', icon: <CalendarIcon className="h-4 w-4" /> },
+    { id: 'utilizadores', label: 'Utilizadores', icon: <UserIcon className="h-4 w-4" /> },
+    { id: 'configuracao', label: 'Configuração', icon: <SettingsIcon className="h-4 w-4" /> },
+  ];
+
+  const users = [
+    { email: 'admin@senhasfestas.com', role: 'Superadmin', variant: 'brand' as const },
+    { email: 'operador@senhasfestas.com', role: 'Operador', variant: 'warning' as const },
+    { email: 'cozinha@senhasfestas.com', role: 'Cozinha', variant: 'success' as const },
+  ];
+
   return (
     <>
       <title>Admin - SenhasFestas</title>
-      <main className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 text-white p-8">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-4xl font-bold mb-8 text-purple-400">
-            ⚙️ Painel de Administração
-          </h1>
 
-          <nav className="flex space-x-4 mb-8">
-            <button
-              onClick={() => setActiveTab('eventos')}
-              className={`px-4 py-2 rounded-lg ${
-                activeTab === 'eventos' ? 'bg-purple-600' : 'bg-slate-700'
-              }`}
-            >
-              📅 Eventos
-            </button>
-            <button
-              onClick={() => setActiveTab('utilizadores')}
-              className={`px-4 py-2 rounded-lg ${
-                activeTab === 'utilizadores' ? 'bg-purple-600' : 'bg-slate-700'
-              }`}
-            >
-              👥 Utilizadores
-            </button>
-            <button
-              onClick={() => setActiveTab('configuracao')}
-              className={`px-4 py-2 rounded-lg ${
-                activeTab === 'configuracao' ? 'bg-purple-600' : 'bg-slate-700'
-              }`}
-            >
-              🔧 Configuração
-            </button>
-          </nav>
+      <AppShell>
+        <PageHeader
+          title="Painel de Administração"
+          subtitle="Gerir eventos, utilizadores e configurações"
+          icon={<SettingsIcon className="h-5 w-5" />}
+        />
 
-          <div className="bg-slate-800 rounded-xl p-6">
-            {activeTab === 'eventos' && (
-              <div>
-                <h2 className="text-2xl font-bold mb-4">Eventos</h2>
-                <p className="text-slate-400">
-                  Gerir eventos, criar novos, editar datas e fechar eventos.
-                </p>
-                <div className="mt-4 bg-slate-700 rounded-lg p-4">
-                  <p className="text-slate-300">
-                    🎉 Festa de Aldeia - Agosto 2026 (Ativo)
-                  </p>
-                  <p className="text-slate-400 text-sm">
-                    Local: Praça Central • Organizador: Junta de Freguesia
-                  </p>
-                </div>
-              </div>
-            )}
+        <Tabs items={tabs} activeTab={activeTab} onChange={setActiveTab} className="mb-6" />
 
-            {activeTab === 'utilizadores' && (
-              <div>
-                <h2 className="text-2xl font-bold mb-4">Utilizadores</h2>
-                <p className="text-slate-400">
-                  Gerir perfis e permissões dos utilizadores do evento.
-                </p>
-                <div className="mt-4 space-y-3">
-                  <div className="bg-slate-700 rounded-lg p-4 flex justify-between">
-                    <span>admin@senhasfestas.com</span>
-                    <span className="text-purple-400">Superadmin</span>
+        {activeTab === 'eventos' && (
+          <Card>
+            <h2 className="text-xl font-bold text-zinc-50 mb-2">Eventos</h2>
+            <p className="text-zinc-500 mb-6 text-sm">
+              Gerir eventos, criar novos, editar datas e fechar eventos.
+            </p>
+
+            <Card hover className="bg-surface/50 border-border-hover glow-amber">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2.5 rounded-xl bg-brand/10 border border-brand/20 text-brand">
+                    <CalendarIcon className="h-5 w-5" />
                   </div>
-                  <div className="bg-slate-700 rounded-lg p-4 flex justify-between">
-                    <span>operador@senhasfestas.com</span>
-                    <span className="text-yellow-400">Operador</span>
-                  </div>
-                  <div className="bg-slate-700 rounded-lg p-4 flex justify-between">
-                    <span>cozinha@senhasfestas.com</span>
-                    <span className="text-green-400">Cozinha</span>
+                  <div>
+                    <div className="font-semibold text-zinc-100">
+                      Festa de Aldeia - Agosto 2026
+                    </div>
+                    <div className="text-sm text-zinc-500 mt-1">
+                      Local: Praça Central • Organizador: Junta de Freguesia
+                    </div>
                   </div>
                 </div>
+                <Badge variant="success" dot>Ativo</Badge>
               </div>
-            )}
+            </Card>
+          </Card>
+        )}
 
-            {activeTab === 'configuracao' && (
-              <div>
-                <h2 className="text-2xl font-bold mb-4">Configuração</h2>
-                <p className="text-slate-400">
-                  Configurar moeda, impostos e regras do evento.
-                </p>
-                <div className="mt-4 space-y-3">
-                  <div className="bg-slate-700 rounded-lg p-4">
-                    <span className="text-slate-400">Moeda:</span>
-                    <span className="ml-2">€ EUR</span>
-                  </div>
-                  <div className="bg-slate-700 rounded-lg p-4">
-                    <span className="text-slate-400">IVA:</span>
-                    <span className="ml-2">6%</span>
-                  </div>
-                  <div className="bg-slate-700 rounded-lg p-4">
-                    <span className="text-slate-400">Pagamento:</span>
-                    <span className="ml-2">Numerário • MB Way • Saldo</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
+        {activeTab === 'utilizadores' && (
+          <Card>
+            <h2 className="text-xl font-bold text-zinc-50 mb-2">Utilizadores</h2>
+            <p className="text-zinc-500 mb-6 text-sm">Gerir perfis e permissões dos utilizadores do evento.</p>
+
+            <div className="space-y-3">
+              {users.map((user, idx) => (
+                <Card
+                  key={user.email}
+                  hover
+                  padding="sm"
+                  className={`flex items-center justify-between bg-surface/50 animate-fade-in stagger-${idx + 1}`}
+                >
+                  <span className="flex items-center gap-3 text-zinc-200">
+                    <span className="h-8 w-8 rounded-full bg-gradient-to-br from-brand/30 to-brand/10 border border-brand/30 flex items-center justify-center text-xs font-bold text-brand">
+                      {user.email.charAt(0).toUpperCase()}
+                    </span>
+                    {user.email}
+                  </span>
+                  <Badge variant={user.variant}>{user.role}</Badge>
+                </Card>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {activeTab === 'configuracao' && (
+          <Card>
+            <h2 className="text-xl font-bold text-zinc-50 mb-2">Configuração</h2>
+            <p className="text-zinc-500 mb-6 text-sm">Configurar moeda, impostos e regras do evento.</p>
+
+            <div className="space-y-3 max-w-lg">
+              {[
+                { label: 'Moeda', value: '€ EUR', icon: <CalendarIcon className="h-4 w-4" /> },
+                { label: 'IVA', value: '6%', icon: <InfoIcon className="h-4 w-4" /> },
+                { label: 'Pagamento', value: 'Numerário • MB Way • Saldo', icon: <SettingsIcon className="h-4 w-4" /> },
+              ].map((field) => (
+                <Card key={field.label} padding="sm" className="flex items-center justify-between bg-surface/50">
+                  <span className="flex items-center gap-3 text-zinc-400">
+                    {field.icon}
+                    {field.label}
+                  </span>
+                  <span className="font-medium text-zinc-100">{field.value}</span>
+                </Card>
+              ))}
+            </div>
+          </Card>
+        )}
+      </AppShell>
     </>
   );
 }

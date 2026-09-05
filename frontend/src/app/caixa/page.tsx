@@ -1,39 +1,39 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { AppShell } from '@/components/layout/app-shell';
+import { PageHeader } from '@/components/layout/page-header';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs } from '@/components/ui/tabs';
+import { Alert } from '@/components/ui/alert';
+import { EmptyState } from '@/components/ui/empty-state';
+import { CashIcon, CheckIcon } from '@/components/ui/icons';
 
 export default function CaixaPage() {
   const [activeTab, setActiveTab] = useState('fecho');
-  const [caixaAberta, setCaixaAberta] = useState(null);
-  const [formData, setFormData] = useState({
-    valorInicial: '',
-    observacoes: '',
-  });
-  const [fechoData, setFechoData] = useState({
-    totalReal: '',
-    observacoes: '',
-  });
+  const [caixaAberta, setCaixaAberta] = useState<any>(null);
+  const [formData, setFormData] = useState({ valorInicial: '', observacoes: '' });
+  const [fechoData, setFechoData] = useState({ totalReal: '', observacoes: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const router = useRouter();
-  const pathname = usePathname();
 
-  // Funções para buscar dados (simulando chamadas à API)
   const carregarCaixaAberta = async () => {
     setLoading(true);
     try {
-      // Simular chamada à API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
       setCaixaAberta({
         id: 'cx-001',
         operador: 'João Silva',
         evento: 'Festa de Aldeia',
         abertoEm: '15/08/2026 20:00',
-        valorInicial: 50.00,
+        valorInicial: 50.0,
       });
-    } catch (err) {
+    } catch {
       setError('Erro ao carregar estado do caixa');
     } finally {
       setLoading(false);
@@ -44,7 +44,7 @@ export default function CaixaPage() {
     setLoading(true);
     setError('');
     setSuccess('');
-    
+
     const totalReal = parseFloat(fechoData.totalReal);
     if (isNaN(totalReal) || totalReal < 0) {
       setError('Por favor, insira um valor válido para o total em caixa');
@@ -53,15 +53,12 @@ export default function CaixaPage() {
     }
 
     try {
-      // Simular chamada à API para fechar caixa
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       setSuccess('Caixa fechado com sucesso!');
       setFechoData({ totalReal: '', observacoes: '' });
       setCaixaAberta(null);
-      setTimeout(() => {
-        setSuccess('');
-      }, 3000);
-    } catch (err) {
+      setTimeout(() => setSuccess(''), 3000);
+    } catch {
       setError('Erro ao fechar o caixa');
     } finally {
       setLoading(false);
@@ -72,7 +69,7 @@ export default function CaixaPage() {
     setLoading(true);
     setError('');
     setSuccess('');
-    
+
     const valorInicial = parseFloat(formData.valorInicial);
     if (isNaN(valorInicial) || valorInicial < 0) {
       setError('Por favor, insira um valor válido para o valor inicial');
@@ -81,15 +78,12 @@ export default function CaixaPage() {
     }
 
     try {
-      // Simular chamada à API para abrir caixa
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       setSuccess('Caixa aberto com sucesso!');
       setFormData({ valorInicial: '', observacoes: '' });
       await carregarCaixaAberta();
-      setTimeout(() => {
-        setSuccess('');
-      }, 3000);
-    } catch (err) {
+      setTimeout(() => setSuccess(''), 3000);
+    } catch {
       setError('Erro ao abrir o caixa');
     } finally {
       setLoading(false);
@@ -100,254 +94,174 @@ export default function CaixaPage() {
     carregarCaixaAberta();
   }, []);
 
+  const tabs = [
+    { id: 'fecho', label: 'Fecho de Caixa' },
+    { id: 'movimentacoes', label: 'Movimentações' },
+    { id: 'historico', label: 'Histórico' },
+  ];
+
+  const movements = [
+    { hora: '20:15', tipo: 'Entrada', valor: '+€150', operador: 'João Silva', obs: 'Venda de senhas' },
+    { hora: '21:30', tipo: 'Saída', valor: '-€45', operador: 'Maria Costa', obs: 'Compra de gelo' },
+    { hora: '22:45', tipo: 'Entrada', valor: '+€89', operador: 'João Silva', obs: 'Venda de bebidas' },
+  ];
+
+  const history = [
+    { numero: '#001', status: 'Fechado' as const, desc: '15/08/2026 • 02:30 • Diferença: +€5.20', variant: 'success' as const },
+    { numero: '#000', status: 'Fechado' as const, desc: '14/08/2026 • 02:15 • Diferença: -€3.80', variant: 'danger' as const },
+  ];
+
   return (
     <>
       <title>Fecho de Caixa - SenhasFestas</title>
 
-      <main className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 text-white p-8">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-4xl font-bold mb-8 text-amber-500">
-            💰 Fecho de Caixa
-          </h1>
+      <AppShell>
+        <PageHeader
+          title="Fecho de Caixa"
+          subtitle="Gestão do caixa do evento"
+          icon={<CashIcon className="h-5 w-5" />}
+        />
 
-          <nav className="flex space-x-4 mb-8">
-            <button
-              onClick={() => setActiveTab('fecho')}
-              className={`px-4 py-2 rounded-lg ${
-                activeTab === 'fecho' ? 'bg-amber-600' : 'bg-slate-700'
-              }`}
-            >
-              📋 Fecho de Caixa
-            </button>
-            <button
-              onClick={() => setActiveTab('movimentacoes')}
-              className={`px-4 py-2 rounded-lg ${
-                activeTab === 'movimentacoes' ? 'bg-amber-600' : 'bg-slate-700'
-              }`}
-            >
-              💸 Movimentações
-            </button>
-            <button
-              onClick={() => setActiveTab('historico')}
-              className={`px-4 py-2 rounded-lg ${
-                activeTab === 'historico' ? 'bg-amber-600' : 'bg-slate-700'
-              }`}
-            >
-              📜 Histórico
-            </button>
-          </nav>
+        <Tabs items={tabs} activeTab={activeTab} onChange={setActiveTab} className="mb-6" />
 
-          <div className="bg-slate-800 rounded-xl p-6">
-            {activeTab === 'fecho' && (
+        {activeTab === 'fecho' && (
+          <Card className="max-w-3xl">
+            {!caixaAberta ? (
               <div>
-                {!caixaAberta && (
+                <h2 className="text-xl font-bold text-zinc-50 mb-6">Abrir Caixa</h2>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    abrirCaixa();
+                  }}
+                  className="space-y-4 max-w-md"
+                >
+                  <Input
+                    label="Valor Inicial (€)"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.valorInicial}
+                    onChange={(e) => setFormData({ ...formData, valorInicial: e.target.value })}
+                    placeholder="Ex: 50.00"
+                    required
+                  />
+                  <Textarea
+                    label="Observações (opcional)"
+                    value={formData.observacoes}
+                    onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+                    rows={3}
+                    placeholder="Observações sobre o fundo de troco..."
+                  />
+                  <Button type="submit" loading={loading} variant="success" className="w-full" size="lg">
+                    {loading ? 'A abrir...' : 'Abrir Caixa'}
+                  </Button>
+                </form>
+              </div>
+            ) : (
+              <div>
+                <h2 className="text-xl font-bold text-zinc-50 mb-6">Caixa Aberto</h2>
+                <div className="grid lg:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: 'Operador', value: caixaAberta.operador },
+                      { label: 'Evento', value: caixaAberta.evento },
+                      { label: 'Aberto em', value: caixaAberta.abertoEm },
+                    ].map((field) => (
+                      <Card key={field.label} padding="sm" className="bg-surface/50">
+                        <div className="text-xs text-zinc-500">{field.label}</div>
+                        <div className="font-semibold text-zinc-100">{field.value}</div>
+                      </Card>
+                    ))}
+                    <Card padding="sm" className="bg-emerald-500/5 border-emerald-500/20">
+                      <div className="text-xs text-zinc-500">Valor Inicial</div>
+                      <div className="font-bold text-emerald-400">€{caixaAberta.valorInicial.toFixed(2)}</div>
+                    </Card>
+                  </div>
+
                   <div>
-                    <h2 className="text-2xl font-bold mb-4">Abrir Caixa</h2>
-                    <form onSubmit={(e) => {
-                      e.preventDefault();
-                      abrirCaixa();
-                    }} className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-2">
-                          Valor Inicial (€)
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={formData.valorInicial}
-                          onChange={(e) => setFormData({...formData, valorInicial: e.target.value})}
-                          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                          placeholder="Ex: 50.00"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-2">
-                          Observações (opcional)
-                        </label>
-<textarea
-                           value={formData.observacoes}
-                           onChange={(e) => setFormData({...formData, observacoes: e.target.value})}
-                           className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                           rows={3}
-                           placeholder="Observações sobre o fundo de troco..."
-                         />
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
-                      >
-                        {loading ? 'Abrindo...' : 'Abrir Caixa'}
-                      </button>
+                    <h3 className="text-lg font-semibold text-zinc-100 mb-4">Fechar Caixa</h3>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        fecharCaixa();
+                      }}
+                      className="space-y-4"
+                    >
+                      <Input
+                        label="Total em Caixa (€)"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={fechoData.totalReal}
+                        onChange={(e) => setFechoData({ ...fechoData, totalReal: e.target.value })}
+                        placeholder="Ex: 425.50"
+                        required
+                      />
+                      <Textarea
+                        label="Observações (opcional)"
+                        value={fechoData.observacoes}
+                        onChange={(e) => setFechoData({ ...fechoData, observacoes: e.target.value })}
+                        rows={3}
+                        placeholder="Observações sobre o fechamento..."
+                      />
+                      <Button type="submit" loading={loading} variant="danger" className="w-full" size="lg">
+                        {loading ? 'A fechar...' : 'Fechar Caixa'}
+                      </Button>
                     </form>
                   </div>
-                )}
-
-                {caixaAberta && (
-                  <div>
-                    <h2 className="text-2xl font-bold mb-4">Caixa Aberto</h2>
-                    <div className="grid md:grid-cols-2 gap-6">
-                      <div className="space-y-4">
-                        <div className="bg-slate-700 rounded-lg p-4">
-                          <div className="text-slate-400">Operador:</div>
-                          <div className="text-lg font-bold">{caixaAberta.operador}</div>
-                        </div>
-                        <div className="bg-slate-700 rounded-lg p-4">
-                          <div className="text-slate-400">Evento:</div>
-                          <div className="text-lg font-bold">{caixaAberta.evento}</div>
-                        </div>
-                        <div className="bg-slate-700 rounded-lg p-4">
-                          <div className="text-slate-400">Aberto em:</div>
-                          <div className="text-lg font-bold">{caixaAberta.abertoEm}</div>
-                        </div>
-                        <div className="bg-slate-700 rounded-lg p-4">
-                          <div className="text-slate-400">Valor Inicial:</div>
-                          <div className="text-lg font-bold text-green-400">€{caixaAberta.valorInicial.toFixed(2)}</div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        <h3 className="text-xl font-bold mb-3">Fechar Caixa</h3>
-                        <form onSubmit={(e) => {
-                          e.preventDefault();
-                          fecharCaixa();
-                        }} className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-2">
-                              Total em Caixa (€)
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={fechoData.totalReal}
-                              onChange={(e) => setFechoData({...fechoData, totalReal: e.target.value})}
-                              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                              placeholder="Ex: 425.50"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-2">
-                              Observações (opcional)
-                            </label>
-                            <textarea
-                              value={fechoData.observacoes}
-                              onChange={(e) => setFechoData({...fechoData, observacoes: e.target.value})}
-                              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                              rows={3}
-                              placeholder="Observações sobre o fechamento..."
-                            />
-                          </div>
-                          <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
-                          >
-                            {loading ? 'Fechando...' : 'Fechar Caixa'}
-                          </button>
-                        </form>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {success && (
-                  <div className="mt-4 p-4 bg-green-900/20 border border-green-500 rounded-lg text-green-400">
-                    {success}
-                  </div>
-                )}
-                
-                {error && (
-                  <div className="mt-4 p-4 bg-red-900/20 border border-red-500 rounded-lg text-red-400">
-                    {error}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeTab === 'movimentacoes' && (
-              <div>
-                <h2 className="text-2xl font-bold mb-4">Movimentações de Caixa</h2>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full bg-slate-900">
-                    <thead>
-                      <tr className="bg-slate-800">
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">
-                          Hora
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">
-                          Tipo
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">
-                          Valor
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">
-                          Operador
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">
-                          Observação
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="hover:bg-slate-700">
-                        <td className="px-4 py-3 text-slate-300">20:15</td>
-                        <td className="px-4 py-3 text-green-400">Entrada</td>
-                        <td className="px-4 py-3 text-green-400">+€150</td>
-                        <td className="px-4 py-3 text-slate-300">João Silva</td>
-                        <td className="px-4 py-3 text-slate-400">Venda de senhas</td>
-                      </tr>
-                      <tr className="hover:bg-slate-700">
-                        <td className="px-4 py-3 text-slate-300">21:30</td>
-                        <td className="px-4 py-3 text-red-400">Saída</td>
-                        <td className="px-4 py-3 text-red-400">-€45</td>
-                        <td className="px-4 py-3 text-slate-300">Maria Costa</td>
-                        <td className="px-4 py-3 text-slate-400">Compra de gelo</td>
-                      </tr>
-                      <tr className="hover:bg-slate-700">
-                        <td className="px-4 py-3 text-slate-300">22:45</td>
-                        <td className="px-4 py-3 text-green-400">Entrada</td>
-                        <td className="px-4 py-3 text-green-400">+€89</td>
-                        <td className="px-4 py-3 text-slate-300">João Silva</td>
-                        <td className="px-4 py-3 text-slate-400">Venda de bebidas</td>
-                      </tr>
-                    </tbody>
-                  </table>
                 </div>
               </div>
             )}
-            
-            {activeTab === 'historico' && (
-              <div>
-                <h2 className="text-2xl font-bold mb-4">Histórico de Fechamentos</h2>
-                <div className="space-y-4">
-                  <div className="bg-slate-700 rounded-lg p-4">
-                    <div className="flex justify-between">
-                      <span className="font-bold">Fechamento #001</span>
-                      <span className="text-green-400">Fechado</span>
-                    </div>
-                    <div className="text-slate-400 text-sm">
-                      15/08/2026 • 02:30 • Diferença: +€5.20
-                    </div>
-                  </div>
-                  <div className="bg-slate-700 rounded-lg p-4">
-                    <div className="flex justify-between">
-                      <span className="font-bold">Fechamento #000</span>
-                      <span className="text-red-400">Fechado</span>
-                    </div>
-                    <div className="text-slate-400 text-sm">
-                      14/08/2026 • 02:15 • Diferença: -€3.80
-                    </div>
-                  </div>
+
+            {success && <div className="mt-4"><Alert variant="success" message={success} /></div>}
+            {error && <div className="mt-4"><Alert variant="error" message={error} /></div>}
+          </Card>
+        )}
+
+        {activeTab === 'movimentacoes' && (
+          <Card padding="none" className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-surface/70 border-b border-border">
+                    {['Hora', 'Tipo', 'Valor', 'Operador', 'Observação'].map((h) => (
+                      <th key={h} className="px-4 py-3 text-left font-medium text-zinc-500">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {movements.map((m, idx) => (
+                    <tr key={idx} className="border-b border-border/50 last:border-0 hover:bg-surface/50 transition-colors">
+                      <td className="px-4 py-3 text-zinc-400">{m.hora}</td>
+                      <td className="px-4 py-3 font-medium">
+                        <span className={m.tipo === 'Entrada' ? 'text-emerald-400' : 'text-red-400'}>{m.tipo}</span>
+                      </td>
+                      <td className={`px-4 py-3 font-mono font-semibold ${m.tipo === 'Entrada' ? 'text-emerald-400' : 'text-red-400'}`}>{m.valor}</td>
+                      <td className="px-4 py-3 text-zinc-300">{m.operador}</td>
+                      <td className="px-4 py-3 text-zinc-500">{m.obs}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+
+        {activeTab === 'historico' && (
+          <div className="space-y-3 max-w-2xl">
+            {history.map((h) => (
+              <Card key={h.numero} className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-zinc-100">Fechamento {h.numero}</div>
+                  <div className="text-sm text-zinc-500 mt-0.5">{h.desc}</div>
                 </div>
-              </div>
-            )}
+                <Badge variant={h.variant} dot>{h.status}</Badge>
+              </Card>
+            ))}
           </div>
-        </div>
-      </main>
+        )}
+      </AppShell>
     </>
   );
 }

@@ -3,13 +3,17 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { fetchWithAuth } from '@/lib/api';
-
-interface Pedido {
-  id: string;
-  status: string;
-  total: number;
-  createdAt: string;
-}
+import { AppShell } from '@/components/layout/app-shell';
+import { PageHeader } from '@/components/layout/page-header';
+import { StatCard } from '@/components/ui/stat-card';
+import { Card } from '@/components/ui/card';
+import { Alert } from '@/components/ui/alert';
+import {
+  ClipboardIcon,
+  ChefHatIcon,
+  TvIcon,
+  CalendarIcon,
+} from '@/components/ui/icons';
 
 interface Estatisticas {
   recebidos: number;
@@ -18,6 +22,33 @@ interface Estatisticas {
   total: number;
 }
 
+const shortcuts = [
+  {
+    href: '/pedidos',
+    title: 'Pedidos',
+    description: 'Criar e gerir pedidos',
+    icon: ClipboardIcon,
+    valueKey: 'total' as const,
+    color: 'bg-brand/10 text-brand border-brand/20',
+  },
+  {
+    href: '/cozinha',
+    title: 'Cozinha / KDS',
+    description: 'Preparação de pedidos',
+    icon: ChefHatIcon,
+    valueKey: 'emPreparacao' as const,
+    color: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+  },
+  {
+    href: '/publico',
+    title: 'Ecrã Público',
+    description: 'Visualização para clientes',
+    icon: TvIcon,
+    valueKey: 'prontos' as const,
+    color: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  },
+];
+
 export default function HomePage() {
   const [estatisticas, setEstatisticas] = useState<Estatisticas>({
     recebidos: 0,
@@ -25,6 +56,7 @@ export default function HomePage() {
     prontos: 0,
     total: 0,
   });
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetchEstatisticas();
@@ -36,106 +68,103 @@ export default function HomePage() {
     try {
       const data = await fetchWithAuth<Estatisticas>('/reports/estatisticas');
       setEstatisticas(data);
-    } catch (error) {
-      console.error('Erro ao obter estatísticas:', error);
+      setError('');
+    } catch {
+      setError('Não foi possível obter as estatísticas.');
     }
   };
+
+  const statCards = [
+    {
+      label: 'Recebidos',
+      value: estatisticas.recebidos,
+      sub: 'aguardam preparação',
+      color: 'brand' as const,
+    },
+    {
+      label: 'A Preparar',
+      value: estatisticas.emPreparacao,
+      sub: 'na cozinha',
+      color: 'orange' as const,
+    },
+    {
+      label: 'Prontos',
+      value: estatisticas.prontos,
+      sub: 'para entrega',
+      color: 'green' as const,
+    },
+    {
+      label: 'Total Ativo',
+      value: estatisticas.total,
+      sub: 'pedidos em curso',
+      color: 'blue' as const,
+    },
+  ];
 
   return (
     <>
       <title>SenhasFestas - Gestão de Pedidos</title>
 
-      <main className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 text-white p-8">
-        <div className="max-w-6xl mx-auto">
-          <header className="text-center mb-12">
-            <h1 className="text-5xl font-bold mb-4 text-amber-400">
-              🍷 SenhasFestas
-            </h1>
-            <p className="text-xl text-slate-300">
-              Sistema de gestão de pedidos para festas de aldeia - v1.1
-            </p>
-          </header>
+      <AppShell>
+        <PageHeader
+          title="Painel de Controlo"
+          subtitle="Visão geral dos pedidos em tempo real"
+          icon={<CalendarIcon className="h-5 w-5" />}
+        />
 
-          <div className="grid md:grid-cols-3 gap-6 mb-12">
-            <Link href="/pedidos" className="block">
-              <div className="bg-slate-800 rounded-xl p-8 hover:bg-slate-700 transition-colors border-2 border-slate-600 hover:border-amber-400">
-                <div className="text-4xl mb-4">📋</div>
-                <h2 className="text-2xl font-bold mb-2">Pedidos</h2>
-                <p className="text-slate-400">Criar e gerir pedidos</p>
-                <div className="mt-4 text-3xl font-bold text-amber-400">
-                  {estatisticas.total}
-                </div>
-              </div>
-            </Link>
-
-            <Link href="/cozinha" className="block">
-              <div className="bg-slate-800 rounded-xl p-8 hover:bg-slate-700 transition-colors border-2 border-slate-600 hover:border-green-400">
-                <div className="text-4xl mb-4">👨‍🍳</div>
-                <h2 className="text-2xl font-bold mb-2">Cozinha/KDS</h2>
-                <p className="text-slate-400">Preparação de pedidos</p>
-                <div className="mt-4 text-3xl font-bold text-green-400">
-                  {estatisticas.emPreparacao}
-                </div>
-              </div>
-            </Link>
-
-            <Link href="/publico" className="block">
-              <div className="bg-slate-800 rounded-xl p-8 hover:bg-slate-700 transition-colors border-2 border-slate-600 hover:border-blue-400">
-                <div className="text-4xl mb-4">📺</div>
-                <h2 className="text-2xl font-bold mb-2">Ecrã Público</h2>
-                <p className="text-slate-400">Visualização para clientes</p>
-                <div className="mt-4 text-3xl font-bold text-blue-400">
-                  {estatisticas.prontos}
-                </div>
-              </div>
-            </Link>
+        {error && (
+          <div className="mb-6">
+            <Alert variant="warning" message={error} />
           </div>
+        )}
 
-          <div className="grid md:grid-cols-4 gap-4 mb-12">
-            <div className="bg-slate-800/50 rounded-lg p-4 text-center">
-              <div className="text-slate-400 text-sm">Recebidos</div>
-              <div className="text-3xl font-bold text-yellow-400">
-                {estatisticas.recebidos}
-              </div>
+        {/* Stats grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {statCards.map((card, idx) => (
+            <div key={card.label} className={`animate-fade-in stagger-${idx + 1}`}>
+              <StatCard {...card} />
             </div>
-            <div className="bg-slate-800/50 rounded-lg p-4 text-center">
-              <div className="text-slate-400 text-sm">A Preparar</div>
-              <div className="text-3xl font-bold text-orange-400">
-                {estatisticas.emPreparacao}
-              </div>
-            </div>
-            <div className="bg-slate-800/50 rounded-lg p-4 text-center">
-              <div className="text-slate-400 text-sm">Prontos</div>
-              <div className="text-3xl font-bold text-green-400">
-                {estatisticas.prontos}
-              </div>
-            </div>
-            <div className="bg-slate-800/50 rounded-lg p-4 text-center">
-              <div className="text-slate-400 text-sm">Total</div>
-              <div className="text-3xl font-bold text-amber-400">
-                {estatisticas.total}
-              </div>
-            </div>
-          </div>
-
-          <footer className="text-center text-slate-500 text-sm">
-            <p>SenhasFestas v1.0 - Sistema de Gestão de Pedidos</p>
-            <p className="mt-2">
-              <Link href="/admin" className="text-amber-400 hover:underline">
-                Admin
-              </Link>
-              {' • '}
-              <Link href="/relatorios" className="text-amber-400 hover:underline">
-                Relatórios
-              </Link>
-              {' • '}
-              <Link href="/caixa" className="text-amber-400 hover:underline">
-                Caixa
-              </Link>
-            </p>
-          </footer>
+          ))}
         </div>
-      </main>
+
+        {/* Shortcuts */}
+        <div className="grid md:grid-cols-3 gap-4">
+          {shortcuts.map((item, idx) => {
+            const Icon = item.icon;
+            return (
+              <Link key={item.href} href={item.href} className={`animate-fade-in stagger-${idx + 1}`}>
+                <Card hover className="h-full">
+                  <div className="flex items-start justify-between">
+                    <div className={`p-3 rounded-xl border ${item.color}`}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div className="text-center">
+                      <div className="text-3xl font-bold tracking-tight text-zinc-50">
+                        {estatisticas[item.valueKey]}
+                      </div>
+                      <div className="text-xs text-zinc-500">em curso</div>
+                    </div>
+                  </div>
+                  <h2 className="mt-4 font-semibold text-zinc-100">{item.title}</h2>
+                  <p className="text-sm text-zinc-500">{item.description}</p>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Footer info */}
+        <footer className="mt-12 pt-6 border-t border-border flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-500">
+          <span>SenhasFestas v1.1 — Gestão de Pedidos</span>
+          <div className="flex items-center gap-4">
+            <Link href="/admin" className="text-zinc-500 hover:text-brand transition-colors">Admin</Link>
+            <span className="text-zinc-700">•</span>
+            <Link href="/relatorios" className="text-zinc-500 hover:text-brand transition-colors">Relatórios</Link>
+            <span className="text-zinc-700">•</span>
+            <Link href="/caixa" className="text-zinc-500 hover:text-brand transition-colors">Caixa</Link>
+          </div>
+        </footer>
+      </AppShell>
     </>
   );
 }
