@@ -233,15 +233,14 @@ recebido → a preparar → pronto → entregue
 
 ## Documentação Adicional
 
-- [Documentação de API](docs/api.md)
-- [Guia de Deploy](docs/deploy.md)
-- [Configuração de Ambiente](docs/development.md)
-- [Arquitetura](docs/architecture.md)
-- [Roadmap de Produto](docs/roadmap.md)
+- [Guia de Deploy](docs/deployment.md)
+- [Documentação de API (Swagger)](http://localhost:3000/api/docs)
+- [README do Backend](backend/README.md)
 
 Para começar rapidamente, execute:
 ```bash
-./scripts/dev.sh
+./scripts/dev.sh        # Linux/macOS (e Windows com Git Bash)
+.\scripts\dev.ps1       # Windows PowerShell
 ```
 
 Para testes de integração:
