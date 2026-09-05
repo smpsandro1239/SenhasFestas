@@ -3,6 +3,14 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { AuthLayout } from '@/components/layout/auth-layout';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Alert } from '@/components/ui/alert';
+import { WalletIcon, ArrowLeftIcon } from '@/components/ui/icons';
+import { cn } from '@/lib/cn';
+
+const QUICK_AMOUNTS = [5, 10, 20, 50];
 
 export default function BalancePage() {
   const [amount, setAmount] = useState('');
@@ -22,7 +30,6 @@ export default function BalancePage() {
       return;
     }
 
-    // Simulate loading balance
     setTimeout(() => {
       setLoading(false);
       router.push('/');
@@ -30,70 +37,69 @@ export default function BalancePage() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center p-8">
-      <div className="max-w-md w-full">
-        <div className="bg-slate-800 rounded-2xl p-8 shadow-xl">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold mb-4 text-amber-400">
-              💳 Carregar Saldo
-            </h1>
-            <p className="text-slate-400">Carregue saldo na sua conta para consumir</p>
+    <AuthLayout subtitle="Carregue saldo na sua conta para consumir">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-brand/10 border border-brand/20 text-brand">
+            <WalletIcon className="h-5 w-5" />
           </div>
+          <div>
+            <h2 className="text-xl font-bold tracking-tight text-zinc-50">
+              Carregar Saldo
+            </h2>
+            <p className="text-sm text-zinc-500">Escolha um valor</p>
+          </div>
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="bg-red-900/20 border border-red-500 rounded-lg p-3 text-red-400">
-                {error}
-              </div>
-            )}
+        {error && <Alert variant="error" message={error} />}
 
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-2">
-                Valor a carregar (€)
-              </label>
-              <input
-                type="number"
-                min="1"
-                step="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                placeholder="10.00"
-                required
-              />
-            </div>
+        <div className="space-y-4">
+          <Input
+            label="Valor a carregar (€)"
+            type="number"
+            min="1"
+            step="0.01"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="10.00"
+            required
+            inputSize="lg"
+            icon={<span className="text-zinc-500 font-semibold">€</span>}
+          />
 
-            <div className="grid grid-cols-4 gap-2">
-              {[5, 10, 20, 50].map((value) => (
+          <div className="grid grid-cols-4 gap-2">
+            {QUICK_AMOUNTS.map((value) => {
+              const active = parseFloat(amount) === value;
+              return (
                 <button
                   key={value}
                   type="button"
                   onClick={() => setAmount(value.toString())}
-                  className="bg-slate-700 hover:bg-slate-600 rounded-lg py-2 text-white font-bold transition-colors"
+                  className={cn(
+                    'py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border',
+                    active
+                      ? 'bg-brand text-black border-brand glow-amber'
+                      : 'bg-surface border-border text-zinc-300 hover:bg-surface-hover hover:border-border-hover',
+                  )}
                 >
                   €{value}
                 </button>
-              ))}
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {loading ? 'A carregar...' : 'Confirmar Carregamento'}
-            </button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-slate-400">
-              <Link href="/" className="text-amber-400 hover:underline">
-                ← Voltar ao menu
-              </Link>
-            </p>
+              );
+            })}
           </div>
         </div>
-      </div>
-    </main>
+
+        <Button type="submit" loading={loading} size="lg" className="w-full" variant="success">
+          {loading ? 'A carregar...' : 'Confirmar Carregamento'}
+        </Button>
+
+        <div className="text-center">
+          <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-300 transition-colors">
+            <ArrowLeftIcon className="h-4 w-4" />
+            Voltar ao menu
+          </Link>
+        </div>
+      </form>
+    </AuthLayout>
   );
 }

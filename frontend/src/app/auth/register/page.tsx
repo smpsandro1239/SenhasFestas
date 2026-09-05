@@ -4,6 +4,11 @@ import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { AuthLayout } from '@/components/layout/auth-layout';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Alert } from '@/components/ui/alert';
+import { UserIcon, LockIcon, BellIcon } from '@/components/ui/icons';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
@@ -38,113 +43,84 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center p-8">
-      <div className="max-w-md w-full">
-        <div className="bg-slate-800 rounded-2xl p-8 shadow-xl">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold mb-4 text-amber-400">
-              🍷 SenhasFestas
-            </h1>
-            <p className="text-slate-400">Crie a sua conta</p>
+    <AuthLayout subtitle="Crie a sua conta para começar a usar o sistema">
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-zinc-50">
+            Criar conta
+          </h2>
+          <p className="mt-1 text-sm text-zinc-500">Preencha os seus dados</p>
+        </div>
+
+        {error && <Alert variant="error" message={error} />}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Input
+            label="Nome Completo"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="O seu nome"
+            required
+            icon={<UserIcon className="h-4 w-4" />}
+          />
+
+          <Input
+            label="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="exemplo@email.com"
+            required
+            icon={<BellIcon className="h-4 w-4" />}
+          />
+
+          <Input
+            label="Telefone (opcional)"
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="912345678"
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Palavra-passe"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              minLength={6}
+              required
+              icon={<LockIcon className="h-4 w-4" />}
+            />
+
+            <Input
+              label="Confirmar"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="••••••••"
+              minLength={6}
+              required
+              icon={<LockIcon className="h-4 w-4" />}
+            />
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="bg-red-900/20 border border-red-500 rounded-lg p-3 text-red-400">
-                {error}
-              </div>
-            )}
+          <Button type="submit" loading={loading} size="lg" className="w-full mt-2">
+            {loading ? 'A registar...' : 'Criar Conta'}
+          </Button>
+        </form>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-2">
-                Nome Completo
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                placeholder="O seu nome"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-2">
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                placeholder="exemplo@email.com"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-2">
-                Telefone (opcional)
-              </label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                placeholder="912345678"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-2">
-                Palavra-passe
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                placeholder="••••••••"
-                minLength={6}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-2">
-                Confirmar Palavra-passe
-              </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                placeholder="••••••••"
-                minLength={6}
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50 mt-6"
-            >
-              {loading ? 'A registar...' : 'Criar Conta'}
-            </button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-slate-400">
-              Já tem conta?{' '}
-              <Link href="/auth/login" className="text-amber-400 hover:underline">
-                Iniciar sessão
-              </Link>
-            </p>
-          </div>
+        <div className="pt-2 text-center">
+          <p className="text-zinc-500">
+            Já tem conta?{' '}
+            <Link href="/auth/login" className="text-brand hover:text-brand-light font-medium transition-colors">
+              Iniciar sessão
+            </Link>
+          </p>
         </div>
       </div>
-    </main>
+    </AuthLayout>
   );
 }
