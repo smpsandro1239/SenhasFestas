@@ -29,8 +29,8 @@ export class EventService {
   async findByUser(userId: string): Promise<EventEntity[]> {
     return this.eventRepository
       .createQueryBuilder('event')
-      .innerJoin('event_users', 'eu', 'eu.event = event.id')
-      .where('eu.user = :userId', { userId })
+      .innerJoin(EventUserEntity, 'eu', 'eu.eventId = event.id')
+      .where('eu.userId = :userId', { userId })
       .getMany();
   }
 

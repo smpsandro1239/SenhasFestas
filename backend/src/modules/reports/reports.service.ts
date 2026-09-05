@@ -1,26 +1,24 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { OrderEntity } from '../../entities';
-import { BalanceMovementEntity } from '../../entities';
-import { ProductEntity } from '../../entities';
+import { OrderEntity, OrderItemEntity, BalanceMovementEntity } from '../../entities';
 
 @Injectable()
 export class ReportsService {
   constructor(
     @InjectRepository(OrderEntity)
     private readonly orderRepository: Repository<OrderEntity>,
+    @InjectRepository(OrderItemEntity)
+    private readonly orderItemRepository: Repository<OrderItemEntity>,
     @InjectRepository(BalanceMovementEntity)
     private readonly balanceRepository: Repository<BalanceMovementEntity>,
-    @InjectRepository(ProductEntity)
-    private readonly productRepository: Repository<ProductEntity>,
   ) {}
 
-  async obterOrdens(filtros: any) {
+  async obterOrdens(filtros: { status?: string; estacao?: string; station?: string }) {
     const query = this.orderRepository
       .createQueryBuilder('orden')
       .leftJoinAndSelect('orden.items', 'itens')
-      .leftJoinAndSelect('itens.produto', 'produto')
+      .leftJoinAndSelect('itens.product', 'product')
       .orderBy('orden.createdAt', 'ASC');
 
     if (filtros.status) {
@@ -31,14 +29,18 @@ export class ReportsService {
       });
     }
 
-    if (filtros.estacao) {
-      query.andWhere('orden.station = :estacao', { estacao: filtros.estacao });
+    const estacao = filtros.estacao || filtros.station;
+    if (estacao) {
+      query.andWhere('orden.station = :estacao', { estacao });
     }
 
     return query.getMany();
   }
 
-  async obterSaldo(filtros: any) {
+  async obterSaldo(filtros: { id?: string }) {
+    if (!filtros?.id) {
+      return [];
+    }
     const query = this.balanceRepository
       .createQueryBuilder('movimentacao')
       .where('movimentacao.balanceId = :id', { id: filtros.id })
@@ -47,14 +49,20 @@ export class ReportsService {
     return query.getMany();
   }
 
-  async topProducts(_filtros: any) {
-    const query = this.productRepository
-      .createQueryBuilder('produto')
-      .where('produto.isActive = :active', { active: true })
-      .orderBy('produto.quantity', 'DESC')
-      .limit(10);
-
-    return query.getMany();
+  async topProducts(_filtros?: any) {
+    return this.orderItemRepository
+      .createQueryBuilder('item')
+      .leftJoin('item.product', 'product')
+      .select('product.id', 'id')
+      .addSelect('product.name', 'name')
+      .addSelect('product.price', 'price')
+      .addSelect('SUM(item.quantity)', 'totalVendido')
+      .groupBy('product.id')
+      .addGroupBy('product.name')
+      .addGroupBy('product.price')
+      .orderBy('"totalVendido"', 'DESC')
+      .limit(10)
+      .getRawMany();
   }
 
   async obterEstatisticas() {
@@ -65,7 +73,11 @@ export class ReportsService {
       this.orderRepository.count({ where: { status: 'received' } }),
       this.orderRepository.count({ where: { status: 'preparing' } }),
       this.orderRepository.count({ where: { status: 'ready' } }),
-      this.orderRepository.count({ where: { status: 'delivered', createdAt: today } }),
+      this.orderRepository
+        .createQueryBuilder('orden')
+        .where('orden.status = :status', { status: 'delivered' })
+        .andWhere('orden.updatedAt >= :today', { today })
+        .getCount(),
     ]);
 
     return {

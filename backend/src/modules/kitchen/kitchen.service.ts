@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrderEntity } from '../../entities';
@@ -8,6 +8,7 @@ export interface FiltrosKDS {
   status?: string;
   estacao?: string;
   categoria?: string;
+  station?: string;
 }
 
 @Injectable()
@@ -33,8 +34,8 @@ export class KitchenService {
       });
     }
 
-    if (filtros.estacao) {
-      query.andWhere('pedido.station = :estacao', { estacao: filtros.estacao });
+    if (filtros.estacao || filtros.station) {
+      query.andWhere('pedido.station = :estacao', { estacao: filtros.estacao || filtros.station });
     }
 
     return query.getMany();
@@ -53,7 +54,7 @@ export class KitchenService {
     };
 
     if (!transicoesValidas[pedido.status]?.includes(novoEstado)) {
-      throw new Error(`Transição inválida: ${pedido.status} -> ${novoEstado}`);
+      throw new BadRequestException(`Transição inválida: ${pedido.status} -> ${novoEstado}`);
     }
 
     pedido.status = novoEstado;
