@@ -1,7 +1,13 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { login as apiLogin, register as apiRegister } from './api';
+import {
+  login as apiLogin,
+  register as apiRegister,
+  logout as apiLogout,
+  persistSession,
+  destroySession,
+} from './api';
 
 interface User {
   id: string;
@@ -44,26 +50,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const { token: newToken, user: userData } = await apiLogin(email, password);
+    const { token: newToken, refreshToken, user: userData } = await apiLogin(email, password);
+    persistSession(newToken, refreshToken, userData);
     setToken(newToken);
     setUser(userData);
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('user', JSON.stringify(userData));
   };
 
   const register = async (data: any) => {
-    const { token: newToken, user: userData } = await apiRegister(data);
+    const { token: newToken, refreshToken, user: userData } = await apiRegister(data);
+    persistSession(newToken, refreshToken, userData);
     setToken(newToken);
     setUser(userData);
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('user', JSON.stringify(userData));
   };
 
   const logout = () => {
+    const refreshToken =
+      typeof window !== 'undefined' ? window.localStorage.getItem('refreshToken') : null;
     setUser(null);
     setToken(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    if (refreshToken) {
+      apiLogout(refreshToken);
+    } else {
+      destroySession(false);
+    }
   };
 
   return (
