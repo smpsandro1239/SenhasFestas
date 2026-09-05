@@ -12,6 +12,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { CashClosureModule } from './modules/cash-closure/cash-closure.module';
 import { UserModule } from './modules/user/user.module';
 import { RedisModule } from './common/redis/redis.module';
+import { WebSocketModule } from './websocket/websocket.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HealthController } from './health/health.controller';
@@ -19,6 +20,7 @@ import {
   AuditMiddleware,
   RateLimitMiddleware,
   SecurityMiddleware,
+  LoginRateLimitMiddleware,
 } from './middleware/audit.middleware';
 
 @Module({
@@ -37,14 +39,15 @@ import {
         username: configService.get<string>('DB_USERNAME'),
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_NAME'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
         migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
         migrationsRun: configService.get<string>('NODE_ENV') === 'production',
-        synchronize: configService.get<string>('NODE_ENV') !== 'production',
+        synchronize: false,
+        autoLoadEntities: true,
         logging: false,
       }),
     }),
     RedisModule,
+    WebSocketModule,
     AuthModule,
     EventModule,
     CatalogModule,
@@ -63,6 +66,8 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(SecurityMiddleware, RateLimitMiddleware, AuditMiddleware)
-      .forRoutes('*');
+      .forRoutes('*')
+      .apply(LoginRateLimitMiddleware)
+      .forRoutes('auth/login');
   }
 }

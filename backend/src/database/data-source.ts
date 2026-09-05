@@ -9,7 +9,7 @@ export const AppDataSource = new DataSource({
   username: process.env.DB_USERNAME || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
   database: process.env.DB_NAME || 'senhasfestas',
-  entities: [__dirname + '/../**/*.entity.ts'],
+  entities: [__dirname + '/../entities/index.ts'],
   migrations: [__dirname + '/migrations/*.ts'],
   synchronize: false,
   logging: false,

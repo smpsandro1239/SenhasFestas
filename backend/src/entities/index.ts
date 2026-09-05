@@ -243,7 +243,7 @@ export class BalanceMovementEntity {
   @Column({ nullable: true, type: 'text' })
   description?: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'uuid', nullable: true })
   orderId?: string;
 
   @CreateDateColumn()
@@ -400,6 +400,34 @@ export class DeviceSessionEntity {
 
   @Column({ type: 'timestamp' })
   lastSeen: Date;
+
+  @CreateDateColumn()
+  createdAt: Date;
+}
+
+@Entity('refresh_tokens')
+@Index(['userId'])
+export class RefreshTokenEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'uuid' })
+  userId: string;
+
+  @Column({ type: 'varchar', length: 64 })
+  tokenHash: string;
+
+  @Column({ type: 'timestamp' })
+  expiresAt: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  revokedAt?: Date;
+
+  @Column({ type: 'uuid', nullable: true })
+  replacedByTokenId?: string;
+
+  @Column({ default: false })
+  isUsed: boolean;
 
   @CreateDateColumn()
   createdAt: Date;
