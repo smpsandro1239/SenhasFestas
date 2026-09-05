@@ -62,6 +62,9 @@ dist/
 .DS_Store
 *.png
 
+# PWA icons (permitir os ícones específicos da PWA)
+!frontend/public/icon-*.png
+
 # Optional npm cache directory
 .npm
 
