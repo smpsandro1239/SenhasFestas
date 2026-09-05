@@ -2,6 +2,29 @@ const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || '';
 const API_URL = rawApiUrl.replace(/\/+$/, '').replace(/\/api$/, '');
 const API_BASE = API_URL ? `${API_URL}/api` : '/api';
 
+export async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers: {
+      ...headers,
+      ...(options.headers as Record<string, string>),
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Erro na requisição');
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {},

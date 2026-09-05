@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { fetchWithAuth } from '@/lib/api';
 
 interface Order {
   id: string;
@@ -26,9 +27,7 @@ export default function PedidosPage() {
 
   const fetchOrders = async () => {
     try {
-      const response = await fetch('/api/orders');
-      if (!response.ok) throw new Error('Erro ao carregar');
-      const data = await response.json();
+      const data = await fetchWithAuth<Order[]>('/orders');
       setOrders(data);
     } catch (err) {
       setError('Erro ao carregar pedidos');
@@ -39,9 +38,8 @@ export default function PedidosPage() {
 
   const updateStatus = async (orderId: string, newStatus: string) => {
     try {
-      await fetch(`/api/orders/${orderId}/status`, {
+      await fetchWithAuth(`/orders/${orderId}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
       fetchOrders();

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { fetchWithAuth } from '@/lib/api';
 
 interface Pedido {
   id: string;
@@ -33,8 +34,7 @@ export default function HomePage() {
 
   const fetchEstatisticas = async () => {
     try {
-      const response = await fetch('/api/reports/estatisticas');
-      const data = await response.json();
+      const data = await fetchWithAuth<Estatisticas>('/reports/estatisticas');
       setEstatisticas(data);
     } catch (error) {
       console.error('Erro ao obter estatísticas:', error);

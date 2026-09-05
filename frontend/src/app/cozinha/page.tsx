@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { fetchWithAuth } from '@/lib/api';
 
 interface Order {
   id: string;
@@ -28,9 +29,7 @@ export default function CozinhaPage() {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/kitchen/pedidos');
-      if (!response.ok) throw new Error('Erro ao carregar');
-      const data = await response.json();
+      const data = await fetchWithAuth<Order[]>('/kitchen/pedidos');
       setOrders(data);
     } catch (err) {
       setError('Erro ao carregar pedidos da cozinha');
@@ -41,9 +40,8 @@ export default function CozinhaPage() {
 
   const updateStatus = async (orderId: string, newStatus: string) => {
     try {
-      await fetch(`/api/orders/${orderId}/status`, {
+      await fetchWithAuth(`/orders/${orderId}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
       // Force refresh after status update
