@@ -2,54 +2,140 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --foreground-rgb: 255, 255, 255;
-  --background-start-rgb: 15, 23, 42;
-  --background-end-rgb: 30, 41, 59;
+@layer base {
+  :root {
+    --color-bg: #09090b;
+    --color-surface: rgba(255,255,255,0.03);
+    --color-surface-hover: rgba(255,255,255,0.06);
+    --color-border: rgba(255,255,255,0.08);
+    --color-text: #fafafa;
+    --color-text-muted: #a1a1aa;
+    --color-brand: #f59e0b;
+    --color-success: #22c55e;
+    --color-warning: #f97316;
+    --color-danger: #ef4444;
+    --color-info: #3b82f6;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    color: var(--color-text);
+    background: var(--color-bg);
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.2);
+  }
+
+  /* Focus visible */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
 }
 
-body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-    to bottom,
-    rgb(var(--background-start-rgb)),
-    rgb(var(--background-end-rgb))
-  );
+@layer components {
+  /* Glass card */
+  .glass {
+    background: var(--color-surface);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--color-border);
+    border-radius: 16px;
+  }
+
+  .glass-strong {
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px;
+  }
+
+  /* Page background with subtle gradient */
+  .page-bg {
+    background: linear-gradient(
+      180deg,
+      #09090b 0%,
+      #0c0c0f 50%,
+      #09090b 100%
+    );
+    min-height: 100vh;
+  }
+
+  /* Status glow effects */
+  .glow-amber {
+    box-shadow: 0 0 20px rgba(245,158,11,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .glow-green {
+    box-shadow: 0 0 20px rgba(34,197,94,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .glow-orange {
+    box-shadow: 0 0 20px rgba(249,115,22,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .glow-blue {
+    box-shadow: 0 0 20px rgba(59,130,246,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .glow-red {
+    box-shadow: 0 0 20px rgba(239,68,68,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  /* Shimmer loading effect */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255,255,255,0.03) 25%,
+      rgba(255,255,255,0.08) 50%,
+      rgba(255,255,255,0.03) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  /* TV-optimized full viewport */
+  .tv-layout {
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: hidden;
+  }
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
-}
 
-* {
-  box-sizing: border-box;
-}
-
-html {
-  scroll-behavior: smooth;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
+  .text-gradient {
+    background: linear-gradient(135deg, #f59e0b, #fbbf24, #f59e0b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
-}
 
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  /* Stagger animation delays for lists */
+  .stagger-1 { animation-delay: 0.05s; }
+  .stagger-2 { animation-delay: 0.1s; }
+  .stagger-3 { animation-delay: 0.15s; }
+  .stagger-4 { animation-delay: 0.2s; }
+  .stagger-5 { animation-delay: 0.25s; }
+  .stagger-6 { animation-delay: 0.3s; }
 }
