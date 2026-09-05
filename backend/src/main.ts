@@ -10,6 +10,19 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  (app as any).enable('trust proxy');
+
+  if (process.env.NODE_ENV === 'production') {
+    app.use((req, res, next) => {
+      if (!req.secure) {
+        return res.redirect(301, `https://${req.headers.host}${req.originalUrl}`);
+      }
+      next();
+    });
+  }
+
+  app.setGlobalPrefix('api', { exclude: ['api/docs'] });
+
   app.enableCors({
     origin: process.env.FRONTEND_URL || 'http://localhost:3001',
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
