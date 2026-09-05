@@ -11,7 +11,6 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState('cashier');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
@@ -29,7 +28,7 @@ export default function RegisterPage() {
     }
 
     try {
-      await register({ name, email, phone, password, role });
+      await register({ name, email, phone, password });
       router.push('/');
     } catch (err: any) {
       setError(err.message || 'Erro no registo');
@@ -95,23 +94,6 @@ export default function RegisterPage() {
                 className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
                 placeholder="912345678"
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-2">
-                Função
-              </label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-              >
-                <option value="cashier">Operador de Caixa</option>
-                <option value="kitchen">Cozinha</option>
-                <option value="bar">Bar</option>
-                <option value="organizer">Organizador</option>
-                <option value="treasurer">Tesoureiro</option>
-              </select>
             </div>
 
             <div>
