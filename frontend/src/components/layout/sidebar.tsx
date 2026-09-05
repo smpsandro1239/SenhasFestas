@@ -96,7 +96,7 @@ export function Sidebar({ className }: SidebarProps) {
                   : 'text-zinc-400 hover:text-zinc-100 hover:bg-surface',
               )}
             >
-              <Icon className="h-4.5 w-4.5" />
+              <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
               {item.label}
             </Link>
           );

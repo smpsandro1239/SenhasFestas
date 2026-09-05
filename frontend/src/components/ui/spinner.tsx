@@ -14,8 +14,14 @@ const sizeMap: Record<NonNullable<SpinnerProps['size']>, string> = {
 
 export function Spinner({ size = 'md', className, label }: SpinnerProps) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label={label ?? 'A carregar'}
+      className="flex flex-col items-center justify-center gap-3"
+    >
       <svg
+        aria-hidden="true"
         className={cn('animate-spin text-brand', sizeMap[size], className)}
         viewBox="0 0 24 24"
         fill="none"

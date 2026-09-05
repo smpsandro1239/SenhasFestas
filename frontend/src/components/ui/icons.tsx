@@ -16,6 +16,8 @@ function svgProps(className?: string) {
     strokeWidth: 1.8,
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+    focusable: false,
   };
 }
 

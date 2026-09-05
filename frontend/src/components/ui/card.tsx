@@ -29,6 +29,7 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
     return (
       <div
         ref={ref}
+        role="group"
         className={cn(
           'rounded-2xl',
           variantStyles[variant],
