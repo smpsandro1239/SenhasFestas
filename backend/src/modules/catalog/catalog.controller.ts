@@ -7,10 +7,13 @@ import {
   Body,
   UseGuards,
   Request,
+  ParseUUIDPipe,
+Query,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CatalogService } from './catalog.service';
 import { CreateProductDto, UpdateProductDto } from './dto';
+import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
@@ -20,12 +23,12 @@ export class CatalogController {
   constructor(private readonly catalogService: CatalogService) {}
 
   @Get()
-  async findAll() {
-    return this.catalogService.findAll();
+  async findAll(@Query() query: PaginationQueryDto) {
+    return this.catalogService.findAll(query.page, query.limit);
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string, @Request() req: any) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.catalogService.findOne(id, req.user);
   }
 
@@ -38,7 +41,7 @@ export class CatalogController {
   @Patch(':id')
   @Roles('superadmin', 'organizer')
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Request() req: any,
     @Body() dto: UpdateProductDto,
   ) {

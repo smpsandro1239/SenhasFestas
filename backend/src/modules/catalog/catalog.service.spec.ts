@@ -5,6 +5,7 @@ import { CatalogService } from './catalog.service';
 const mockProductRepository = {
   find: vi.fn(),
   findOne: vi.fn(),
+  findAndCount: vi.fn(),
   create: vi.fn(),
   save: vi.fn(),
 };
@@ -30,11 +31,19 @@ describe('CatalogService', () => {
   describe('findAll', () => {
     it('returns only active products', async () => {
       const products = [{ id: 'p1', name: 'Bifana', isActive: true }];
-      mockProductRepository.find.mockResolvedValue(products);
+      mockProductRepository.findAndCount.mockResolvedValue([products, 1]);
 
-      await expect(service.findAll()).resolves.toEqual(products);
-      expect(mockProductRepository.find).toHaveBeenCalledWith({
+      await expect(service.findAll()).resolves.toEqual({
+        items: products,
+        total: 1,
+        page: 1,
+        limit: 20,
+      });
+      expect(mockProductRepository.findAndCount).toHaveBeenCalledWith({
         where: { isActive: true },
+        skip: 0,
+        take: 20,
+        order: { createdAt: 'DESC' },
       });
     });
   });

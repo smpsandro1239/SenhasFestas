@@ -1,15 +1,22 @@
-import { IsString, IsNumber, IsArray, IsOptional, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsUUID,
+  IsInt,
+  Min,
+  IsArray,
+  IsOptional,
+  IsEnum,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateOrderItemDto {
-  @IsString()
+  @IsUUID()
   productId: string;
 
-  @IsNumber()
+  @IsInt()
+  @Min(1)
   quantity: number;
-
-  @IsNumber()
-  @IsOptional()
-  unitPrice?: number;
 
   @IsString()
   @IsOptional()
@@ -17,7 +24,7 @@ export class CreateOrderItemDto {
 }
 
 export class CreateOrderDto {
-  @IsString()
+  @IsUUID()
   eventId: string;
 
   @IsEnum(['qr', 'pos'])
@@ -31,7 +38,7 @@ export class CreateOrderDto {
   @IsOptional()
   station?: string;
 
-  @IsString()
+  @IsUUID()
   @IsOptional()
   balanceId?: string;
 
@@ -39,18 +46,23 @@ export class CreateOrderDto {
   @IsOptional()
   paymentMethod?: string;
 
-  @IsNumber()
-  total: number;
-
-  @IsNumber()
+  @Min(0)
   @IsOptional()
   balanceUsed?: number;
 
   @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateOrderItemDto)
   items: CreateOrderItemDto[];
 }
 
 export class UpdateOrderStatusDto {
   @IsEnum(['received', 'preparing', 'ready', 'delivered', 'cancelled'])
   status: string;
+}
+
+export class ListOrdersQueryDto {
+  @IsUUID()
+  @IsOptional()
+  eventId?: string;
 }

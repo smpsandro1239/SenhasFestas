@@ -13,10 +13,14 @@ export class CatalogService {
     private readonly categoryRepository: Repository<CategoryEntity>,
   ) {}
 
-  async findAll(): Promise<ProductEntity[]> {
-    return this.productRepository.find({
+  async findAll(page = 1, limit = 20): Promise<{ items: ProductEntity[]; total: number; page: number; limit: number }> {
+    const [items, total] = await this.productRepository.findAndCount({
       where: { isActive: true },
+      skip: (page - 1) * limit,
+      take: limit,
+      order: { createdAt: 'DESC' },
     });
+    return { items, total, page, limit };
   }
 
   async findOne(id: string, _user: UserEntity): Promise<ProductEntity> {

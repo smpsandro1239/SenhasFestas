@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource, In } from 'typeorm';
-import { OrderEntity, OrderItemEntity, BalanceEntity, BalanceMovementEntity, ProductEntity, EventEntity } from '../../entities';
+import { OrderEntity, OrderItemEntity, BalanceEntity, BalanceMovementEntity, ProductEntity, EventEntity, EventUserEntity } from '../../entities';
 import { CreateOrderDto } from './dto';
 import { QRCodeService } from '../../services/qr-code.service';
 import { OrderGateway } from '../../websocket/order.gateway';
@@ -23,6 +23,8 @@ export class OrderService {
     private readonly productRepository: Repository<ProductEntity>,
     @InjectRepository(EventEntity)
     private readonly eventRepository: Repository<EventEntity>,
+    @InjectRepository(EventUserEntity)
+    private readonly eventUserRepository: Repository<EventUserEntity>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
     private readonly qrCodeService: QRCodeService,
@@ -35,8 +37,36 @@ export class OrderService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
+    if (event.status !== 'active') {
+      throw new ForbiddenException('Evento não está ativo');
+    }
+
+    const isMember = await this.eventUserRepository.findOne({
+      where: { event: { id: event.id }, user: { id: user.id } },
+    });
+    if (!isMember && user.role !== 'superadmin') {
+      throw new ForbiddenException('Não pertence a este evento');
+    }
 
     const savedOrder = await this.dataSource.transaction(async (manager) => {
+      const products = dto.items.length
+        ? await manager.findBy(ProductEntity, { id: In(dto.items.map((item) => item.productId)) })
+        : [];
+      if (products.length !== dto.items.length) {
+        throw new NotFoundException('Um ou mais produtos não encontrados');
+      }
+      const productById = new Map(products.map((product) => [product.id, product]));
+
+      let total = 0;
+      for (const item of dto.items) {
+        const product = productById.get(item.productId);
+        if (!product) {
+          throw new NotFoundException(`Produto não encontrado: ${item.productId}`);
+        }
+        total += item.quantity * Number(product.price);
+      }
+
+      const balanceUsed = Math.min(dto.balanceUsed || 0, total);
       const order = manager.create(OrderEntity, {
         source: dto.source,
         event: event,
@@ -45,22 +75,14 @@ export class OrderService {
         station: dto.station,
         balanceId: dto.balanceId,
         paymentMethod: dto.paymentMethod,
-        total: dto.total,
-        balanceUsed: dto.balanceUsed || 0,
+        total,
+        balanceUsed,
       });
       const createdOrder = await manager.save(OrderEntity, order);
 
-      const products = dto.items.length
-        ? await manager.findBy(ProductEntity, { id: In(dto.items.map((item) => item.productId)) })
-        : [];
-      const productById = new Map(products.map((product) => [product.id, product]));
-
       for (const item of dto.items) {
         const product = productById.get(item.productId);
-        if (!product) {
-          throw new NotFoundException(`Produto não encontrado: ${item.productId}`);
-        }
-        const unitPrice = item.unitPrice ?? product.price;
+        const unitPrice = Number(product.price);
         const orderItem = manager.create(OrderItemEntity, {
           order: createdOrder,
           product,
@@ -72,8 +94,8 @@ export class OrderService {
         await manager.save(OrderItemEntity, orderItem);
       }
 
-      if (dto.balanceId && dto.balanceUsed) {
-        await this.consumeBalanceInTransaction(manager, user, dto.balanceId, dto.balanceUsed, createdOrder.id);
+      if (dto.balanceId && balanceUsed > 0) {
+        await this.consumeBalanceInTransaction(manager, user, dto.balanceId, balanceUsed, createdOrder.id, event.id);
       }
 
       return createdOrder;
@@ -83,7 +105,7 @@ export class OrderService {
     const qrCode = await this.qrCodeService.generateOrderQRCode(savedOrder.id);
 
     // Emit WebSocket event for real-time updates
-    this.orderGateway.emitOrderUpdate(savedOrder.id, savedOrder.status);
+    this.orderGateway.emitOrderUpdate(savedOrder.id, savedOrder.status, event.id);
 
     // Send notification for new order
     await this.notificationService.notifyNewOrder(savedOrder.id);
@@ -98,10 +120,11 @@ export class OrderService {
     balanceId: string,
     amount: number,
     orderId: string,
+    eventId: string,
   ): Promise<void> {
     const balance = await manager.findOne(BalanceEntity, {
       where: { id: balanceId },
-      relations: { user: true },
+      relations: { user: true, event: true },
       lock: { mode: 'pessimistic_write' },
     });
     if (!balance) {
@@ -110,6 +133,9 @@ export class OrderService {
     const isClient = user?.role === 'client';
     if (isClient && balance.user?.id !== user.id) {
       throw new ForbiddenException('Não pode usar o saldo de outro utilizador');
+    }
+    if (balance.event?.id && balance.event.id !== eventId) {
+      throw new ForbiddenException('Saldo não pertence a este evento');
     }
     if (balance.currentBalance < amount) {
       throw new ForbiddenException('Saldo insuficiente');
@@ -127,7 +153,29 @@ export class OrderService {
     await manager.save(BalanceMovementEntity, movement);
   }
 
-  async findAll(eventId?: string, balanceIds?: string[]): Promise<any[]> {
+  async findByEvent(eventId: string, user: any): Promise<{
+    items: any[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    if (user && user.role !== 'superadmin') {
+      const membership = await this.eventUserRepository.findOne({
+        where: { event: { id: eventId }, user: { id: user.id } },
+      });
+      if (!membership) {
+        throw new ForbiddenException('Não pertence a este evento');
+      }
+    }
+    return this.findAll(eventId);
+  }
+
+  async findAll(eventId?: string, balanceIds?: string[], eventIds?: string[], page = 1, limit = 20): Promise<{
+    items: any[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
     const query = this.orderRepository.createQueryBuilder('order')
       .leftJoinAndSelect('order.items', 'items')
       .leftJoinAndSelect('items.product', 'product')
@@ -136,24 +184,48 @@ export class OrderService {
     if (balanceIds && balanceIds.length > 0) {
       query.where('order.balanceId IN (:...balanceIds)', { balanceIds });
     } else if (balanceIds) {
-      return [];
+      return { items: [], total: 0, page, limit };
     }
 
     if (eventId) {
       query.andWhere('order.event.id = :eventId', { eventId });
     }
 
-    return query.getMany();
+    if (eventIds && eventIds.length > 0) {
+      query.andWhere('order.event.id IN (:...eventIds)', { eventIds });
+    }
+
+    const [items, total] = await query
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+    return { items, total, page, limit };
   }
 
-  async findAllForUser(user: any): Promise<any[]> {
+  async findAllForUser(user: any, page = 1, limit = 20): Promise<{
+    items: any[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
     if (user.role === 'client') {
       const balances = await this.balanceRepository.find({
         where: { user: { id: user.id } as any },
       });
-      return this.findAll(undefined, balances.map((b) => b.id));
+      return this.findAll(undefined, balances.map((b) => b.id), undefined, page, limit);
     }
-    return this.findAll();
+    if (user.role === 'superadmin') {
+      return this.findAll(undefined, undefined, undefined, page, limit);
+    }
+    const memberships = await this.eventUserRepository.find({
+      where: { user: { id: user.id } as any },
+      relations: { event: true },
+    });
+    const eventIds = memberships.map((m) => m.event?.id).filter((id): id is string => Boolean(id));
+    if (eventIds.length === 0) {
+      return { items: [], total: 0, page, limit };
+    }
+    return this.findAll(undefined, undefined, eventIds, page, limit);
   }
 
   async findOne(id: string): Promise<any> {
@@ -187,6 +259,13 @@ export class OrderService {
       const balance = await this.balanceRepository.findOne({ where: { id: order.balanceId } });
       if (!balance || balance.user?.id !== user.id) {
         throw new ForbiddenException('Não pode cancelar o pedido de outro utilizador');
+      }
+    } else if (user?.role !== 'superadmin') {
+      const membership = await this.eventUserRepository.findOne({
+        where: { event: { id: order.event?.id }, user: { id: user.id } },
+      });
+      if (!membership) {
+        throw new ForbiddenException('Não pertence a este evento');
       }
     }
 
@@ -229,15 +308,27 @@ export class OrderService {
     });
 
     // Emit WebSocket event for real-time updates
-    this.orderGateway.emitOrderUpdate(savedOrder.id, savedOrder.status);
+    this.orderGateway.emitOrderUpdate(savedOrder.id, savedOrder.status, order.event?.id);
 
     return savedOrder;
   }
 
-  async updateStatus(id: string, status: string): Promise<any> {
-    const order = await this.orderRepository.findOne({ where: { id } });
+  async updateStatus(id: string, status: string, user?: any): Promise<any> {
+    const order = await this.orderRepository.findOne({
+      where: { id },
+      relations: { event: true },
+    });
     if (!order) {
       throw new NotFoundException('Pedido não encontrado');
+    }
+
+    if (user && user.role !== 'superadmin') {
+      const membership = await this.eventUserRepository.findOne({
+        where: { event: { id: order.event?.id }, user: { id: user.id } },
+      });
+      if (!membership) {
+        throw new ForbiddenException('Não pertence a este evento');
+      }
     }
 
     const transicoesValidas: Record<string, string[]> = {
@@ -251,9 +342,18 @@ export class OrderService {
       throw new ForbiddenException(`Transição inválida: ${order.status} -> ${status}`);
     }
 
-    order.status = status as 'received' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
-    const savedOrder = await this.orderRepository.save(order);
-    
+    const savedOrder = await this.dataSource.transaction(async (manager) => {
+      const currentOrder = await manager.findOne(OrderEntity, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!currentOrder || currentOrder.status !== order.status) {
+        throw new ForbiddenException('Pedido mudou de estado, tente novamente');
+      }
+      currentOrder.status = status as 'received' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+      return manager.save(OrderEntity, currentOrder);
+    });
+
     // Send notification based on new status
     switch (status) {
       case 'preparing':
@@ -268,10 +368,10 @@ export class OrderService {
       default:
         break;
     }
-    
+
     // Also emit WebSocket event for real-time updates
-    this.orderGateway.emitOrderUpdate(savedOrder.id, status);
-    
+    this.orderGateway.emitOrderUpdate(savedOrder.id, status, order.event?.id);
+
     return savedOrder;
   }
 }

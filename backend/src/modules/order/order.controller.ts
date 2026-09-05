@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request, ParseUUIDPipe, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { OrderService } from './order.service';
 import { CreateOrderDto, UpdateOrderStatusDto } from './dto';
+import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
@@ -20,25 +21,26 @@ export class OrderController {
   @Patch(':id/status')
   @Roles(...STAFF_ROLES)
   async updateStatus(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateOrderStatusDto,
+    @Request() req: any,
   ) {
-    return this.orderService.updateStatus(id, dto.status);
+    return this.orderService.updateStatus(id, dto.status, req.user);
   }
 
   @Post(':id/cancel')
-  async cancel(@Param('id') id: string, @Request() req: any) {
+  async cancel(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.orderService.cancelOrder(id, req.user);
   }
 
   @Get('event/:eventId')
   @Roles(...STAFF_ROLES)
-  async findByEvent(@Param('eventId') eventId: string) {
-    return this.orderService.findAll(eventId);
+  async findByEvent(@Param('eventId', ParseUUIDPipe) eventId: string, @Request() req: any) {
+    return this.orderService.findByEvent(eventId, req.user);
   }
 
   @Get()
-  async findAll(@Request() req: any) {
-    return this.orderService.findAllForUser(req.user);
+  async findAll(@Request() req: any, @Query() query: PaginationQueryDto) {
+    return this.orderService.findAllForUser(req.user, query.page, query.limit);
   }
 }
