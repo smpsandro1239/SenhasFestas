@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { Repository, DataSource } from 'typeorm';
 import {
   EventEntity,
   EventUserEntity,
@@ -8,6 +8,9 @@ import {
   OrderEntity,
   BalanceEntity,
   ProductEntity,
+  BalanceMovementEntity,
+  CategoryEntity,
+  StationEntity,
 } from '../../entities';
 import { CreateEventDto, UpdateEventDto } from './dto';
 
@@ -24,6 +27,8 @@ export class EventService {
     private readonly balanceRepository: Repository<BalanceEntity>,
     @InjectRepository(ProductEntity)
     private readonly productRepository: Repository<ProductEntity>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
 
   async findByUser(userId: string): Promise<EventEntity[]> {
@@ -90,12 +95,29 @@ export class EventService {
   }
 
   async remove(id: string, user: UserEntity): Promise<{ deleted: boolean }> {
-    const event = await this.findOne(id, user);
-    await this.orderRepository.delete({ event: { id } as any });
-    await this.balanceRepository.delete({ event: { id } as any });
-    await this.productRepository.delete({ event: { id } as any });
-    await this.eventUserRepository.delete({ event: { id } as any });
-    await this.eventRepository.delete(event.id);
+    await this.findOne(id, user);
+    const balanceIds = (
+      await this.balanceRepository.find({ where: { event: { id } as any }, select: { id: true } })
+    ).map((b) => b.id);
+
+    await this.dataSource.transaction(async (manager) => {
+      if (balanceIds.length > 0) {
+        await manager
+          .createQueryBuilder()
+          .delete()
+          .from(BalanceMovementEntity)
+          .where('"balanceId" IN (:...balanceIds)', { balanceIds })
+          .execute();
+      }
+      await manager.delete(OrderEntity, { event: { id } as any });
+      await manager.delete(BalanceEntity, { event: { id } as any });
+      await manager.delete(ProductEntity, { event: { id } as any });
+      await manager.delete(CategoryEntity, { event: { id } as any });
+      await manager.delete(StationEntity, { event: { id } as any });
+      await manager.delete(EventUserEntity, { event: { id } as any });
+      await manager.delete(EventEntity, { id });
+    });
+
     return { deleted: true };
   }
 }

@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Patch, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PublicScreenService } from './public-screen.service';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -31,7 +31,7 @@ export class PublicScreenController {
   @Patch('pedidos/:id/entregue')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('superadmin', 'organizer', 'cashier', 'bar', 'kitchen')
-  async entregar(@Param('id') id: string) {
+  async entregar(@Param('id', ParseUUIDPipe) id: string) {
     return this.publicScreenService.marcarEntregue(id);
   }
 }

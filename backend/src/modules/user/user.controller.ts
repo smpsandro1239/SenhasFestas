@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Patch, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Param, Patch, Body, UseGuards, Request, ParseUUIDPipe } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { UserService } from './user.service';
 import { CreateUserDto, UpdateUserDto } from './dto';
@@ -24,7 +24,7 @@ export class UserController {
 
   @Get(':id')
   @Roles('superadmin', 'organizer')
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.userService.findOne(id);
   }
 
@@ -36,7 +36,7 @@ export class UserController {
 
   @Patch(':id')
   @Roles('superadmin')
-  async update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
     return this.userService.update(id, dto);
   }
 }

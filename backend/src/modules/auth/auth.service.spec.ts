@@ -18,7 +18,7 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new AuthService(mockRepository as any, mockJwtService as any);
+    service = new AuthService(mockRepository as any, mockRepository as any, mockJwtService as any);
   });
 
   describe('login', () => {
@@ -36,11 +36,10 @@ describe('AuthService', () => {
 
       const result = await service.login('client@test.com', 'secret123');
 
-      expect(mockJwtService.sign).toHaveBeenCalledWith({
-        sub: 'u1',
-        email: 'client@test.com',
-        role: 'client',
-      });
+      expect(mockJwtService.sign).toHaveBeenCalledWith(
+        { sub: 'u1', email: 'client@test.com', role: 'client' },
+        { issuer: 'senhasfestas-api', audience: 'senhasfestas-app' },
+      );
       expect(result.token).toBe('signed-token');
       expect(result.user).not.toHaveProperty('password');
       expect(result.user.role).toBe('client');
@@ -80,7 +79,7 @@ describe('AuthService', () => {
 
       await expect(
         service.login('inactive@test.com', 'secret123'),
-      ).rejects.toThrow('User inactive');
+      ).rejects.toThrow('Utilizador inativo');
     });
   });
 
@@ -113,7 +112,7 @@ describe('AuthService', () => {
 
       await expect(
         service.register('taken@test.com', 'secret123', 'Taken', 'client'),
-      ).rejects.toThrow('Email already in use');
+      ).rejects.toThrow('Email já em uso');
     });
   });
 

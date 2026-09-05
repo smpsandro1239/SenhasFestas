@@ -8,6 +8,7 @@ import {
   Body,
   UseGuards,
   Request,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { EventService } from './event.service';
@@ -32,14 +33,14 @@ export class EventController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string, @Request() req: any) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.eventService.findOne(id, req.user);
   }
 
   @Patch(':id')
   @Roles('superadmin', 'organizer')
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Request() req: any,
     @Body() dto: UpdateEventDto,
   ) {
@@ -49,7 +50,7 @@ export class EventController {
   @Patch(':id/status')
   @Roles('superadmin', 'organizer')
   async updateStatus(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Request() req: any,
     @Body() dto: UpdateEventStatusDto,
   ) {
@@ -58,7 +59,7 @@ export class EventController {
 
   @Delete(':id')
   @Roles('superadmin')
-  async remove(@Param('id') id: string, @Request() req: any) {
+  async remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.eventService.remove(id, req.user);
   }
 }

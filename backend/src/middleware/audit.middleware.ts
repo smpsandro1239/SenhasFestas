@@ -57,6 +57,42 @@ export class RateLimitMiddleware implements NestMiddleware {
 }
 
 @Injectable()
+export class LoginRateLimitMiddleware implements NestMiddleware {
+  private attempts: Map<string, number[] > = new Map();
+  private readonly maxAttempts = parseInt(process.env.LOGIN_RATE_LIMIT_MAX || '10', 10);
+  private readonly windowMs = 15 * 60 * 1000;
+
+  use(req: Request, res: Response, next: NextFunction) {
+    const ip = req.ip || 'unknown';
+    const email = (req.body && typeof req.body.email === 'string' ? req.body.email.toLowerCase() : '').trim();
+    const key = `${ip}:${email}`;
+    const now = Date.now();
+    const timestamps = (this.attempts.get(key) || []).filter(t => now - t < this.windowMs);
+
+    if (timestamps.length >= this.maxAttempts) {
+      throw new HttpException(
+        'Demasiadas tentativas de login. Tente novamente mais tarde.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    timestamps.push(now);
+    this.attempts.set(key, timestamps);
+
+    setTimeout(() => {
+      const updated = this.attempts.get(key)?.filter(t => Date.now() - t < this.windowMs);
+      if (updated && updated.length > 0) {
+        this.attempts.set(key, updated);
+      } else {
+        this.attempts.delete(key);
+      }
+    }, this.windowMs);
+
+    next();
+  }
+}
+
+@Injectable()
 export class SecurityMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
     res.setHeader('X-Content-Type-Options', 'nosniff');

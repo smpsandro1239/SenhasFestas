@@ -1,17 +1,25 @@
-import { IsNumber, IsOptional, IsPositive, IsString } from 'class-validator';
+import { IsNumber, IsOptional, IsPositive, IsString, IsUUID } from 'class-validator';
 
 export class LoadBalanceDto {
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   amount: number;
 
   @IsString()
   @IsOptional()
   paymentMethod?: string;
+
+  @IsUUID()
+  @IsOptional()
+  eventId?: string;
 }
 
 export class CreateBalanceDto {
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   amount: number;
+
+  @IsUUID()
+  @IsOptional()
+  eventId?: string;
 }

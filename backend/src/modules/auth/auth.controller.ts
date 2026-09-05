@@ -31,6 +31,11 @@ export class RegisterDto {
   phone?: string;
 }
 
+export class RefreshTokenDto {
+  @IsString()
+  refreshToken: string;
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -51,5 +56,17 @@ export class AuthController {
       registerDto.role,
       registerDto.phone,
     );
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refresh(dto.refreshToken);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  async logout(@Body() dto: RefreshTokenDto) {
+    return this.authService.logout(dto.refreshToken);
   }
 }

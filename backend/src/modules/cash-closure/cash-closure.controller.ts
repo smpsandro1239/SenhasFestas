@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Param, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, UseGuards, Request, ParseUUIDPipe } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CashClosureService } from './cash-closure.service';
 import { CreateCashClosureDto, CloseCashClosureDto } from './dto';
@@ -21,7 +21,7 @@ export class CashClosureController {
   @Post(':id/fechar')
   @Roles(...STAFF_ROLES)
   async fechar(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Request() req: any,
     @Body() dto: CloseCashClosureDto,
   ) {
@@ -30,19 +30,19 @@ export class CashClosureController {
 
   @Get('event/:eventoId')
   @Roles(...STAFF_ROLES)
-  async listar(@Param('eventoId') eventoId: string) {
+  async listar(@Param('eventoId', ParseUUIDPipe) eventoId: string) {
     return this.cashClosureService.listarPorEvento(eventoId);
   }
 
   @Get(':id')
   @Roles(...STAFF_ROLES)
-  async obter(@Param('id') id: string) {
+  async obter(@Param('id', ParseUUIDPipe) id: string) {
     return this.cashClosureService.obterPorId(id);
   }
 
   @Get('event/:eventoId/aberta')
   @Roles(...STAFF_ROLES)
-  async obterAberta(@Param('eventoId') eventoId: string) {
+  async obterAberta(@Param('eventoId', ParseUUIDPipe) eventoId: string) {
     return this.cashClosureService.obterCaixaAberta(eventoId);
   }
 }

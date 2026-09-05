@@ -9,9 +9,11 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const configService = app.get(ConfigService);
 
-  if (process.env.NODE_ENV === 'production') {
-    (app as any).enable('trust proxy');
+  const trustProxy = configService.get<number | string>('TRUST_PROXY');
+  if (trustProxy !== undefined && trustProxy !== '') {
+    (app as any).set('trust proxy', typeof trustProxy === 'string' ? Number(trustProxy) : trustProxy);
   }
 
   if (process.env.NODE_ENV === 'production') {
@@ -52,7 +54,6 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  const configService = app.get(ConfigService);
   if (configService.get<string>('NODE_ENV') === 'development') {
     const dbSeeder = app.get(DatabaseSeederService);
     await dbSeeder.seed();
