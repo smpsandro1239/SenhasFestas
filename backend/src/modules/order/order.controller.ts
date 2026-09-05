@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { OrderService } from './order.service';
 import { CreateOrderDto, UpdateOrderStatusDto } from './dto';
@@ -13,7 +13,7 @@ export class OrderController {
     return this.orderService.create(req.user, dto);
   }
 
-  @Post(':id/status')
+  @Patch(':id/status')
   async updateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateOrderStatusDto,
@@ -29,5 +29,10 @@ export class OrderController {
   @Get('event/:eventId')
   async findByEvent(@Param('eventId') eventId: string) {
     return this.orderService.findAll(eventId);
+  }
+
+  @Get()
+  async findAll(@Request() req: any) {
+    return this.orderService.findAllForUser(req.user);
   }
 }

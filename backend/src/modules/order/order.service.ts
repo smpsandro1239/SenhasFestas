@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrderEntity, OrderItemEntity, BalanceEntity, BalanceMovementEntity, ProductEntity, EventEntity } from '../../entities';
-import { CreateOrderDto, UpdateOrderStatusDto } from './dto';
+import { CreateOrderDto } from './dto';
 import { QRCodeService } from '../../services/qr-code.service';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { NotificationService } from '../../services/notification.service';
@@ -99,7 +99,7 @@ export class OrderService {
     await this.movementRepository.save(movement);
   }
 
-  async findAll(eventId?: string): Promise<any[]> {
+  async findAll(eventId?: string, balanceIds?: string[]): Promise<any[]> {
     const query = this.orderRepository.createQueryBuilder('order')
       .leftJoinAndSelect('order.items', 'items')
       .leftJoinAndSelect('items.product', 'product')
@@ -109,7 +109,23 @@ export class OrderService {
       query.where('order.event.id = :eventId', { eventId });
     }
 
+    if (balanceIds && balanceIds.length > 0) {
+      query.where('order.balanceId IN (:...balanceIds)', { balanceIds });
+    } else if (balanceIds) {
+      return [];
+    }
+
     return query.getMany();
+  }
+
+  async findAllForUser(user: any): Promise<any[]> {
+    if (user.role === 'client') {
+      const balances = await this.balanceRepository.find({
+        where: { user: { id: user.id } as any },
+      });
+      return this.findAll(undefined, balances.map((b) => b.id));
+    }
+    return this.findAll();
   }
 
   async findOne(id: string): Promise<any> {
@@ -120,7 +136,7 @@ export class OrderService {
       .getOne();
   }
 
-  async cancelOrder(id: string, userId: string): Promise<any> {
+  async cancelOrder(id: string, _userId: string): Promise<any> {
     const order = await this.orderRepository.findOne({ where: { id } });
     if (!order) {
       throw new NotFoundException('Pedido não encontrado');

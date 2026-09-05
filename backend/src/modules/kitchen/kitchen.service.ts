@@ -22,7 +22,7 @@ export class KitchenService {
     const query = this.orderRepository
       .createQueryBuilder('pedido')
       .leftJoinAndSelect('pedido.items', 'itens')
-      .leftJoinAndSelect('itens.produto', 'produto')
+      .leftJoinAndSelect('itens.product', 'produto')
       .orderBy('pedido.createdAt', 'ASC');
 
     if (filtros.status) {
@@ -40,7 +40,7 @@ export class KitchenService {
     return query.getMany();
   }
 
-  async atualizarEstado(id: string, novoEstado: string, utilizadorId: string): Promise<any> {
+  async atualizarEstado(id: string, novoEstado: string, _utilizadorId: string): Promise<any> {
     const pedido = await this.orderRepository.findOne({ where: { id } });
     if (!pedido) {
       throw new NotFoundException('Pedido não encontrado');

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
   UseGuards,
@@ -10,11 +11,12 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { EventService } from './event.service';
-import { EventEntity } from '../../entities';
 import { CreateEventDto, UpdateEventDto, UpdateEventStatusDto } from './dto';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @Controller('events')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), RolesGuard)
 export class EventController {
   constructor(private readonly eventService: EventService) {}
 
@@ -24,6 +26,7 @@ export class EventController {
   }
 
   @Post()
+  @Roles('superadmin', 'organizer')
   async create(@Request() req: any, @Body() dto: CreateEventDto) {
     return this.eventService.create(req.user, dto);
   }
@@ -34,6 +37,7 @@ export class EventController {
   }
 
   @Patch(':id')
+  @Roles('superadmin', 'organizer')
   async update(
     @Param('id') id: string,
     @Request() req: any,
@@ -43,11 +47,18 @@ export class EventController {
   }
 
   @Patch(':id/status')
+  @Roles('superadmin', 'organizer')
   async updateStatus(
     @Param('id') id: string,
     @Request() req: any,
     @Body() dto: UpdateEventStatusDto,
   ) {
     return this.eventService.updateStatus(id, req.user, dto.status);
+  }
+
+  @Delete(':id')
+  @Roles('superadmin')
+  async remove(@Param('id') id: string, @Request() req: any) {
+    return this.eventService.remove(id, req.user);
   }
 }

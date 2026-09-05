@@ -12,6 +12,11 @@ export class KitchenController {
     return this.kitchenService.obterPedidos(filters);
   }
 
+  @Get('pedidos')
+  async getPedidos(@Query() filters: { status?: string; station?: string }) {
+    return this.kitchenService.obterPedidos(filters);
+  }
+
   @Patch('orders/:id/status')
   async updateStatus(
     @Param('id') id: string,

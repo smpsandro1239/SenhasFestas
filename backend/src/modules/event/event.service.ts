@@ -1,7 +1,14 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { EventEntity, EventUserEntity, UserEntity } from '../../entities';
+import {
+  EventEntity,
+  EventUserEntity,
+  UserEntity,
+  OrderEntity,
+  BalanceEntity,
+  ProductEntity,
+} from '../../entities';
 import { CreateEventDto, UpdateEventDto } from './dto';
 
 @Injectable()
@@ -11,6 +18,12 @@ export class EventService {
     private readonly eventRepository: Repository<EventEntity>,
     @InjectRepository(EventUserEntity)
     private readonly eventUserRepository: Repository<EventUserEntity>,
+    @InjectRepository(OrderEntity)
+    private readonly orderRepository: Repository<OrderEntity>,
+    @InjectRepository(BalanceEntity)
+    private readonly balanceRepository: Repository<BalanceEntity>,
+    @InjectRepository(ProductEntity)
+    private readonly productRepository: Repository<ProductEntity>,
   ) {}
 
   async findByUser(userId: string): Promise<EventEntity[]> {
@@ -74,5 +87,15 @@ export class EventService {
       role,
     });
     return this.eventUserRepository.save(eventUser);
+  }
+
+  async remove(id: string, user: UserEntity): Promise<{ deleted: boolean }> {
+    const event = await this.findOne(id, user);
+    await this.orderRepository.delete({ event: { id } as any });
+    await this.balanceRepository.delete({ event: { id } as any });
+    await this.productRepository.delete({ event: { id } as any });
+    await this.eventUserRepository.delete({ event: { id } as any });
+    await this.eventRepository.delete(event.id);
+    return { deleted: true };
   }
 }
