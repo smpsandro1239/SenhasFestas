@@ -66,7 +66,7 @@ export class AuthService {
       email,
       password: hashedPassword,
       name,
-      role,
+      role: 'client',
       phone,
       isActive: true,
     });

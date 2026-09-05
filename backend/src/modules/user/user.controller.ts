@@ -1,29 +1,42 @@
-import { Controller, Get, Param, Patch, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Param, Patch, Body, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { UserService } from './user.service';
-import { UpdateUserDto } from './dto';
+import { CreateUserDto, UpdateUserDto } from './dto';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @Controller('users')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), RolesGuard)
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
+  @Get('me')
+  async me(@Request() req: any) {
+    const { password: _password, ...safe } = req.user;
+    return safe;
+  }
+
   @Get()
-  async findAll(@Request() req: any) {
+  @Roles('superadmin', 'organizer')
+  async findAll() {
     return this.userService.findAll();
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string, @Request() req: any) {
+  @Roles('superadmin', 'organizer')
+  async findOne(@Param('id') id: string) {
     return this.userService.findOne(id);
   }
 
+  @Post()
+  @Roles('superadmin', 'organizer')
+  async create(@Body() dto: CreateUserDto) {
+    return this.userService.create(dto);
+  }
+
   @Patch(':id')
-  async update(
-    @Param('id') id: string,
-    @Body() dto: UpdateUserDto,
-    @Request() req: any,
-  ) {
+  @Roles('superadmin')
+  async update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.userService.update(id, dto);
   }
 }

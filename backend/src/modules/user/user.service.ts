@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as bcrypt from 'bcryptjs';
 import { UserEntity } from '../../entities';
-import { UpdateUserDto } from './dto';
+import { CreateUserDto, UpdateUserDto } from './dto';
 
 @Injectable()
 export class UserService {
@@ -26,6 +27,27 @@ export class UserService {
       throw new NotFoundException('Utilizador não encontrado');
     }
     return user;
+  }
+
+  async create(dto: CreateUserDto): Promise<Partial<UserEntity>> {
+    const existing = await this.userRepository.findOne({ where: { email: dto.email } });
+    if (existing) {
+      throw new ConflictException('Email já em uso');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const user = this.userRepository.create({
+      email: dto.email,
+      password: hashedPassword,
+      name: dto.name,
+      role: dto.role,
+      phone: dto.phone,
+      isActive: true,
+    });
+
+    const savedUser = await this.userRepository.save(user);
+    const { password: _password, ...safe } = savedUser;
+    return safe;
   }
 
   async update(id: string, dto: UpdateUserDto): Promise<Partial<UserEntity>> {

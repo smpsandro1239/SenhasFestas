@@ -22,7 +22,7 @@ export class RegisterDto {
   @IsString()
   name: string;
 
-  @IsIn(['superadmin', 'organizer', 'cashier', 'bar', 'kitchen', 'treasurer', 'client'])
+  @IsIn(['client'])
   role: string;
 
   @IsOptional()

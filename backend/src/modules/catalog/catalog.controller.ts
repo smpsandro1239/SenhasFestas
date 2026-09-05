@@ -11,14 +11,16 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { CatalogService } from './catalog.service';
 import { CreateProductDto, UpdateProductDto } from './dto';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @Controller('products')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), RolesGuard)
 export class CatalogController {
   constructor(private readonly catalogService: CatalogService) {}
 
   @Get()
-  async findAll(@Request() req: any) {
+  async findAll() {
     return this.catalogService.findAll();
   }
 
@@ -28,11 +30,13 @@ export class CatalogController {
   }
 
   @Post()
+  @Roles('superadmin', 'organizer')
   async create(@Request() req: any, @Body() dto: CreateProductDto) {
     return this.catalogService.create(req.user, dto);
   }
 
   @Patch(':id')
+  @Roles('superadmin', 'organizer')
   async update(
     @Param('id') id: string,
     @Request() req: any,

@@ -19,7 +19,7 @@ export class CatalogService {
     });
   }
 
-  async findOne(id: string, user: UserEntity): Promise<ProductEntity> {
+  async findOne(id: string, _user: UserEntity): Promise<ProductEntity> {
     const product = await this.productRepository.findOne({
       where: { id },
     });
