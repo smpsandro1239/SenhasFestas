@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { OrderEntity, OrderItemEntity, BalanceEntity, BalanceMovementEntity, ProductEntity, EventEntity } from '../../entities';
 import { CreateOrderDto } from './dto';
 import { QRCodeService } from '../../services/qr-code.service';
@@ -23,47 +23,61 @@ export class OrderService {
     private readonly productRepository: Repository<ProductEntity>,
     @InjectRepository(EventEntity)
     private readonly eventRepository: Repository<EventEntity>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
     private readonly qrCodeService: QRCodeService,
     private readonly orderGateway: OrderGateway,
     private readonly notificationService: NotificationService,
   ) {}
 
   async create(user: any, dto: CreateOrderDto): Promise<any> {
-    // Create event reference
     const event = await this.eventRepository.findOne({ where: { id: dto.eventId } });
     if (!event) {
       throw new NotFoundException('Event not found');
     }
 
-    const order = this.orderRepository.create({
-      source: dto.source,
-      event: event,
-      status: 'received',
-      tableNumber: dto.tableNumber,
-      station: dto.station,
-      balanceId: dto.balanceId,
-      paymentMethod: dto.paymentMethod,
-      total: dto.total,
-      balanceUsed: dto.balanceUsed || 0,
-    });
-    const savedOrder = await this.orderRepository.save(order);
-
-    for (const item of dto.items) {
-      const product = await this.productRepository.findOne({ where: { id: item.productId } });
-      const orderItem = this.orderItemRepository.create({
-        order: savedOrder,
-        product,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice || product?.price || 0,
-        subtotal: item.quantity * (item.unitPrice || product?.price || 0),
-        notes: item.notes,
+    const savedOrder = await this.dataSource.transaction(async (manager) => {
+      const order = manager.create(OrderEntity, {
+        source: dto.source,
+        event: event,
+        status: 'received',
+        tableNumber: dto.tableNumber,
+        station: dto.station,
+        balanceId: dto.balanceId,
+        paymentMethod: dto.paymentMethod,
+        total: dto.total,
+        balanceUsed: dto.balanceUsed || 0,
       });
-      await this.orderItemRepository.save(orderItem);
-    }
+      const createdOrder = await manager.save(OrderEntity, order);
 
-    if (dto.balanceId && dto.balanceUsed) {
-      await this.consumeBalance(dto.balanceId, dto.balanceUsed, savedOrder.id);
-    }
+      const products = dto.items.length
+        ? await manager.findBy(ProductEntity, { id: In(dto.items.map((item) => item.productId)) })
+        : [];
+      const productById = new Map(products.map((product) => [product.id, product]));
+
+      for (const item of dto.items) {
+        const product = productById.get(item.productId);
+        if (!product) {
+          throw new NotFoundException(`Produto não encontrado: ${item.productId}`);
+        }
+        const unitPrice = item.unitPrice ?? product.price;
+        const orderItem = manager.create(OrderItemEntity, {
+          order: createdOrder,
+          product,
+          quantity: item.quantity,
+          unitPrice,
+          subtotal: item.quantity * unitPrice,
+          notes: item.notes,
+        });
+        await manager.save(OrderItemEntity, orderItem);
+      }
+
+      if (dto.balanceId && dto.balanceUsed) {
+        await this.consumeBalanceInTransaction(manager, user, dto.balanceId, dto.balanceUsed, createdOrder.id);
+      }
+
+      return createdOrder;
+    });
 
     // Generate QR code for the order
     const qrCode = await this.qrCodeService.generateOrderQRCode(savedOrder.id);
@@ -78,25 +92,39 @@ export class OrderService {
     return { ...result, qrCode };
   }
 
-  async consumeBalance(balanceId: string, amount: number, orderId: string): Promise<void> {
-    const balance = await this.balanceRepository.findOne({ where: { id: balanceId } });
+  private async consumeBalanceInTransaction(
+    manager: import('typeorm').EntityManager,
+    user: any,
+    balanceId: string,
+    amount: number,
+    orderId: string,
+  ): Promise<void> {
+    const balance = await manager.findOne(BalanceEntity, {
+      where: { id: balanceId },
+      relations: { user: true },
+      lock: { mode: 'pessimistic_write' },
+    });
     if (!balance) {
       throw new NotFoundException('Saldo não encontrado');
+    }
+    const isClient = user?.role === 'client';
+    if (isClient && balance.user?.id !== user.id) {
+      throw new ForbiddenException('Não pode usar o saldo de outro utilizador');
     }
     if (balance.currentBalance < amount) {
       throw new ForbiddenException('Saldo insuficiente');
     }
 
     balance.currentBalance -= amount;
-    await this.balanceRepository.save(balance);
+    await manager.save(BalanceEntity, balance);
 
-    const movement = this.movementRepository.create({
+    const movement = manager.create(BalanceMovementEntity, {
       balance: { id: balanceId } as any,
       type: MovementType.CONSUME,
       amount,
       orderId,
     });
-    await this.movementRepository.save(movement);
+    await manager.save(BalanceMovementEntity, movement);
   }
 
   async findAll(eventId?: string, balanceIds?: string[]): Promise<any[]> {
@@ -105,14 +133,14 @@ export class OrderService {
       .leftJoinAndSelect('items.product', 'product')
       .orderBy('order.createdAt', 'DESC');
 
-    if (eventId) {
-      query.where('order.event.id = :eventId', { eventId });
-    }
-
     if (balanceIds && balanceIds.length > 0) {
       query.where('order.balanceId IN (:...balanceIds)', { balanceIds });
     } else if (balanceIds) {
       return [];
+    }
+
+    if (eventId) {
+      query.andWhere('order.event.id = :eventId', { eventId });
     }
 
     return query.getMany();
@@ -136,17 +164,73 @@ export class OrderService {
       .getOne();
   }
 
-  async cancelOrder(id: string, _userId: string): Promise<any> {
-    const order = await this.orderRepository.findOne({ where: { id } });
+  async cancelOrder(id: string, user: any): Promise<any> {
+    const order = await this.orderRepository.findOne({
+      where: { id },
+      relations: { event: true },
+    });
     if (!order) {
       throw new NotFoundException('Pedido não encontrado');
     }
-    order.status = 'cancelled';
-    const savedOrder = await this.orderRepository.save(order);
-    
+    if (order.status === 'delivered') {
+      throw new ForbiddenException('Pedido entregue não pode ser cancelado');
+    }
+    if (order.status === 'cancelled') {
+      throw new ForbiddenException('Pedido já cancelado');
+    }
+
+    const isStaff = user?.role !== 'client';
+    if (!isStaff) {
+      if (!order.balanceId) {
+        throw new ForbiddenException('Não pode cancelar este pedido');
+      }
+      const balance = await this.balanceRepository.findOne({ where: { id: order.balanceId } });
+      if (!balance || balance.user?.id !== user.id) {
+        throw new ForbiddenException('Não pode cancelar o pedido de outro utilizador');
+      }
+    }
+
+    const savedOrder = await this.dataSource.transaction(async (manager) => {
+      const currentOrder = await manager.findOne(OrderEntity, {
+        where: { id: order.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!currentOrder) {
+        throw new NotFoundException('Pedido não encontrado');
+      }
+      if (currentOrder.status === 'delivered' || currentOrder.status === 'cancelled') {
+        throw new ForbiddenException('Pedido já não pode ser cancelado');
+      }
+
+      currentOrder.status = 'cancelled';
+      const updatedOrder = await manager.save(OrderEntity, currentOrder);
+
+      if (currentOrder.balanceId && currentOrder.balanceUsed > 0) {
+        const balance = await manager.findOne(BalanceEntity, {
+          where: { id: currentOrder.balanceId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (balance) {
+          balance.currentBalance += currentOrder.balanceUsed;
+          await manager.save(BalanceEntity, balance);
+
+          const refund = manager.create(BalanceMovementEntity, {
+            balance,
+            type: MovementType.REFUND,
+            amount: currentOrder.balanceUsed,
+            orderId: updatedOrder.id,
+            description: 'Reembolso por cancelamento',
+          });
+          await manager.save(BalanceMovementEntity, refund);
+        }
+      }
+
+      return updatedOrder;
+    });
+
     // Emit WebSocket event for real-time updates
     this.orderGateway.emitOrderUpdate(savedOrder.id, savedOrder.status);
-    
+
     return savedOrder;
   }
 
@@ -155,6 +239,18 @@ export class OrderService {
     if (!order) {
       throw new NotFoundException('Pedido não encontrado');
     }
+
+    const transicoesValidas: Record<string, string[]> = {
+      received: ['preparing', 'cancelled'],
+      preparing: ['ready', 'cancelled'],
+      ready: ['delivered'],
+      delivered: [],
+      cancelled: [],
+    };
+    if (!transicoesValidas[order.status]?.includes(status)) {
+      throw new ForbiddenException(`Transição inválida: ${order.status} -> ${status}`);
+    }
+
     order.status = status as 'received' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
     const savedOrder = await this.orderRepository.save(order);
     
