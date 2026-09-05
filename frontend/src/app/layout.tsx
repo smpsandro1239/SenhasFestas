@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
 import ServiceWorkerRegister from './sw-register';
+import { ThemeProvider } from './theme-provider';
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+const jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains' });
 
 export const metadata: Metadata = {
   title: 'SenhasFestas - Gestão de Pedidos para Festas',
@@ -25,7 +27,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0f172a',
+  themeColor: '#09090b',
 };
 
 export default function RootLayout({
@@ -34,9 +36,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-PT">
-      <body className={`${inter.className} antialiased`}>
-        <AuthProvider>{children}</AuthProvider>
+    <html lang="pt-PT" suppressHydrationWarning>
+      <body className={`${inter.variable} ${jetbrains.variable} font-sans antialiased`}>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+          <AuthProvider>{children}</AuthProvider>
+        </ThemeProvider>
         <ServiceWorkerRegister />
       </body>
     </html>
