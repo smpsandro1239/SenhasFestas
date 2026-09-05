@@ -10,7 +10,9 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  (app as any).enable('trust proxy');
+  if (process.env.NODE_ENV === 'production') {
+    (app as any).enable('trust proxy');
+  }
 
   if (process.env.NODE_ENV === 'production') {
     app.use((req, res, next) => {

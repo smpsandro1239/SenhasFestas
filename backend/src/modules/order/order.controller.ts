@@ -2,9 +2,13 @@ import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@
 import { AuthGuard } from '@nestjs/passport';
 import { OrderService } from './order.service';
 import { CreateOrderDto, UpdateOrderStatusDto } from './dto';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
+
+const STAFF_ROLES = ['superadmin', 'organizer', 'cashier', 'bar', 'kitchen', 'treasurer'];
 
 @Controller('orders')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), RolesGuard)
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
@@ -14,6 +18,7 @@ export class OrderController {
   }
 
   @Patch(':id/status')
+  @Roles(...STAFF_ROLES)
   async updateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateOrderStatusDto,
@@ -23,10 +28,11 @@ export class OrderController {
 
   @Post(':id/cancel')
   async cancel(@Param('id') id: string, @Request() req: any) {
-    return this.orderService.cancelOrder(id, req.user.id);
+    return this.orderService.cancelOrder(id, req.user);
   }
 
   @Get('event/:eventId')
+  @Roles(...STAFF_ROLES)
   async findByEvent(@Param('eventId') eventId: string) {
     return this.orderService.findAll(eventId);
   }

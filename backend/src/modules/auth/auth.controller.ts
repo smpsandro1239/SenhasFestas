@@ -22,8 +22,9 @@ export class RegisterDto {
   @IsString()
   name: string;
 
+  @IsOptional()
   @IsIn(['client'])
-  role: string;
+  role?: string;
 
   @IsOptional()
   @IsString()

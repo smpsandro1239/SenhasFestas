@@ -1,9 +1,11 @@
 import { Controller, Get, Patch, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { KitchenService } from './kitchen.service';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @Controller('kitchen')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), RolesGuard)
 export class KitchenController {
   constructor(private readonly kitchenService: KitchenService) {}
 
@@ -18,6 +20,7 @@ export class KitchenController {
   }
 
   @Patch('orders/:id/status')
+  @Roles('superadmin', 'organizer', 'kitchen', 'bar')
   async updateStatus(
     @Param('id') id: string,
     @Query('status') status: string,
@@ -27,6 +30,7 @@ export class KitchenController {
   }
 
   @Get('stats')
+  @Roles('superadmin', 'organizer', 'kitchen', 'bar')
   async getStats() {
     return this.kitchenService.obterEstatisticas();
   }

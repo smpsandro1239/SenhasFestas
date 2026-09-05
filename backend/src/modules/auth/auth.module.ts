@@ -13,10 +13,19 @@ import { UserEntity } from '../../entities';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'super-secret-key',
-        signOptions: { expiresIn: '24h' },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const jwtSecret = configService.get<string>('JWT_SECRET');
+        if (!jwtSecret) {
+          throw new Error('Configuração inválida: define JWT_SECRET no .env');
+        }
+        if (configService.get<string>('NODE_ENV') === 'production' && jwtSecret === 'super-secret-key-change-in-production') {
+          throw new Error('Configuração inválida: JWT_SECRET em produção não pode ser o valor por omissão');
+        }
+        return {
+          secret: jwtSecret,
+          signOptions: { expiresIn: '24h' },
+        };
+      },
       inject: [ConfigService],
     }),
     TypeOrmModule.forFeature([UserEntity]),

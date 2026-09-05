@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CashClosureEntity } from '../../entities';
@@ -39,7 +39,7 @@ export class CashClosureService {
       throw new ForbiddenException('Apenas o operador que abriu pode fechar');
     }
     if (fecho.status === 'closed') {
-      throw new Error('Caixa já está fechado');
+      throw new ConflictException('Caixa já está fechado');
     }
 
     fecho.closedAt = new Date();
