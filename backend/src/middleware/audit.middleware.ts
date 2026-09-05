@@ -24,7 +24,7 @@ export class AuditMiddleware implements NestMiddleware {
 @Injectable()
 export class RateLimitMiddleware implements NestMiddleware {
   private requests: Map<string, number[]> = new Map();
-  private readonly maxRequests = 100;
+  private readonly maxRequests = parseInt(process.env.RATE_LIMIT_MAX || '100', 10);
   private readonly windowMs = 60000;
 
   use(req: Request, res: Response, next: NextFunction) {
