@@ -16,16 +16,11 @@ export class DatabaseSeederService {
   }
 
   async seedUsers(): Promise<void> {
-    const adminExists = await this.userRepository.findOne({ where: { email: 'admin@senhasfestas.com' } });
-    if (adminExists) {
-      return;
-    }
-
     const users = [
       {
         email: 'admin@senhasfestas.com',
         password: await bcrypt.hash('admin123', 10),
-        name: 'Admin',
+        name: 'Administrador',
         role: 'superadmin',
         phone: '910000000',
       },
@@ -64,13 +59,28 @@ export class DatabaseSeederService {
         role: 'treasurer',
         phone: '910000005',
       },
+      {
+        email: 'client@senhasfestas.com',
+        password: await bcrypt.hash('client123', 10),
+        name: 'Cliente de Teste',
+        role: 'client',
+        phone: '910000006',
+      },
     ];
 
+    let created = 0;
     for (const userData of users) {
+      const existing = await this.userRepository.findOne({ where: { email: userData.email } });
+      if (existing) {
+        continue;
+      }
       const user = this.userRepository.create(userData);
       await this.userRepository.save(user);
+      created += 1;
     }
 
-    console.log(`[Seeder] ${users.length} utilizadores criados com sucesso`);
+    if (created > 0) {
+      console.log(`[Seeder] ${created} utilizadores de teste criados com sucesso`);
+    }
   }
 }
