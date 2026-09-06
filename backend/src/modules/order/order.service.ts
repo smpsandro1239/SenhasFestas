@@ -125,7 +125,6 @@ export class OrderService {
     const balance = await manager.findOne(BalanceEntity, {
       where: { id: balanceId },
       relations: { user: true, event: true },
-      lock: { mode: 'pessimistic_write' },
     });
     if (!balance) {
       throw new NotFoundException('Saldo não encontrado');
@@ -141,8 +140,14 @@ export class OrderService {
       throw new ForbiddenException('Saldo insuficiente');
     }
 
-    balance.currentBalance -= amount;
-    await manager.save(BalanceEntity, balance);
+    const updated = await manager.update(
+      BalanceEntity,
+      { id: balanceId, currentBalance: balance.currentBalance },
+      { currentBalance: balance.currentBalance - amount },
+    );
+    if (!updated.affected) {
+      throw new ForbiddenException('Saldo alterado, tente novamente');
+    }
 
     const movement = manager.create(BalanceMovementEntity, {
       balance: { id: balanceId } as any,

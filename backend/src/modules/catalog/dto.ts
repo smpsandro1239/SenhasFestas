@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsUUID } from 'class-validator';
 
 export class CreateProductDto {
   @IsString()
@@ -11,6 +11,10 @@ export class CreateProductDto {
   @IsString()
   @IsOptional()
   imageUrl?: string;
+
+  @IsUUID()
+  @IsOptional()
+  eventId?: string;
 
   @IsNumber()
   price: number;
