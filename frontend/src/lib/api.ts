@@ -249,8 +249,9 @@ export async function getReports(type: string, params?: any): Promise<any> {
   return apiRequest(`/reports/${type}${query ? `?${query}` : ''}`);
 }
 
-export async function getProducts(): Promise<any> {
-  return apiRequest('/products');
+export async function getProducts(eventId?: string): Promise<any> {
+  const query = eventId ? `?eventId=${encodeURIComponent(eventId)}` : '';
+  return apiRequest(`/products${query}`);
 }
 
 export async function createProduct(data: any): Promise<any> {

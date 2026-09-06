@@ -16,20 +16,34 @@ import { CreateProductDto, UpdateProductDto } from './dto';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { MembershipService } from '../../common/membership.service';
 
 @Controller('products')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 export class CatalogController {
-  constructor(private readonly catalogService: CatalogService) {}
+  constructor(
+    private readonly catalogService: CatalogService,
+    private readonly membershipService: MembershipService,
+  ) {}
 
   @Get()
-  async findAll(@Query() query: PaginationQueryDto) {
-    return this.catalogService.findAll(query.page, query.limit);
+  async findAll(@Query() query: PaginationQueryDto & { eventId?: string }, @Request() req: any) {
+    if (req.user.role === 'client' && !query.eventId) {
+      return { items: [], total: 0, page: query.page, limit: query.limit };
+    }
+    if (query.eventId && req.user.role !== 'superadmin') {
+      await this.membershipService.assertMember(req.user, query.eventId);
+    }
+    return this.catalogService.findAll(query.eventId, query.page, query.limit);
   }
 
   @Get(':id')
   async findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    return this.catalogService.findOne(id, req.user);
+    const product = await this.catalogService.findOne(id, req.user);
+    if (req.user.role !== 'superadmin' && product.event?.id) {
+      await this.membershipService.assertMember(req.user, product.event.id);
+    }
+    return product;
   }
 
   @Post()

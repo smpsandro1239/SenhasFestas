@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/cn';
@@ -35,9 +35,21 @@ function QROrderPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const router = useRouter();
 
+  const fetchProducts = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await getProducts(eventId || undefined);
+      setProducts(Array.isArray(data) ? data : data?.items ?? []);
+    } catch {
+      setError('Erro ao carregar produtos');
+    } finally {
+      setLoading(false);
+    }
+  }, [eventId]);
+
   useEffect(() => {
     fetchProducts();
-  }, []);
+  }, [fetchProducts]);
 
   useEffect(() => {
     if (!user) return;
@@ -45,18 +57,6 @@ function QROrderPage() {
       .then((b) => setBalance(b ?? null))
       .catch(() => setBalance(null));
   }, [user, eventId]);
-
-  const fetchProducts = async () => {
-    try {
-      setLoading(true);
-      const data = await getProducts();
-      setProducts(Array.isArray(data) ? data : data?.items ?? []);
-    } catch {
-      setError('Erro ao carregar produtos');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const addToCart = (product: any) => {
     setCart((prev) => {

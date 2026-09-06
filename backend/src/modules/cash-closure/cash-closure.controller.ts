@@ -15,7 +15,7 @@ export class CashClosureController {
   @Post('abrir')
   @Roles(...STAFF_ROLES)
   async abrir(@Request() req: any, @Body() dto: CreateCashClosureDto) {
-    return this.cashClosureService.abrirCaixa(req.user.id, dto);
+    return this.cashClosureService.abrirCaixa(req.user.id, req.user, dto);
   }
 
   @Post(':id/fechar')
@@ -25,24 +25,24 @@ export class CashClosureController {
     @Request() req: any,
     @Body() dto: CloseCashClosureDto,
   ) {
-    return this.cashClosureService.fecharCaixa(id, req.user.id, dto);
+    return this.cashClosureService.fecharCaixa(id, req.user.id, req.user, dto);
   }
 
   @Get('event/:eventoId')
   @Roles(...STAFF_ROLES)
-  async listar(@Param('eventoId', ParseUUIDPipe) eventoId: string) {
-    return this.cashClosureService.listarPorEvento(eventoId);
+  async listar(@Param('eventoId', ParseUUIDPipe) eventoId: string, @Request() req: any) {
+    return this.cashClosureService.listarPorEvento(eventoId, req.user);
   }
 
   @Get(':id')
   @Roles(...STAFF_ROLES)
-  async obter(@Param('id', ParseUUIDPipe) id: string) {
-    return this.cashClosureService.obterPorId(id);
+  async obter(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    return this.cashClosureService.obterPorId(id, req.user);
   }
 
   @Get('event/:eventoId/aberta')
   @Roles(...STAFF_ROLES)
-  async obterAberta(@Param('eventoId', ParseUUIDPipe) eventoId: string) {
-    return this.cashClosureService.obterCaixaAberta(eventoId);
+  async obterAberta(@Param('eventoId', ParseUUIDPipe) eventoId: string, @Request() req: any) {
+    return this.cashClosureService.obterCaixaAberta(eventoId, req.user);
   }
 }

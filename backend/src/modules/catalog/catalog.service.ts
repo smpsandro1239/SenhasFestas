@@ -13,9 +13,13 @@ export class CatalogService {
     private readonly categoryRepository: Repository<CategoryEntity>,
   ) {}
 
-  async findAll(page = 1, limit = 20): Promise<{ items: ProductEntity[]; total: number; page: number; limit: number }> {
+  async findAll(eventId?: string, page = 1, limit = 20): Promise<{ items: ProductEntity[]; total: number; page: number; limit: number }> {
+    const where: Record<string, unknown> = { isActive: true };
+    if (eventId) {
+      where.event = { id: eventId };
+    }
     const [items, total] = await this.productRepository.findAndCount({
-      where: { isActive: true },
+      where,
       skip: (page - 1) * limit,
       take: limit,
       order: { createdAt: 'DESC' },

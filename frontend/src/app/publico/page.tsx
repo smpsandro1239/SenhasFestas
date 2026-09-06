@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/cn';
 
 interface PublicOrder {
@@ -47,7 +48,17 @@ const COLUMN_META = [
 
 const TICK = 2000;
 
-export default function PublicoPage() {
+export default function PublicoPageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <PublicoPage />
+    </Suspense>
+  );
+}
+
+function PublicoPage() {
+  const searchParams = useSearchParams();
+  const eventId = searchParams.get('event') ?? '';
   const [orders, setOrders] = useState<Record<string, PublicOrder[]>>({
     received: [],
     preparing: [],
@@ -57,14 +68,15 @@ export default function PublicoPage() {
 
   const fetchOrders = useCallback(async () => {
     try {
+      const suffix = eventId ? `?eventId=${encodeURIComponent(eventId)}` : '';
       const [received, preparing, ready] = await Promise.all([
-        fetch('/api/public/pedidos-recebidos')
+        fetch(`/api/public/pedidos-recebidos${suffix}`)
           .then((r) => (r.ok ? r.json() : []))
           .catch(() => []),
-        fetch('/api/public/pedidos-em-preparacao')
+        fetch(`/api/public/pedidos-em-preparacao${suffix}`)
           .then((r) => (r.ok ? r.json() : []))
           .catch(() => []),
-        fetch('/api/public/pedidos-prontos')
+        fetch(`/api/public/pedidos-prontos${suffix}`)
           .then((r) => (r.ok ? r.json() : []))
           .catch(() => []),
       ]);
@@ -73,7 +85,7 @@ export default function PublicoPage() {
     } catch {
       setError('Erro ao carregar estados');
     }
-  }, []);
+  }, [eventId]);
 
   useEffect(() => {
     fetchOrders();

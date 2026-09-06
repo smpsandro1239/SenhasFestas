@@ -12,6 +12,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { CashClosureModule } from './modules/cash-closure/cash-closure.module';
 import { UserModule } from './modules/user/user.module';
 import { RedisModule } from './common/redis/redis.module';
+import { MembershipModule } from './common/membership.module';
 import { WebSocketModule } from './websocket/websocket.module';
 import { DatabaseSeederService } from './seeds/database.seeder';
 import { ProductSeederService } from './seeds/product.seeder';
@@ -52,6 +53,7 @@ import {
     }),
     RedisModule,
     WebSocketModule,
+    MembershipModule,
     TypeOrmModule.forFeature([UserEntity, CategoryEntity, ProductEntity]),
     AuthModule,
     EventModule,

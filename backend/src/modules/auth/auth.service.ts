@@ -108,20 +108,20 @@ export class AuthService {
 
     const user = await this.assertUserActive(stored.userId);
 
-    stored.revokedAt = new Date();
-    stored.isUsed = true;
-    await this.refreshTokenRepository.save(stored);
+    const revoked = await this.refreshTokenRepository.update(
+      { id: stored.id, revokedAt: IsNull(), isUsed: false },
+      { revokedAt: new Date(), isUsed: true },
+    );
+    if (!revoked.affected) {
+      throw new UnauthorizedException('Refresh token já utilizado');
+    }
 
     const raw = await this.emitRefreshToken(user.id);
     const newHash = this.hashToken(raw);
-    const latest = await this.refreshTokenRepository.findOne({
-      where: { userId: user.id, tokenHash: newHash },
-      order: { createdAt: 'DESC' },
-    });
-    if (latest) {
-      latest.replacedByTokenId = stored.id;
-      await this.refreshTokenRepository.save(latest);
-    }
+    await this.refreshTokenRepository.update(
+      { userId: user.id, tokenHash: newHash },
+      { replacedByTokenId: stored.id },
+    );
 
     const token = this.signAccessToken(user);
     return {

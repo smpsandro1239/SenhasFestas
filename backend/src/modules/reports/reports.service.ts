@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
-import { OrderEntity, OrderItemEntity, BalanceMovementEntity, EventUserEntity } from '../../entities';
+import { Repository } from 'typeorm';
+import { OrderEntity, OrderItemEntity, BalanceMovementEntity } from '../../entities';
+import { MembershipService } from '../../common/membership.service';
 import { OrdensQueryDto, SaldoQueryDto, TopProductsQueryDto } from './dto';
 
 @Injectable()
@@ -13,23 +14,11 @@ export class ReportsService {
     private readonly orderItemRepository: Repository<OrderItemEntity>,
     @InjectRepository(BalanceMovementEntity)
     private readonly movementRepository: Repository<BalanceMovementEntity>,
-    @InjectRepository(EventUserEntity)
-    private readonly eventUserRepository: Repository<EventUserEntity>,
+    private readonly membershipService: MembershipService,
   ) {}
 
-  private async obterEventosDoUtilizador(utilizador: any): Promise<string[]> {
-    if (!utilizador || utilizador.role === 'superadmin') {
-      return [];
-    }
-    const membros = await this.eventUserRepository.find({
-      where: { user: { id: utilizador.id } as any },
-      relations: { event: true },
-    });
-    return membros.map((m) => m.event?.id).filter((id): id is string => Boolean(id));
-  }
-
   async obterOrdens(filtros: OrdensQueryDto, utilizador: any) {
-    const eventIds = await this.obterEventosDoUtilizador(utilizador);
+    const eventIds = await this.membershipService.eventIdsFor(utilizador);
 
     const query = this.orderRepository
       .createQueryBuilder('orden')
@@ -49,10 +38,9 @@ export class ReportsService {
       query.andWhere('orden.station = :station', { station: filtros.station });
     }
 
-    if (filtros.eventId) {
-      query.andWhere('orden.eventId = :eventId', { eventId: filtros.eventId });
-    } else if (eventIds.length > 0) {
-      query.andWhere('orden.eventId IN (:...eventIds)', { eventIds });
+    const scope = this.membershipService.eventColumnFor(eventIds, filtros.eventId);
+    if (scope) {
+      query.andWhere('orden.' + scope.column, scope.params);
     }
 
     const page = filtros?.page ?? 1;
@@ -76,7 +64,7 @@ export class ReportsService {
   }
 
   async topProducts(filtros: TopProductsQueryDto, utilizador?: any) {
-    const eventIds = await this.obterEventosDoUtilizador(utilizador);
+    const eventIds = await this.membershipService.eventIdsFor(utilizador);
 
     const query = this.orderItemRepository
       .createQueryBuilder('item')
@@ -91,39 +79,39 @@ export class ReportsService {
       .orderBy('"totalVendido"', 'DESC')
       .limit(10);
 
-    if (filtros?.eventId) {
-      query.innerJoin('item.order', 'ordenEm').andWhere('ordenEm.eventId = :eventId', { eventId: filtros.eventId });
-    } else if (eventIds.length > 0) {
-      query.innerJoin('item.order', 'ordenEm').andWhere('ordenEm.eventId IN (:...eventIds)', { eventIds });
+    const scope = this.membershipService.eventColumnFor(eventIds, filtros?.eventId);
+    if (scope) {
+      query.innerJoin('item.order', 'ordenEm').andWhere('ordenEm.' + scope.column, scope.params);
     }
 
     return query.getRawMany();
   }
 
   async obterEstatisticas(utilizador?: any) {
-    const eventIds = await this.obterEventosDoUtilizador(utilizador);
+    const eventIds = await this.membershipService.eventIdsFor(utilizador);
 
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
 
-    const condicoes = (where: Record<string, unknown>, extra?: Record<string, unknown>) => {
-      const base: Record<string, unknown> = { ...where };
-      if (eventIds.length > 0) {
-        base.eventId = In(eventIds);
+    const contagem = (status: string, extra?: { sql: string; params: Record<string, unknown> }) => {
+      const q = this.orderRepository
+        .createQueryBuilder('orden')
+        .where('orden.status = :status', { status });
+      const scope = this.membershipService.eventColumnFor(eventIds);
+      if (scope) {
+        q.andWhere('orden.' + scope.column, scope.params);
       }
-      return { ...base, ...extra };
+      if (extra) {
+        q.andWhere(extra.sql, extra.params);
+      }
+      return q.getCount();
     };
 
     const [recebidos, emPreparacao, prontos, entregues] = await Promise.all([
-      this.orderRepository.count(condicoes({ status: 'received' })),
-      this.orderRepository.count(condicoes({ status: 'preparing' })),
-      this.orderRepository.count(condicoes({ status: 'ready' })),
-      this.orderRepository
-        .createQueryBuilder('orden')
-        .where('orden.status = :status', { status: 'delivered' })
-        .andWhere('orden.updatedAt >= :hoje', { hoje })
-        .andWhere(eventIds.length > 0 ? 'orden.eventId IN (:...eventIds)' : '1=1', eventIds.length > 0 ? { eventIds } : {})
-        .getCount(),
+      contagem('received'),
+      contagem('preparing'),
+      contagem('ready'),
+      contagem('delivered', { sql: 'orden.updatedAt >= :hoje', params: { hoje } }),
     ]);
 
     return {
