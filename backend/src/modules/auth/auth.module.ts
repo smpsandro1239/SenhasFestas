@@ -6,6 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
+import { BootstrapAdminService } from './bootstrap-admin.service';
 import { UserEntity, RefreshTokenEntity } from '../../entities';
 
 @Module({
@@ -32,7 +33,7 @@ import { UserEntity, RefreshTokenEntity } from '../../entities';
     TypeOrmModule.forFeature([UserEntity, RefreshTokenEntity]),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, BootstrapAdminService],
   exports: [AuthService],
 })
 export class AuthModule {}
