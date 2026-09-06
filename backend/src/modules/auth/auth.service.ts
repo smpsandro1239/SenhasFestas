@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Repository, IsNull, LessThan } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -190,6 +191,7 @@ export class AuthService {
     return this.assertUserActive(payload.sub);
   }
 
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async cleanupExpiredTokens(): Promise<number> {
     const { affected } = await this.refreshTokenRepository.delete({
       expiresAt: LessThan(new Date()),

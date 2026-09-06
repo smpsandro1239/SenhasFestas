@@ -1,11 +1,23 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Inject, Logger } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { REDIS_CLIENT } from '../common/redis/redis.service';
+import { Redis } from 'ioredis';
 
 @ApiTags('Health')
 @Controller('health')
 export class HealthController {
-  constructor(private readonly configService: ConfigService) {}
+  private readonly logger = new Logger(HealthController.name);
+
+  constructor(
+    private readonly configService: ConfigService,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
+    @Inject(REDIS_CLIENT)
+    private readonly redisClient: Redis | null,
+  ) {}
 
   @Get()
   check() {
@@ -19,12 +31,10 @@ export class HealthController {
 
   @Get('ready')
   async ready() {
-    // Verificar se a base de dados está disponível
     const dbStatus = await this.checkDatabase();
-    const redisStatus = await this.checkRedis();
-    
+    const redisStatus = this.checkRedis();
     const allHealthy = dbStatus && redisStatus;
-    
+
     return {
       status: allHealthy ? 'ready' : 'unhealthy',
       timestamp: new Date().toISOString(),
@@ -44,14 +54,19 @@ export class HealthController {
   }
 
   private async checkDatabase(): Promise<boolean> {
-    // Em produção, faria uma conexão real ao banco
-    // Por enquanto, simular sucesso
-    return true;
+    try {
+      await this.dataSource.query('SELECT 1');
+      return true;
+    } catch (error) {
+      this.logger.error(`Healthcheck de base de dados falhou: ${(error as Error).message}`);
+      return false;
+    }
   }
 
-  private async checkRedis(): Promise<boolean> {
-    // Em produção, faria um ping ao Redis
-    // Por enquanto, simular sucesso
-    return true;
+  private checkRedis(): boolean {
+    if (!this.redisClient) {
+      return false;
+    }
+    return this.redisClient.status === 'ready';
   }
 }

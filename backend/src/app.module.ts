@@ -1,6 +1,7 @@
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from './modules/auth/auth.module';
 import { EventModule } from './modules/event/event.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
@@ -16,7 +17,7 @@ import { MembershipModule } from './common/membership.module';
 import { WebSocketModule } from './websocket/websocket.module';
 import { DatabaseSeederService } from './seeds/database.seeder';
 import { ProductSeederService } from './seeds/product.seeder';
-import { UserEntity, CategoryEntity, ProductEntity } from './entities';
+import { UserEntity, CategoryEntity, ProductEntity, AuditLogEntity } from './entities';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HealthController } from './health/health.controller';
@@ -54,7 +55,8 @@ import {
     RedisModule,
     WebSocketModule,
     MembershipModule,
-    TypeOrmModule.forFeature([UserEntity, CategoryEntity, ProductEntity]),
+    ScheduleModule.forRoot(),
+    TypeOrmModule.forFeature([UserEntity, CategoryEntity, ProductEntity, AuditLogEntity]),
     AuthModule,
     EventModule,
     CatalogModule,

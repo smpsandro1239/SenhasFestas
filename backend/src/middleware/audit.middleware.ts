@@ -1,19 +1,46 @@
-import { Injectable, NestMiddleware, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, NestMiddleware, Logger, HttpStatus } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { AuditLogEntity } from '../entities';
 
 @Injectable()
 export class AuditMiddleware implements NestMiddleware {
+  private readonly logger = new Logger(AuditMiddleware.name);
+
+  constructor(
+    @InjectRepository(AuditLogEntity)
+    private readonly auditLogRepository: Repository<AuditLogEntity>,
+  ) {}
+
   use(req: Request, res: Response, next: NextFunction) {
     const { method, originalUrl, ip, headers } = req;
     const userAgent = headers['user-agent'] || '';
     const timestamp = new Date().toISOString();
 
-    console.log(`[${timestamp}] ${method} ${originalUrl} - IP: ${ip} - UA: ${userAgent}`);
+    if (method !== 'GET') {
+      const userId = (req as any).user?.id || null;
+      const segment = originalUrl.split('/').filter(Boolean);
+      const resourceId = segment[segment.length - 1] || null;
+      void this.auditLogRepository
+        .save(
+          this.auditLogRepository.create({
+            userId,
+            action: method.toLowerCase(),
+            resource: originalUrl,
+            resourceId,
+            ip,
+            userAgent,
+            details: { method, query: req.query },
+          }),
+        )
+        .catch(() => this.logger.warn('Falha ao registar audit log'));
+    }
 
     res.on('finish', () => {
       const { statusCode } = res;
       if (statusCode >= 400) {
-        console.warn(`[${timestamp}] ALERTA: ${method} ${originalUrl} retornou ${statusCode}`);
+        this.logger.warn(`[${timestamp}] ALERTA: ${method} ${originalUrl} retornou ${statusCode}`);
       }
     });
 
@@ -34,10 +61,11 @@ export class RateLimitMiddleware implements NestMiddleware {
     const recentRequests = requests.filter(time => now - time < this.windowMs);
 
     if (recentRequests.length >= this.maxRequests) {
-      throw new HttpException(
-        'Muitas requisições. Tente novamente mais tarde.',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+        statusCode: HttpStatus.TOO_MANY_REQUESTS,
+        message: 'Muitas requisições. Tente novamente mais tarde.',
+      });
+      return;
     }
 
     recentRequests.push(now);
@@ -70,10 +98,11 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
     const timestamps = (this.attempts.get(key) || []).filter(t => now - t < this.windowMs);
 
     if (timestamps.length >= this.maxAttempts) {
-      throw new HttpException(
-        'Demasiadas tentativas de login. Tente novamente mais tarde.',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+        statusCode: HttpStatus.TOO_MANY_REQUESTS,
+        message: 'Demasiadas tentativas de login. Tente novamente mais tarde.',
+      });
+      return;
     }
 
     timestamps.push(now);
