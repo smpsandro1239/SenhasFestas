@@ -217,19 +217,23 @@ export async function updateOrderStatus(orderId: string, status: string): Promis
   });
 }
 
-export async function getBalance(userId: string): Promise<any> {
-  return apiRequest(`/balances/${userId}`);
+export async function getBalance(userId: string, eventId?: string): Promise<any> {
+  const query = eventId ? `?eventId=${encodeURIComponent(eventId)}` : '';
+  return apiRequest(`/balances/${userId}${query}`);
 }
 
-export async function loadBalance(userId: string, amount: number): Promise<any> {
+export async function loadBalance(userId: string, amount: number, eventId?: string): Promise<any> {
+  const body: Record<string, unknown> = { amount, paymentMethod: 'cash' };
+  if (eventId) body.eventId = eventId;
   return apiRequest(`/balances/${userId}/load`, {
     method: 'POST',
-    body: JSON.stringify({ amount, paymentMethod: 'cash' }),
+    body: JSON.stringify(body),
   });
 }
 
-export async function getBalanceHistory(userId: string): Promise<any> {
-  return apiRequest(`/balances/${userId}/history`);
+export async function getBalanceHistory(userId: string, eventId?: string): Promise<any> {
+  const query = eventId ? `?eventId=${encodeURIComponent(eventId)}` : '';
+  return apiRequest(`/balances/${userId}/history${query}`);
 }
 
 export async function getKitchenOrders(query?: string): Promise<any> {

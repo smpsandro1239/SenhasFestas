@@ -26,7 +26,7 @@ function QROrderPage() {
   const { user } = useAuth();
   const [products, setProducts] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
-  const [balance, setBalance] = useState<{ id?: string; currentBalance?: number } | null>(null);
+  const [balance, setBalance] = useState<{ id?: string; balance?: number } | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [placing, setPlacing] = useState(false);
@@ -41,10 +41,10 @@ function QROrderPage() {
 
   useEffect(() => {
     if (!user) return;
-    getBalance(user.id)
+    getBalance(user.id, eventId || undefined)
       .then((b) => setBalance(b ?? null))
       .catch(() => setBalance(null));
-  }, [user]);
+  }, [user, eventId]);
 
   const fetchProducts = async () => {
     try {
@@ -82,7 +82,7 @@ function QROrderPage() {
 
   const getCartTotal = () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const usableBalance = Math.min(balance?.currentBalance ?? 0, getCartTotal());
+  const usableBalance = Math.min(balance?.balance ?? 0, getCartTotal());
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) {
@@ -114,7 +114,9 @@ function QROrderPage() {
       setCart([]);
       setShowPaymentModal(true);
       setBalance((prev) =>
-        prev ? { ...prev, currentBalance: Math.max((prev.currentBalance ?? 0) - usableBalance, 0) } : prev,
+        prev
+          ? { ...prev, balance: Math.max((prev.balance ?? 0) - usableBalance, 0) }
+          : prev,
       );
     } catch (err: any) {
       setError(err?.message ?? 'Erro ao criar o pedido');

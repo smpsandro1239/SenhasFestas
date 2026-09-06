@@ -10,12 +10,15 @@ import { Alert } from '@/components/ui/alert';
 import { WalletIcon, ArrowLeftIcon } from '@/components/ui/icons';
 import { cn } from '@/lib/cn';
 import { useAuth } from '@/lib/auth-context';
+import { useCurrentEvent } from '@/lib/use-current-event';
 import { getBalance, loadBalance } from '@/lib/api';
 
 const QUICK_AMOUNTS = [5, 10, 20, 50];
 
 export default function BalancePage() {
   const { user } = useAuth();
+  const { event } = useCurrentEvent();
+  const eventId = event?.id;
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
@@ -24,10 +27,10 @@ export default function BalancePage() {
 
   useEffect(() => {
     if (!user) return;
-    getBalance(user.id)
-      .then((b) => setCurrentBalance(Number(b?.currentBalance ?? 0)))
+    getBalance(user.id, eventId)
+      .then((b) => setCurrentBalance(Number(b?.balance ?? 0)))
       .catch(() => {});
-  }, [user]);
+  }, [user, eventId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,9 +46,9 @@ export default function BalancePage() {
     }
 
     try {
-      await loadBalance(user.id, numericAmount);
-      const updated = await getBalance(user.id);
-      setCurrentBalance(Number(updated?.currentBalance ?? 0));
+      await loadBalance(user.id, numericAmount, eventId);
+      const updated = await getBalance(user.id, eventId);
+      setCurrentBalance(Number(updated?.balance ?? 0));
       setAmount('');
       router.refresh();
     } catch (err: any) {
