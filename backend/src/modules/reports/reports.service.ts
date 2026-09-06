@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { OrderEntity, OrderItemEntity, BalanceMovementEntity } from '../../entities';
+import { OrderEntity, OrderItemEntity, BalanceMovementEntity, BalanceEntity } from '../../entities';
 import { MembershipService } from '../../common/membership.service';
 import { OrdensQueryDto, SaldoQueryDto, TopProductsQueryDto } from './dto';
 
@@ -14,6 +14,8 @@ export class ReportsService {
     private readonly orderItemRepository: Repository<OrderItemEntity>,
     @InjectRepository(BalanceMovementEntity)
     private readonly movementRepository: Repository<BalanceMovementEntity>,
+    @InjectRepository(BalanceEntity)
+    private readonly balanceRepository: Repository<BalanceEntity>,
     private readonly membershipService: MembershipService,
   ) {}
 
@@ -52,9 +54,19 @@ export class ReportsService {
     return { items, total, page, limit };
   }
 
-  async obterSaldo(filtros: SaldoQueryDto) {
+  async obterSaldo(filtros: SaldoQueryDto, utilizador: any) {
     if (!filtros?.id) {
       return [];
+    }
+    if (utilizador?.role !== 'superadmin') {
+      const balance = await this.balanceRepository.findOne({
+        where: { id: filtros.id },
+        relations: { event: true },
+      });
+      if (!balance || !balance.event?.id) {
+        return [];
+      }
+      await this.membershipService.assertMember(utilizador, balance.event.id);
     }
     return this.movementRepository
       .createQueryBuilder('movimentacao')

@@ -20,8 +20,8 @@ export class ReportsController {
 
   @Get('saldo')
   @Roles(...STAFF_ROLES)
-  async saldo(@Query() filters: SaldoQueryDto) {
-    return this.reportsService.obterSaldo(filters);
+  async saldo(@Query() filters: SaldoQueryDto, @Request() req: any) {
+    return this.reportsService.obterSaldo(filters, req.user);
   }
 
   @Get('top-products')
