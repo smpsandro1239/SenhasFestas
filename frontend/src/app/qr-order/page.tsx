@@ -158,7 +158,7 @@ function QROrderPage() {
               <div className="flex-1">
                 <div className="text-[10px] text-zinc-500">Saldo</div>
                 <div className="text-sm font-semibold text-emerald-400">
-                  {(balance?.currentBalance ?? 0).toFixed(2)}
+                  {(balance?.balance ?? 0).toFixed(2)}
                 </div>
               </div>
             </div>

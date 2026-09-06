@@ -42,7 +42,7 @@ async function networkFirst(request) {
   } catch {
     const cached = await cache.match(request);
     if (cached) return cached;
-    const fallback = await cache.match('/manifest.webmanifest');
+    const fallback = await cache.match('/');
     if (fallback) return fallback;
     return Response.error();
   }

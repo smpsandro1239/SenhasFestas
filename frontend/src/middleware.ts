@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
 
 const PUBLIC_PATHS = ['/auth', '/publico', '/api'];
 
@@ -21,7 +22,23 @@ function matchesGate(pathname: string): string | null {
   return null;
 }
 
-export function middleware(request: NextRequest) {
+async function verifySessionToken(token: string): Promise<{ role?: string } | null> {
+  const secretEnv = process.env.JWT_SECRET;
+  if (!secretEnv) {
+    return null;
+  }
+  try {
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(secretEnv), {
+      issuer: 'senhasfestas-api',
+      audience: 'senhasfestas-app',
+    });
+    return payload as { role?: string };
+  } catch {
+    return null;
+  }
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (isPublic(pathname)) {
@@ -29,7 +46,6 @@ export function middleware(request: NextRequest) {
   }
 
   const token = request.cookies.get('sf_token')?.value;
-  const role = request.cookies.get('sf_role')?.value;
 
   if (!token) {
     const loginUrl = new URL('/auth/login', request.url);
@@ -37,8 +53,15 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  const payload = await verifySessionToken(token);
+  if (!payload) {
+    const loginUrl = new URL('/auth/login', request.url);
+    loginUrl.searchParams.set('from', pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
   const gate = matchesGate(pathname);
-  if (gate && !ROLE_GATES[gate].includes(role ?? '')) {
+  if (gate && !ROLE_GATES[gate].includes(payload.role ?? '')) {
     return NextResponse.redirect(new URL('/pedidos', request.url));
   }
 

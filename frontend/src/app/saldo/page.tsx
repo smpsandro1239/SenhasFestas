@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AuthLayout } from '@/components/layout/auth-layout';
@@ -15,7 +15,15 @@ import { getBalance, loadBalance } from '@/lib/api';
 
 const QUICK_AMOUNTS = [5, 10, 20, 50];
 
-export default function BalancePage() {
+export default function BalancePageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <BalancePage />
+    </Suspense>
+  );
+}
+
+function BalancePage() {
   const { user } = useAuth();
   const { event } = useCurrentEvent();
   const eventId = event?.id;
