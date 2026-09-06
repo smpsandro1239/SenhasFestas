@@ -158,7 +158,7 @@ export class AuthService {
     name: string,
     role: string,
     phone?: string,
-  ): Promise<Partial<UserEntity>> {
+  ): Promise<AuthResult> {
     const existingUser = await this.userRepository.findOne({ where: { email } });
     if (existingUser) {
       throw new ConflictException('Email já em uso');
@@ -175,7 +175,15 @@ export class AuthService {
     });
 
     const savedUser = await this.userRepository.save(user);
-    return this.sanitizeUser(savedUser);
+
+    const token = this.signAccessToken(savedUser);
+    const refreshToken = await this.emitRefreshToken(savedUser.id);
+
+    return {
+      token,
+      refreshToken,
+      user: this.sanitizeUser(savedUser),
+    };
   }
 
   async validateUser(payload: JwtPayload): Promise<UserEntity> {
