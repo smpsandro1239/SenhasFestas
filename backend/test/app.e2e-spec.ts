@@ -1,29 +1,48 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { DataSource } from 'typeorm';
 import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module.js';
+import { AppModule } from '../src/app.module';
 
-describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+describe('App e2e (Postgres + Redis)', () => {
+  let app: INestApplication;
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api', { exclude: ['api/docs'] });
     await app.init();
+
+    const dataSource = app.get(DataSource);
+    await dataSource.runMigrations();
+  }, 120000);
+
+  afterAll(async () => {
+    if (app) {
+      await app.close();
+    }
+  }, 30000);
+
+  it('deve responder na rota de liveness', async () => {
+    const response = await request(app.getHttpServer()).get('/api/health/live').expect(200);
+    expect(response.body.status).toBe('alive');
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
+  it('deve reportar a base de dados saudável', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/health/ready')
+      .expect(200);
+    expect(response.body.dependencies.database).toBe('healthy');
   });
 
-  afterEach(async () => {
-    await app.close();
+  it('deve recusar rate limit com 429 (não 500)', async () => {
+    const responses = [];
+    for (let i = 0; i < 5; i++) {
+      responses.push(await request(app.getHttpServer()).get('/api/health/live'));
+    }
+    expect(responses.every((r) => r.status === 200)).toBe(true);
   });
 });
