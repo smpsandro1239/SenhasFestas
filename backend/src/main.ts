@@ -11,12 +11,19 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
-  const trustProxy = configService.get<number | string>('TRUST_PROXY');
-  if (trustProxy !== undefined && trustProxy !== '') {
-    (app as any).set('trust proxy', typeof trustProxy === 'string' ? Number(trustProxy) : trustProxy);
+  const rawTrustProxy = configService.get<string>('TRUST_PROXY');
+  const trustProxy =
+    rawTrustProxy !== undefined && rawTrustProxy !== ''
+      ? Number(rawTrustProxy)
+      : process.env.NODE_ENV === 'production'
+        ? 1
+        : undefined;
+
+  if (trustProxy !== undefined) {
+    app.getHttpAdapter().getInstance().set('trust proxy', trustProxy);
   }
 
-  if (process.env.NODE_ENV === 'production') {
+  if (trustProxy !== undefined) {
     app.use((req, res, next) => {
       if (!req.secure) {
         return res.redirect(301, `https://${req.headers.host}${req.originalUrl}`);
