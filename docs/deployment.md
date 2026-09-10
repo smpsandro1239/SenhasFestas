@@ -2,8 +2,8 @@
 
 ## Visão geral
 
-- **Frontend:** Next.js 14 (Vercel ou Docker). PWA instalável.
-- **Backend:** NestJS 12 (VPS/CloudRun/qualquer plataforma com Docker ou Node).
+- **Frontend:** Next.js (export `standalone`) — Docker ou VPS. PWA instalável.
+- **Backend:** NestJS — Docker, VPS ou qualquer plataforma com Node/Docker.
 - **Base de dados:** PostgreSQL 15+ (a migração usa `gen_random_uuid()`, nativo do PG 13+).
 - **Cache/Pub-Sub:** Redis 7 (opcional — sem `REDIS_URL` o backend degrada com graça).
 
@@ -26,10 +26,15 @@ JWT_SECRET=<segredo-forte-de-64-caracteres>
 FRONTEND_URL=https://<dominio-frontend>
 REDIS_URL=redis://<redis-host>:6379
 RATE_LIMIT_MAX=100
+LOGIN_RATE_LIMIT_MAX=10
+TRUST_PROXY=1
 ```
 
-- `REDIS_URL` é opcional; sem Redis, cache e pub/sub ficam desativados.
+- `REDIS_URL` é opcional; sem Redis, cache e pub/sub ficam desativados (modo degradado).
 - `RATE_LIMIT_MAX` controla o limite por IP/minuto (100 por omissão).
+- `TRUST_PROXY` é o número de proxies de confiança à frente do backend (1 em produção
+  atrás de um proxy/reverse que termina TLS). Sem ele, o redirect HTTPS e o rate limit
+  por IP deixam de funcionar corretamente.
 
 ### Frontend (`frontend/.env.production`)
 
@@ -86,9 +91,11 @@ npm run docker:up          # docker compose up -d --build
 - Parar: `npm run docker:down` — Logs: `npm run docker:logs`.
 - O `frontend/Dockerfile` recebe `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_WS_URL` como
   **build args** (o Next.js congela estas variáveis no build; passá-las apenas em
-  runtime não tem efeito).
+  runtime não tem efeito). Em Docker, aponte para `http://backend:3000` (rede do compose).
+- O middleware do frontend partilha o `JWT_SECRET` com o backend (variável de runtime
+  `JWT_SECRET` no container do frontend) para validar as sessões.
 - Credenciais da BD e segredos podem ser sobrescritos num `.env` na raiz (ver
-  `.env.example` na raiz).
+  `.env.example` na raiz). `POSTGRES_PASSWORD` e `JWT_SECRET` são obrigatórios.
 
 ### 3.2 Sem Docker — infra nativa + apps locais (híbrido)
 
@@ -128,15 +135,24 @@ docker run -d --name senhasfestas-backend \
   senhasfestas-backend
 ```
 
-## 5. Frontend (Vercel)
+## 5. Frontend (Docker) — imagem isolada
 
-1. Importar o repositório na Vercel.
-2. Diretório raiz: `frontend`; comando build: `npm run build`; output: padrão (Next.js).
-3. Variáveis de ambiente: `NEXT_PUBLIC_API_URL` e `NEXT_PUBLIC_WS_URL`.
-4. Os `rewrites` do `next.config.js` encaminham `/api/*` para o backend.
+```bash
+cd frontend
+docker build \
+  --build-arg NEXT_PUBLIC_API_URL=https://<api-url> \
+  --build-arg NEXT_PUBLIC_WS_URL=wss://<api-url> \
+  -t senhasfestas-frontend .
+docker run -d --name senhasfestas-frontend \
+  -p 3001:3000 \
+  -e JWT_SECRET=<segredo> \
+  senhasfestas-frontend
+```
 
-> A Vercel aloja apenas o frontend; backend, PostgreSQL e Redis correm fora
-> (VPS, CloudRun, etc.) — use o domínio da API em `NEXT_PUBLIC_API_URL`.
+> O frontend pode ser alojado em VPS com Nginx/Caddy, em qualquer PaaS com Docker,
+> ou num serviço de frontend estático (para este caso é preciso exportar a app sem
+> os `rewrites` do proxy — ver `next export`). Use o domínio da API em
+> `NEXT_PUBLIC_API_URL`.
 
 ## 6. RBAC
 

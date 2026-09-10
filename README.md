@@ -27,8 +27,8 @@ Plataforma completa para organização de festas, venda de senhas digitais/físi
 
 ### DevOps
 - **Container:** Docker + Docker Compose
-- **Deploy:** Vercel/CloudRun
-- **CI/CD:** GitHub Actions
+- **Deploy:** VPS/Paas (Docker) — ver [Guia de Deploy](docs/deployment.md)
+- **CI/CD:** GitHub Actions (lint, testes, e2e, migrações e deploy via SSH)
 - **Monitorização:** PM2 + Logtail
 
 ## Requisitos Funcionais
