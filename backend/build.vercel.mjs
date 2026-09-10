@@ -1,14 +1,19 @@
 import { execSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { build } from 'esbuild';
 
 const root = process.cwd();
 const funcDir = path.join(root, '.vercel', 'output', 'functions', 'api', 'index.js.func');
 const outputDir = path.join(root, '.vercel', 'output');
+const depsDir = path.join(tmpdir(), 'sf-vercel-func-dep');
 
 rmSync(outputDir, { recursive: true, force: true });
+rmSync(depsDir, { recursive: true, force: true });
 mkdirSync(funcDir, { recursive: true });
+mkdirSync(depsDir, { recursive: true });
+writeFileSync(path.join(depsDir, 'package.json'), '{}');
 
 execSync('npx nest build', { stdio: 'inherit', cwd: root });
 
@@ -21,6 +26,14 @@ await build({
   external: ['@nestjs/microservices'],
   define: { 'import.meta.url': '"/workspace/bundle.js"' },
   outfile: path.join(funcDir, 'index.js'),
+});
+
+execSync('npm install pg@^8.23.0 --no-audit --no-fund --omit=dev --legacy-peer-deps', {
+  stdio: 'ignore',
+  cwd: depsDir,
+});
+execSync(`cp -R "${path.join(depsDir, 'node_modules')}" "${path.join(funcDir, 'node_modules')}"`, {
+  stdio: 'ignore',
 });
 
 writeFileSync(
