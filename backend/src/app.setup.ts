@@ -1,11 +1,15 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { AppModule } from './app.module';
 
-export async function criarAplicacao(): Promise<INestApplication> {
+export interface CriarAplicacaoOpcoes {
+  swagger?: boolean;
+}
+
+export async function criarAplicacao(opcoes: CriarAplicacaoOpcoes = {}): Promise<INestApplication> {
+  const swagger = opcoes.swagger ?? true;
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
@@ -49,15 +53,19 @@ export async function criarAplicacao(): Promise<INestApplication> {
 
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  const config = new DocumentBuilder()
-    .setTitle('SenhasFestas API')
-    .setDescription('SaaS para gestão de senhas/tokens para consumo em festas de aldeia')
-    .setVersion('1.0')
-    .addTag('SenhasFestas')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  if (swagger) {
+    const alvo = '@nestjs/swagger';
+    const { DocumentBuilder, SwaggerModule } = await import(alvo);
+    const config = new DocumentBuilder()
+      .setTitle('SenhasFestas API')
+      .setDescription('SaaS para gestão de senhas/tokens para consumo em festas de aldeia')
+      .setVersion('1.0')
+      .addTag('SenhasFestas')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   return app;
 }

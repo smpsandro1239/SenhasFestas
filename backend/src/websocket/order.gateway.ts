@@ -67,7 +67,9 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
           return;
         }
         const room = payload.eventId ? `event:${payload.eventId}` : 'public';
-        this.server.to(room).emit('orderUpdated', { orderId: payload.orderId, status: payload.status });
+        if (this.server) {
+          this.server.to(room).emit('orderUpdated', { orderId: payload.orderId, status: payload.status });
+        }
       } catch {
         this.logger.warn('Mensagem malformada no canal order:updates');
       }
@@ -142,7 +144,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     // Sem Redis, cai no modo degradado de emissão local direta.
     if (this.subscriber) {
       void this.redisService.publish(CHANNEL, payload);
-    } else {
+    } else if (this.server) {
       this.server.to(room).emit('orderUpdated', { orderId, status });
     }
     this.redisService.set(`order:status:${orderId}`, status, ORDER_STATUS_CACHE_TTL);
