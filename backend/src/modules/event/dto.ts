@@ -2,6 +2,7 @@ import {
   IsString,
   IsOptional,
   IsDateString,
+  IsIn,
 } from 'class-validator';
 
 export class CreateEventDto {
@@ -54,6 +55,6 @@ export class UpdateEventDto {
 }
 
 export class UpdateEventStatusDto {
-  @IsString()
+  @IsIn(['draft', 'active', 'closed'])
   status: 'draft' | 'active' | 'closed';
 }

@@ -105,17 +105,24 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
       return;
     }
 
-    timestamps.push(now);
-    this.attempts.set(key, timestamps);
-
-    setTimeout(() => {
-      const updated = this.attempts.get(key)?.filter(t => Date.now() - t < this.windowMs);
-      if (updated && updated.length > 0) {
-        this.attempts.set(key, updated);
-      } else {
-        this.attempts.delete(key);
+    // Apenas tentativas falhadas contam para o limite (evita bloquear logins bem-sucedidos)
+    res.on('finish', () => {
+      if (res.statusCode !== HttpStatus.UNAUTHORIZED) {
+        return;
       }
-    }, this.windowMs);
+      const failed = (this.attempts.get(key) || []).filter(t => Date.now() - t < this.windowMs);
+      failed.push(Date.now());
+      this.attempts.set(key, failed);
+
+      setTimeout(() => {
+        const updated = this.attempts.get(key)?.filter(t => Date.now() - t < this.windowMs);
+        if (updated && updated.length > 0) {
+          this.attempts.set(key, updated);
+        } else {
+          this.attempts.delete(key);
+        }
+      }, this.windowMs);
+    });
 
     next();
   }

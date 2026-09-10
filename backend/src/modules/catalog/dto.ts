@@ -23,7 +23,7 @@ export class CreateProductDto {
   @IsOptional()
   availability?: string;
 
-  @IsString()
+  @IsUUID()
   @IsOptional()
   categoryId?: string;
 

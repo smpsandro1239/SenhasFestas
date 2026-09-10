@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Repository, IsNull, LessThan } from 'typeorm';
+import { Repository, IsNull, Brackets } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
@@ -193,9 +193,20 @@ export class AuthService {
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async cleanupExpiredTokens(): Promise<number> {
-    const { affected } = await this.refreshTokenRepository.delete({
-      expiresAt: LessThan(new Date()),
-    });
+    const agora = new Date();
+    const limiteAntigos = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const { affected } = await this.refreshTokenRepository
+      .createQueryBuilder()
+      .delete()
+      .from(RefreshTokenEntity)
+      .where(
+        new Brackets((qb) =>
+          qb
+            .where('"expiresAt" < :agora', { agora })
+            .orWhere('"revokedAt" IS NOT NULL AND "revokedAt" < :limiteAntigos', { limiteAntigos }),
+        ),
+      )
+      .execute();
     return affected ?? 0;
   }
 }
