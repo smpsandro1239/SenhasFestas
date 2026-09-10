@@ -17,6 +17,7 @@ export function useOrderSocket(refetch: () => void, eventId?: string | null): vo
       auth: { token },
       transports: ['websocket'],
       reconnection: true,
+      reconnectionAttempts: 3,
       reconnectionDelayMax: 8000,
       timeout: 5000,
     });
