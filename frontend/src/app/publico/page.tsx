@@ -65,6 +65,25 @@ function PublicoPage() {
     ready: [],
   });
   const [error, setError] = useState('');
+  const [eventSubtitle, setEventSubtitle] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!eventId) return;
+    fetch(`/api/public/evento?eventId=${encodeURIComponent(eventId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((e) => {
+        if (!e?.name) return;
+        const start = e.startDate
+          ? new Date(e.startDate).toLocaleDateString('pt-PT', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            })
+          : '';
+        setEventSubtitle(start ? `${e.name} • ${start}` : e.name);
+      })
+      .catch(() => undefined);
+  }, [eventId]);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -115,7 +134,7 @@ function PublicoPage() {
             📺 SenhasFestas
           </h1>
           <p className="mt-[1vh] text-[clamp(1rem,2vw,1.75rem)] text-zinc-500">
-            Festa de Aldeia • 15 de Agosto de 2026
+            {eventSubtitle ?? 'SenhasFestas'}
           </p>
         </header>
 

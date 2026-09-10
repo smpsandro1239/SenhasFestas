@@ -177,7 +177,7 @@ export default function PedidosPage() {
                     {/* Footer */}
                     <div className="flex items-center justify-between pt-3 border-t border-border">
                       <span className="text-xl font-bold text-brand tracking-tight">
-                        €{Number(order.total).toFixed(2)}
+                        €{Number(order.total ?? 0).toFixed(2)}
                       </span>
                       <span className="text-xs text-zinc-500">
                         {new Date(order.createdAt).toLocaleTimeString('pt-PT')}

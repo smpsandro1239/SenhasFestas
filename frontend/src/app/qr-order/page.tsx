@@ -80,7 +80,8 @@ function QROrderPage() {
     });
   };
 
-  const getCartTotal = () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const getCartTotal = () =>
+    cart.reduce((sum, item) => sum + (Number(item.price) || 0) * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const usableBalance = Math.min(balance?.balance ?? 0, getCartTotal());
 
@@ -291,7 +292,7 @@ function QROrderPage() {
                   <span>
                     <span className="text-zinc-500">{item.quantity}x</span> {item.name}
                   </span>
-                  <span className="font-medium">€{(item.price * item.quantity).toFixed(2)}</span>
+                  <span className="font-medium">€{((Number(item.price) || 0) * item.quantity).toFixed(2)}</span>
                 </div>
               ))}
             </div>

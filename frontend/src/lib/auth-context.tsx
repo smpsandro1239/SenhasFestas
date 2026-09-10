@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         isAuthenticated: !!token && !!user,
-        isAdmin: user?.role === 'admin' || user?.role === 'organizer' || user?.role === 'cashier' || user?.role === 'bar' || user?.role === 'kitchen' || user?.role === 'treasurer' || user?.role === 'superadmin',
+        isAdmin: user?.role === 'superadmin' || user?.role === 'organizer',
         isSuperadmin: user?.role === 'superadmin',
       }}
     >

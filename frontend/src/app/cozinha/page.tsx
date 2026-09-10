@@ -231,7 +231,7 @@ export default function CozinhaPage() {
                     {/* Footer actions */}
                     <div className="px-6 py-5 mt-4 border-t border-border flex items-center justify-between gap-4">
                       <span className="text-lg font-bold text-zinc-50">
-                        Total: <span className="text-brand">€{Number(order.total).toFixed(2)}</span>
+                        Total: <span className="text-brand">€{Number(order.total ?? 0).toFixed(2)}</span>
                       </span>
 
                       <div className="flex gap-3">

@@ -234,8 +234,8 @@ export async function getKitchenOrders(query?: string): Promise<any> {
   return apiRequest(`/kitchen/pedidos${query ? `?${query}` : ''}`);
 }
 
-export async function getPublicOrders(): Promise<any> {
-  return apiRequest('/public/contagem');
+export async function getPublicOrders(eventId: string): Promise<any> {
+  return apiRequest(`/public/contagem?eventId=${encodeURIComponent(eventId)}`);
 }
 
 export async function getReports(type: string, params?: any): Promise<any> {
