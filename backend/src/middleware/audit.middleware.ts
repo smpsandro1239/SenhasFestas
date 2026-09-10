@@ -3,6 +3,14 @@ import { Request, Response, NextFunction } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditLogEntity } from '../entities';
+import { RedisService } from '../common/redis/redis.service';
+
+const RL_IP_PREFIX = 'rl:ip:';
+const RL_LOGIN_PREFIX = 'rl:login:';
+
+function nunca(timestamps: number[], windowMs: number, now: number): number[] {
+  return timestamps.filter((time) => now - time < windowMs);
+}
 
 @Injectable()
 export class AuditMiddleware implements NestMiddleware {
@@ -50,15 +58,38 @@ export class AuditMiddleware implements NestMiddleware {
 
 @Injectable()
 export class RateLimitMiddleware implements NestMiddleware {
-  private requests: Map<string, number[]> = new Map();
+  private local: Map<string, number[]> = new Map();
   private readonly maxRequests = parseInt(process.env.RATE_LIMIT_MAX || '100', 10);
   private readonly windowMs = 60000;
 
-  use(req: Request, res: Response, next: NextFunction) {
+  constructor(private readonly redisService: RedisService) {}
+
+  async use(req: Request, res: Response, next: NextFunction) {
     const ip = req.ip || 'unknown';
+
+    if (this.redisService.isEnabled) {
+      const key = `${RL_IP_PREFIX}${ip}`;
+      try {
+        const count = (await this.redisService.incr(key)) ?? 0;
+        if (count === 1) {
+          await this.redisService.expire(key, Math.ceil(this.windowMs / 1000));
+        }
+        if (count > this.maxRequests) {
+          res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+            statusCode: HttpStatus.TOO_MANY_REQUESTS,
+            message: 'Muitas requisições. Tente novamente mais tarde.',
+          });
+          return;
+        }
+      } catch (error) {
+        this.onRedisFalhou(error);
+      }
+      next();
+      return;
+    }
+
     const now = Date.now();
-    const requests = this.requests.get(ip) || [];
-    const recentRequests = requests.filter(time => now - time < this.windowMs);
+    const recentRequests = nunca(this.local.get(ip) || [], this.windowMs, now);
 
     if (recentRequests.length >= this.maxRequests) {
       res.status(HttpStatus.TOO_MANY_REQUESTS).json({
@@ -69,33 +100,77 @@ export class RateLimitMiddleware implements NestMiddleware {
     }
 
     recentRequests.push(now);
-    this.requests.set(ip, recentRequests);
+    this.local.set(ip, recentRequests);
 
     setTimeout(() => {
-      const updated = this.requests.get(ip)?.filter(time => Date.now() - time < this.windowMs);
-      if (updated && updated.length > 0) {
-        this.requests.set(ip, updated);
+      const updated = nunca(this.local.get(ip) || [], this.windowMs, Date.now());
+      if (updated.length > 0) {
+        this.local.set(ip, updated);
       } else {
-        this.requests.delete(ip);
+        this.local.delete(ip);
       }
     }, this.windowMs);
 
     next();
   }
+
+  private onRedisFalhou(error: unknown): void {
+    Logger.warn(`Falha no rate limit via Redis: ${(error as Error).message}`);
+  }
 }
 
 @Injectable()
 export class LoginRateLimitMiddleware implements NestMiddleware {
-  private attempts: Map<string, number[] > = new Map();
+  private local: Map<string, number[]> = new Map();
   private readonly maxAttempts = parseInt(process.env.LOGIN_RATE_LIMIT_MAX || '10', 10);
   private readonly windowMs = 15 * 60 * 1000;
 
-  use(req: Request, res: Response, next: NextFunction) {
+  constructor(private readonly redisService: RedisService) {}
+
+  private chaveDoPedido(req: Request): string {
     const ip = req.ip || 'unknown';
     const email = (req.body && typeof req.body.email === 'string' ? req.body.email.toLowerCase() : '').trim();
-    const key = `${ip}:${email}`;
+    return `${ip}:${email}`;
+  }
+
+  async use(req: Request, res: Response, next: NextFunction) {
+    const chave = this.chaveDoPedido(req);
+
+    if (this.redisService.isEnabled) {
+      try {
+        const atual = await this.redisService.get(`${RL_LOGIN_PREFIX}${chave}`);
+        if (atual !== null && parseInt(atual, 10) >= this.maxAttempts) {
+          res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+            statusCode: HttpStatus.TOO_MANY_REQUESTS,
+            message: 'Demasiadas tentativas de login. Tente novamente mais tarde.',
+          });
+          return;
+        }
+      } catch (error) {
+        Logger.warn(`Falha no rate limit de login via Redis: ${(error as Error).message}`);
+      }
+      res.on('finish', () => {
+        if (res.statusCode !== HttpStatus.UNAUTHORIZED) {
+          return;
+        }
+        const key = `${RL_LOGIN_PREFIX}${chave}`;
+        void (async () => {
+          try {
+            const count = (await this.redisService.incr(key)) ?? 0;
+            if (count === 1) {
+              await this.redisService.expire(key, Math.ceil(this.windowMs / 1000));
+            }
+          } catch (error) {
+            Logger.warn(`Falha ao registar tentativa de login no Redis: ${(error as Error).message}`);
+          }
+        })();
+      });
+      next();
+      return;
+    }
+
     const now = Date.now();
-    const timestamps = (this.attempts.get(key) || []).filter(t => now - t < this.windowMs);
+    const timestamps = nunca(this.local.get(chave) || [], this.windowMs, now);
 
     if (timestamps.length >= this.maxAttempts) {
       res.status(HttpStatus.TOO_MANY_REQUESTS).json({
@@ -110,31 +185,20 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
       if (res.statusCode !== HttpStatus.UNAUTHORIZED) {
         return;
       }
-      const failed = (this.attempts.get(key) || []).filter(t => Date.now() - t < this.windowMs);
+      const failed = nunca(this.local.get(chave) || [], this.windowMs, Date.now());
       failed.push(Date.now());
-      this.attempts.set(key, failed);
+      this.local.set(chave, failed);
 
       setTimeout(() => {
-        const updated = this.attempts.get(key)?.filter(t => Date.now() - t < this.windowMs);
-        if (updated && updated.length > 0) {
-          this.attempts.set(key, updated);
+        const updated = nunca(this.local.get(chave) || [], this.windowMs, Date.now());
+        if (updated.length > 0) {
+          this.local.set(chave, updated);
         } else {
-          this.attempts.delete(key);
+          this.local.delete(chave);
         }
       }, this.windowMs);
     });
 
-    next();
-  }
-}
-
-@Injectable()
-export class SecurityMiddleware implements NestMiddleware {
-  use(req: Request, res: Response, next: NextFunction) {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     next();
   }
 }
