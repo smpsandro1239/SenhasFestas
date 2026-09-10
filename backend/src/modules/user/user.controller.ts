@@ -18,14 +18,14 @@ export class UserController {
 
   @Get()
   @Roles('superadmin', 'organizer')
-  async findAll() {
-    return this.userService.findAll();
+  async findAll(@Request() req: any) {
+    return this.userService.findAll(req.user);
   }
 
   @Get(':id')
   @Roles('superadmin', 'organizer')
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.userService.findOne(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    return this.userService.findOne(id, req.user);
   }
 
   @Post()
