@@ -43,7 +43,7 @@ writeFileSync(
   JSON.stringify(
     {
       version: 3,
-      routes: [{ handle: 'filesystem' }, { src: '/(.*)', dest: '/api/index' }],
+      routes: [{ handle: 'filesystem' }, { src: '/api/(.*)', dest: '/api/index.js' }],
     },
     null,
     2,
