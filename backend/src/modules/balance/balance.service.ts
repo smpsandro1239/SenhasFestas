@@ -41,52 +41,67 @@ export class BalanceService {
   }
 
   async loadBalance(userId: string, dto: LoadBalanceDto): Promise<BalanceEntity> {
-    const updated = await this.dataSource.transaction(async (manager) => {
-      let balance = await manager.findOne(BalanceEntity, {
-        where: dto.eventId
-          ? ({ user: { id: userId }, event: { id: dto.eventId } } as any)
-          : ({ user: { id: userId } } as any),
-        lock: { mode: 'pessimistic_write' },
-      });
-
-      if (!balance) {
-        const userEntity = await manager.findOne(UserEntity, { where: { id: userId } });
-        if (!userEntity) {
-          throw new NotFoundException('Utilizador não encontrado');
-        }
-
-        let event: EventEntity | undefined;
-        if (dto.eventId) {
-          event = await manager.findOne(EventEntity, { where: { id: dto.eventId } });
-          if (!event) {
-            throw new NotFoundException('Evento não encontrado');
-          }
-        }
-
-        balance = manager.create(BalanceEntity, {
-          user: userEntity,
-          event: event || undefined,
-          currentBalance: 0,
-        });
-        await manager.save(BalanceEntity, balance);
-      }
-
-      balance.currentBalance = Number(balance.currentBalance) + dto.amount;
-      const saved = await manager.save(BalanceEntity, balance);
-
-      const movement = manager.create(BalanceMovementEntity, {
-        balance: saved,
-        type: MovementType.LOAD,
-        amount: dto.amount,
-        description: dto.paymentMethod || 'Carregamento',
-      });
-      await manager.save(BalanceMovementEntity, movement);
-
-      return saved;
-    });
-
+    const updated = await this.runLoadTransaction(userId, dto);
     this.orderGateway.emitOrderUpdate(updated.id, 'balance_updated', updated.event?.id);
     return updated;
+  }
+
+  private async runLoadTransaction(
+    userId: string,
+    dto: LoadBalanceDto,
+    tries = 3,
+  ): Promise<BalanceEntity> {
+    try {
+      return await this.dataSource.transaction(async (manager) => {
+        let balance = await manager.findOne(BalanceEntity, {
+          where: dto.eventId
+            ? ({ user: { id: userId }, event: { id: dto.eventId } } as any)
+            : ({ user: { id: userId } } as any),
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!balance) {
+          const userEntity = await manager.findOne(UserEntity, { where: { id: userId } });
+          if (!userEntity) {
+            throw new NotFoundException('Utilizador não encontrado');
+          }
+
+          let event: EventEntity | undefined;
+          if (dto.eventId) {
+            event = await manager.findOne(EventEntity, { where: { id: dto.eventId } });
+            if (!event) {
+              throw new NotFoundException('Evento não encontrado');
+            }
+          }
+
+          balance = manager.create(BalanceEntity, {
+            user: userEntity,
+            event: event || undefined,
+            currentBalance: 0,
+          });
+          await manager.save(BalanceEntity, balance);
+        }
+
+        balance.currentBalance = Number(balance.currentBalance) + dto.amount;
+        const saved = await manager.save(BalanceEntity, balance);
+
+        const movement = manager.create(BalanceMovementEntity, {
+          balance: saved,
+          type: MovementType.LOAD,
+          amount: dto.amount,
+          description: dto.paymentMethod || 'Carregamento',
+        });
+        await manager.save(BalanceMovementEntity, movement);
+
+        return saved;
+      });
+    } catch (error) {
+      const code = (error as { code?: string } | null)?.code;
+      if (tries > 1 && code === '23505') {
+        return this.runLoadTransaction(userId, dto, tries - 1);
+      }
+      throw error;
+    }
   }
 
   async getBalanceHistory(

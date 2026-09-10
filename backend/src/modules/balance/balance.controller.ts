@@ -19,6 +19,7 @@ export class BalanceController {
     @Query('eventId', new ParseUUIDPipe({ optional: true })) eventId?: string,
   ) {
     this.assertCanAccess(req.user, userId);
+    this.assertStaffEventScope(req.user, eventId);
     if (eventId && req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, eventId);
     }
@@ -35,6 +36,7 @@ export class BalanceController {
     if (dto.eventId && req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
+    this.assertStaffEventScope(req.user, dto.eventId);
     return this.balanceService.loadBalance(userId, dto);
   }
 
@@ -45,6 +47,7 @@ export class BalanceController {
     @Query('eventId', new ParseUUIDPipe({ optional: true })) eventId?: string,
   ) {
     this.assertCanAccess(req.user, userId);
+    this.assertStaffEventScope(req.user, eventId);
     if (eventId && req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, eventId);
     }
@@ -54,6 +57,15 @@ export class BalanceController {
   private assertCanAccess(requestUser: any, userId: string) {
     if (requestUser.role === 'client' && requestUser.id !== userId) {
       throw new ForbiddenException('Não pode consultar o saldo de outro utilizador');
+    }
+  }
+
+  private assertStaffEventScope(requestUser: any, eventId?: string) {
+    if (requestUser.role === 'superadmin' || requestUser.role === 'client') {
+      return;
+    }
+    if (!eventId) {
+      throw new ForbiddenException('Indique o evento (eventId) para consultar saldos');
     }
   }
 }

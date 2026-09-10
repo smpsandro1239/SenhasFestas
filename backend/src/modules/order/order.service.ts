@@ -125,6 +125,7 @@ export class OrderService {
     const balance = await manager.findOne(BalanceEntity, {
       where: { id: balanceId },
       relations: { user: true, event: true },
+      lock: { mode: 'pessimistic_write' },
     });
     if (!balance) {
       throw new NotFoundException('Saldo não encontrado');
