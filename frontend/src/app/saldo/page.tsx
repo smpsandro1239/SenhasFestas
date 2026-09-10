@@ -37,7 +37,7 @@ function BalancePage() {
     if (!user) return;
     getBalance(user.id, eventId)
       .then((b) => setCurrentBalance(Number(b?.balance ?? 0)))
-      .catch(() => {});
+      .catch((err: any) => setError(err?.message ?? 'Não foi possível carregar o saldo'));
   }, [user, eventId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
