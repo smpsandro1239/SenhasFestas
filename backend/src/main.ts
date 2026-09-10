@@ -1,65 +1,11 @@
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import { AppModule } from './app.module';
+import { ConfigService } from '@nestjs/config';
 import { DatabaseSeederService } from './seeds/database.seeder';
 import { ProductSeederService } from './seeds/product.seeder';
-import { ConfigService } from '@nestjs/config';
-import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { criarAplicacao } from './app.setup';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await criarAplicacao();
   const configService = app.get(ConfigService);
-
-  const rawTrustProxy = configService.get<string>('TRUST_PROXY');
-  const trustProxy =
-    rawTrustProxy !== undefined && rawTrustProxy !== ''
-      ? Number(rawTrustProxy)
-      : process.env.NODE_ENV === 'production'
-        ? 1
-        : undefined;
-
-  if (trustProxy !== undefined) {
-    app.getHttpAdapter().getInstance().set('trust proxy', trustProxy);
-  }
-
-  if (trustProxy !== undefined) {
-    app.use((req, res, next) => {
-      if (!req.secure) {
-        return res.redirect(301, `https://${req.headers.host}${req.originalUrl}`);
-      }
-      next();
-    });
-  }
-
-  app.setGlobalPrefix('api', { exclude: ['api/docs'] });
-
-  app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
-  });
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
-
-  app.useGlobalFilters(new AllExceptionsFilter());
-
-  const config = new DocumentBuilder()
-    .setTitle('SenhasFestas API')
-    .setDescription('SaaS para gestão de senhas/tokens para consumo em festas de aldeia')
-    .setVersion('1.0')
-    .addTag('SenhasFestas')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
 
   if (configService.get<string>('NODE_ENV') === 'development') {
     const dbSeeder = app.get(DatabaseSeederService);

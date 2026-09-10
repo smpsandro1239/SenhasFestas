@@ -21,7 +21,8 @@
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
-    "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/data-source.ts -p src/database/migrations/"
+    "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/data-source.ts -p src/database/migrations/",
+    "seed:roles": "node scripts/seed-roles.js"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
