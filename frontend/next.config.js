@@ -1,6 +1,16 @@
 /** @type {import('next').NextConfig} */
 const isProd = process.env.NODE_ENV === 'production';
 
+const apiOrigin = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000')
+  .replace(/\/+$/, '')
+  .replace(/\/api$/, '');
+
+const connectSrc = [
+  "'self'",
+  apiOrigin,
+  apiOrigin.replace(/^http/, 'ws'),
+].join(' ');
+
 const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -9,7 +19,7 @@ const securityHeaders = [
   { key: 'X-DNS-Prefetch-Control', value: 'on' },
   {
     key: 'Content-Security-Policy',
-    value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    value: `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src ${connectSrc}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`,
   },
   { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
   { key: 'Cross-Origin-Resource-Policy', value: 'same-site' },
