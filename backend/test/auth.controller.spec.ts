@@ -63,8 +63,12 @@ describe('AuthController', () => {
 
       vi.spyOn(service, 'login').mockResolvedValue(result);
 
-      await expect(controller.login(loginDto)).resolves.toEqual(result);
+      const req = { secure: false, get: () => undefined, headers: {} };
+      const res = { cookie: vi.fn(), clearCookie: vi.fn() };
+
+      await expect(controller.login(req as any, res as any, loginDto)).resolves.toEqual(result);
       expect(service.login).toHaveBeenCalledWith(loginDto.email, loginDto.password);
+      expect(res.cookie).toHaveBeenCalledWith('sf_token', 'test-token', expect.objectContaining({ httpOnly: true }));
     });
   });
 
@@ -78,7 +82,10 @@ describe('AuthController', () => {
 
       vi.spyOn(service, 'refresh').mockResolvedValue(result);
 
-      await expect(controller.refresh({ refreshToken: 'refresh-1' })).resolves.toEqual(result);
+      const req = { secure: false, get: () => undefined, headers: {} };
+      const res = { cookie: vi.fn(), clearCookie: vi.fn() };
+
+      await expect(controller.refresh(req as any, res as any, { refreshToken: 'refresh-1' })).resolves.toEqual(result);
     });
   });
 });

@@ -7,7 +7,6 @@ const TIMEOUT_MS = 10000;
 const TOKEN_KEY = 'token';
 const REFRESH_KEY = 'refreshToken';
 const USER_KEY = 'user';
-const TOKEN_COOKIE = 'sf_token';
 
 export class ApiError extends Error {
   status: number;
@@ -23,25 +22,12 @@ function getStorage(): Storage | null {
   return typeof window !== 'undefined' ? window.localStorage : null;
 }
 
-function setCookie(name: string, value: string, days = 30): void {
-  if (typeof document === 'undefined') return;
-  const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
-  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${secure}`;
-}
-
-function clearCookie(name: string): void {
-  if (typeof document === 'undefined') return;
-  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
-}
-
 export function persistSession(token: string, refreshToken: string, user: unknown): void {
   const storage = getStorage();
   if (!storage) return;
   storage.setItem(TOKEN_KEY, token);
   storage.setItem(REFRESH_KEY, refreshToken);
   storage.setItem(USER_KEY, JSON.stringify(user));
-  setCookie(TOKEN_COOKIE, token);
 }
 
 export function destroySession(redirect = true): void {
@@ -51,7 +37,6 @@ export function destroySession(redirect = true): void {
     storage.removeItem(REFRESH_KEY);
     storage.removeItem(USER_KEY);
   }
-  clearCookie(TOKEN_COOKIE);
   if (redirect && typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth/login')) {
     window.location.assign('/auth/login');
   }
