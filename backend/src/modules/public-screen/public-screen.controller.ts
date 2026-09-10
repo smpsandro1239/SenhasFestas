@@ -8,6 +8,11 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 export class PublicScreenController {
   constructor(private readonly publicScreenService: PublicScreenService) {}
 
+  @Get('evento')
+  async evento(@Query('eventId', ParseUUIDPipe) eventId: string) {
+    return this.publicScreenService.obterEventoPublico(eventId);
+  }
+
   @Get('pedidos-prontos')
   async pedidosProntos(@Query('eventId', ParseUUIDPipe) eventId: string) {
     return this.publicScreenService.obterPedidosProntos(eventId);

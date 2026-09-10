@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
-import { OrderEntity, EventUserEntity } from '../../entities';
+import { OrderEntity, EventUserEntity, EventEntity } from '../../entities';
 import { OrderGateway } from '../../websocket/order.gateway';
 
 const ECRAN_PUBLICO_FIELDS = [
@@ -21,10 +21,23 @@ export class PublicScreenService {
     private readonly orderRepository: Repository<OrderEntity>,
     @InjectRepository(EventUserEntity)
     private readonly eventUserRepository: Repository<EventUserEntity>,
+    @InjectRepository(EventEntity)
+    private readonly eventRepository: Repository<EventEntity>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
     private readonly orderGateway: OrderGateway,
   ) {}
+
+  async obterEventoPublico(eventId: string): Promise<Partial<EventEntity>> {
+    const evento = await this.eventRepository.findOne({
+      where: { id: eventId },
+      select: { id: true, name: true, location: true, startDate: true, endDate: true },
+    });
+    if (!evento) {
+      throw new NotFoundException('Evento não encontrado');
+    }
+    return evento;
+  }
 
   async obterPedidosProntos(eventId: string): Promise<Partial<OrderEntity>[]> {
     return this.orderRepository
