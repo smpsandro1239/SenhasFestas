@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { OrderEntity, EventUserEntity } from '../../entities';
 import { OrderGateway } from '../../websocket/order.gateway';
 
@@ -21,6 +21,8 @@ export class PublicScreenService {
     private readonly orderRepository: Repository<OrderEntity>,
     @InjectRepository(EventUserEntity)
     private readonly eventUserRepository: Repository<EventUserEntity>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
     private readonly orderGateway: OrderGateway,
   ) {}
 
@@ -72,36 +74,39 @@ export class PublicScreenService {
   }
 
   async marcarEntregue(id: string, utilizador: any): Promise<any> {
-    const pedido = await this.orderRepository.findOne({
-      where: { id },
-      relations: { event: true },
-    });
-    if (!pedido) {
-      throw new NotFoundException('Pedido não encontrado');
-    }
-
-    if (utilizador?.role !== 'superadmin') {
-      const eventId = pedido.event?.id;
-      if (!eventId) {
-        throw new ForbiddenException('Pedido sem evento associado');
-      }
-      const membro = await this.eventUserRepository.findOne({
-        where: { event: { id: eventId }, user: { id: utilizador?.id } },
+    return this.dataSource.transaction(async (manager) => {
+      const pedido = await manager.findOne(OrderEntity, {
+        where: { id },
+        relations: { event: true },
+        lock: { mode: 'pessimistic_write' },
       });
-      if (!membro) {
-        throw new ForbiddenException('Não pertence a este evento');
+      if (!pedido) {
+        throw new NotFoundException('Pedido não encontrado');
       }
-    }
 
-    if (pedido.status !== 'ready') {
-      throw new BadRequestException('Pedido não está pronto para entrega');
-    }
-    pedido.status = 'delivered';
-    const pedidoAtualizado = await this.orderRepository.save(pedido);
+      if (utilizador?.role !== 'superadmin') {
+        const eventId = pedido.event?.id;
+        if (!eventId) {
+          throw new ForbiddenException('Pedido sem evento associado');
+        }
+        const membro = await manager.findOne(EventUserEntity, {
+          where: { event: { id: eventId }, user: { id: utilizador?.id } },
+        });
+        if (!membro) {
+          throw new ForbiddenException('Não pertence a este evento');
+        }
+      }
 
-    // Emitir evento WebSocket para o ecrã público
-    this.orderGateway.emitOrderUpdate(pedidoAtualizado.id, pedidoAtualizado.status, pedido.event?.id);
+      if (pedido.status !== 'ready') {
+        throw new BadRequestException('Pedido não está pronto para entrega');
+      }
+      pedido.status = 'delivered';
+      const pedidoAtualizado = await manager.save(OrderEntity, pedido);
 
-    return pedidoAtualizado;
+      // Emitir evento WebSocket para o ecrã público
+      this.orderGateway.emitOrderUpdate(pedidoAtualizado.id, pedidoAtualizado.status, pedido.event?.id);
+
+      return pedidoAtualizado;
+    });
   }
 }

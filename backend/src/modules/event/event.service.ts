@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import {
   EventEntity,
   EventUserEntity,
@@ -11,6 +11,7 @@ import {
   BalanceMovementEntity,
   CategoryEntity,
   StationEntity,
+  CashClosureEntity,
 } from '../../entities';
 import { CreateEventDto, UpdateEventDto } from './dto';
 
@@ -27,15 +28,20 @@ export class EventService {
     private readonly balanceRepository: Repository<BalanceEntity>,
     @InjectRepository(ProductEntity)
     private readonly productRepository: Repository<ProductEntity>,
+    @InjectRepository(CashClosureEntity)
+    private readonly cashClosureRepository: Repository<CashClosureEntity>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
 
-  async findByUser(userId: string): Promise<EventEntity[]> {
+  async findByUser(user: any): Promise<EventEntity[]> {
+    if (user?.role === 'superadmin') {
+      return this.eventRepository.find();
+    }
     return this.eventRepository
       .createQueryBuilder('event')
       .innerJoin(EventUserEntity, 'eu', 'eu.eventId = event.id')
-      .where('eu.userId = :userId', { userId })
+      .where('eu.userId = :userId', { userId: user?.id })
       .getMany();
   }
 
@@ -96,6 +102,21 @@ export class EventService {
 
   async remove(id: string, user: UserEntity): Promise<{ deleted: boolean }> {
     await this.findOne(id, user);
+
+    const pedidosAtivos = await this.orderRepository.count({
+      where: { event: { id } as any, status: In(['received', 'preparing', 'ready']) },
+    });
+    if (pedidosAtivos > 0) {
+      throw new ConflictException('Não é possível eliminar um evento com pedidos em curso');
+    }
+
+    const caixaAberto = await this.cashClosureRepository.count({
+      where: { eventId: id, status: 'open' },
+    });
+    if (caixaAberto > 0) {
+      throw new ConflictException('Feche o caixa antes de eliminar o evento');
+    }
+
     const balanceIds = (
       await this.balanceRepository.find({ where: { event: { id } as any }, select: { id: true } })
     ).map((b) => b.id);

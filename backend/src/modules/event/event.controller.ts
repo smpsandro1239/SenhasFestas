@@ -23,7 +23,7 @@ export class EventController {
 
   @Get()
   async findAll(@Request() req: any) {
-    return this.eventService.findByUser(req.user.id);
+    return this.eventService.findByUser(req.user);
   }
 
   @Post()
