@@ -24,9 +24,9 @@ import { HealthController } from './health/health.controller';
 import {
   AuditMiddleware,
   RateLimitMiddleware,
-  SecurityMiddleware,
   LoginRateLimitMiddleware,
 } from './middleware/audit.middleware';
+import { SecurityMiddleware } from './middleware/security.middleware';
 
 @Module({
   imports: [
