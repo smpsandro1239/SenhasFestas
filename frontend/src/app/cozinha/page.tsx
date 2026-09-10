@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { fetchWithAuth } from '@/lib/api';
+import { useCurrentEvent } from '@/lib/use-current-event';
+import { useOrderSocket } from '@/lib/use-order-socket';
 import { Badge, type BadgeVariant } from '@/components/ui/badge';
 import { Tabs } from '@/components/ui/tabs';
 import { Alert } from '@/components/ui/alert';
@@ -56,12 +58,14 @@ function useClock() {
   return now;
 }
 
-export default function CozinhaPage() {
+function CozinhaPageInner() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'received' | 'preparing'>('all');
   const now = useClock();
+
+  const { event: eventoAtual } = useCurrentEvent();
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -78,6 +82,8 @@ export default function CozinhaPage() {
       setLoading(false);
     }
   }, []);
+
+  useOrderSocket(fetchOrders, eventoAtual?.id);
 
   useEffect(() => {
     fetchOrders();
@@ -261,5 +267,13 @@ export default function CozinhaPage() {
         </div>
       </main>
     </>
+  );
+}
+
+export default function CozinhaPage() {
+  return (
+    <Suspense fallback={null}>
+      <CozinhaPageInner />
+    </Suspense>
   );
 }

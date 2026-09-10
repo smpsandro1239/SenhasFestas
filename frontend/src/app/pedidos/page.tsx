@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { fetchWithAuth } from '@/lib/api';
+import { useCurrentEvent } from '@/lib/use-current-event';
+import { useOrderSocket } from '@/lib/use-order-socket';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { Badge, type BadgeVariant } from '@/components/ui/badge';
@@ -38,11 +40,13 @@ const statusMeta: Record<string, { label: string; variant: BadgeVariant }> = {
   cancelled: { label: 'Cancelado', variant: 'danger' },
 };
 
-export default function PedidosPage() {
+function PedidosPageInner() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('active');
+
+  const { event: eventoAtual } = useCurrentEvent();
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -55,6 +59,8 @@ export default function PedidosPage() {
       setLoading(false);
     }
   }, []);
+
+  useOrderSocket(fetchOrders, eventoAtual?.id);
 
   useEffect(() => {
     fetchOrders();
@@ -218,5 +224,13 @@ export default function PedidosPage() {
         )}
       </AppShell>
     </>
+  );
+}
+
+export default function PedidosPage() {
+  return (
+    <Suspense fallback={null}>
+      <PedidosPageInner />
+    </Suspense>
   );
 }
