@@ -17,6 +17,8 @@ describe('App e2e (Postgres + Redis)', () => {
     await app.init();
 
     const dataSource = app.get(DataSource);
+    await dataSource.query('DROP SCHEMA public CASCADE');
+    await dataSource.query('CREATE SCHEMA public');
     await dataSource.runMigrations();
   }, 120000);
 
@@ -39,10 +41,15 @@ describe('App e2e (Postgres + Redis)', () => {
   });
 
   it('deve recusar rate limit com 429 (não 500)', async () => {
-    const responses = [];
-    for (let i = 0; i < 5; i++) {
-      responses.push(await request(app.getHttpServer()).get('/api/health/live'));
+    const max = parseInt(process.env.RATE_LIMIT_MAX || '100', 10);
+    const totalRequests = Math.min(12, max + 2);
+    const statuses: number[] = [];
+    for (let i = 0; i < totalRequests; i++) {
+      statuses.push((await request(app.getHttpServer()).get('/api/health/live')).status);
     }
-    expect(responses.every((r) => r.status === 200)).toBe(true);
+    expect(statuses.every((s) => s === 200 || s === 429)).toBe(true);
+    if (max < totalRequests) {
+      expect(statuses).toContain(429);
+    }
   });
 });

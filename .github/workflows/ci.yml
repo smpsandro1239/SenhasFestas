@@ -15,6 +15,7 @@ jobs:
   backend:
     name: Backend (lint, testes, build, e2e)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:15-alpine
@@ -75,11 +76,13 @@ jobs:
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: ci-secret-nao-usado-em-producao
           FRONTEND_URL: http://localhost:3001
+          RATE_LIMIT_MAX: 5
         run: npm run test:e2e
 
   frontend:
     name: Frontend (lint, build)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -109,6 +112,7 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' && secrets.DEPLOY_HOST != '' }}
     needs: [backend, frontend]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -127,6 +131,7 @@ jobs:
           DB_USERNAME: ${{ secrets.DB_USERNAME }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_NAME: ${{ secrets.DB_NAME }}
+          DB_SSL: "true"
         run: |
           npm ci
           npm run migration:run
