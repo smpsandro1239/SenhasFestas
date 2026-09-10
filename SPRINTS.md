@@ -1,34 +1,34 @@
 # Sprint Plan: SenhasFestas SaaS
 
 ## Sprint 1: Foundation (Autenticação + Eventos + Catálogo)
-- [ ] Autenticação JWT e perfis de utilizador
-- [ ] Modelos de Evento e Utilizador
-- [ ] API de catálogo de produtos
-- [ ] Gestão de categorias
-- [ ] CRUD de produtos com preços e stock
+- [x] Autenticação JWT e perfis de utilizador
+- [x] Modelos de Evento e Utilizador
+- [x] API de catálogo de produtos
+- [x] Gestão de categorias
+- [x] CRUD de produtos com preços e stock
 
 ## Sprint 2: Saldo e Pedidos QR
-- [ ] Sistema de saldo pré-pago
-- [ ] Geração de QR codes
-- [ ] Fluxo de pedido por QR (cliente)
-- [ ] Validação de saldo ao confirmar
-- [ ] Fila de preparação em tempo real
+- [x] Sistema de saldo pré-pago
+- [x] Geração de QR codes
+- [x] Fluxo de pedido por QR (cliente)
+- [x] Validação de saldo ao confirmar
+- [x] Fila de preparação em tempo real
 
 ## Sprint 3: POS Operador + KDS + Ecrã Público
-- [ ] Interface POS para operador
-- [ ] Criação de pedido completo pelo operador
-- [ ] Ecrã de cozinha/bar (KDS)
-- [ ] Ecrã público com estados
-- [ ] Atualização em tempo real via WebSocket
+- [x] Interface POS para operador
+- [x] Criação de pedido completo pelo operador
+- [x] Ecrã de cozinha/bar (KDS)
+- [x] Ecrã público com estados
+- [x] Atualização em tempo real via WebSocket
 
 ## Sprint 4: Relatórios e Fechamento
-- [ ] Fechamento de caixa por operador/banca/evento
-- [ ] Relatórios operacionais
-- [ ] Anulações e devoluções
-- [ ] Interface de administração
+- [x] Fechamento de caixa por operador/banca/evento
+- [x] Relatórios operacionais
+- [x] Anulações e devoluções
+- [x] Interface de administração
 
 ## Sprint 5: Avançado
 - [ ] Funcionalidades offline
-- [ ] Multi-evento
+- [x] Multi-evento
 - [ ] Analytics avançados
 - [ ] Melhorias de performance
