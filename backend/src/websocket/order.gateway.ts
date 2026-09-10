@@ -1,13 +1,16 @@
 import { WebSocketGateway, WebSocketServer, SubscribeMessage, OnGatewayConnection, OnGatewayDisconnect, MessageBody, ConnectedSocket } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { Logger, OnModuleDestroy } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Redis } from 'ioredis';
 import { EventUserEntity } from '../entities';
 import { RedisService } from '../common/redis/redis.service';
 
 const ORDER_STATUS_CACHE_TTL = 60 * 60 * 24;
+const CHANNEL = 'order:updates';
 
 @WebSocketGateway({
   cors: {
@@ -22,7 +25,10 @@ const ORDER_STATUS_CACHE_TTL = 60 * 60 * 24;
     credentials: true,
   },
 })
-export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
+  private readonly logger = new Logger(OrderGateway.name);
+  private subscriber: Redis | null = null;
+
   @WebSocketServer()
   server: Server;
 
@@ -33,7 +39,43 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @InjectRepository(EventUserEntity)
     private readonly eventUserRepository: Repository<EventUserEntity>,
   ) {
-    void this.configService;
+    this.setupDistributedSubscriber();
+  }
+
+  private setupDistributedSubscriber(): void {
+    const rawUrl = this.configService.get<string>('REDIS_URL');
+    if (!rawUrl) {
+      return;
+    }
+    const subscriber = new Redis(rawUrl, {
+      lazyConnect: true,
+      maxRetriesPerRequest: 2,
+      retryStrategy: (times) => {
+        if (times > 5) {
+          return null;
+        }
+        return Math.min(times * 500, 2000);
+      },
+    });
+    subscriber.on('error', (error) => {
+      this.logger.warn(`Subscriber Redis: ${error.message}`);
+    });
+    subscriber.on('message', (_channel, rawMessage) => {
+      try {
+        const payload = JSON.parse(rawMessage) as { orderId?: string; status?: string; eventId?: string };
+        if (!payload?.orderId) {
+          return;
+        }
+        const room = payload.eventId ? `event:${payload.eventId}` : 'public';
+        this.server.to(room).emit('orderUpdated', { orderId: payload.orderId, status: payload.status });
+      } catch {
+        this.logger.warn('Mensagem malformada no canal order:updates');
+      }
+    });
+    subscriber.subscribe(CHANNEL).catch((error) => {
+      this.logger.warn(`Não foi possível subscrever ${CHANNEL}: ${error.message}`);
+    });
+    this.subscriber = subscriber;
   }
 
   async handleConnection(client: Socket) {
@@ -58,7 +100,14 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   handleDisconnect(client: Socket) {
-    console.log(`Cliente desconectado: ${client.id}`);
+    this.logger.log(`Cliente desconectado: ${client.id}`);
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.subscriber) {
+      await this.subscriber.quit().catch(() => undefined);
+      this.subscriber = null;
+    }
   }
 
   @SubscribeMessage('joinEvent')
@@ -86,10 +135,16 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   emitOrderUpdate(orderId: string, status: string, eventId?: string) {
     const room = eventId ? `event:${eventId}` : 'public';
-    this.server.to(room).emit('orderUpdated', { orderId, status });
+    const payload = JSON.stringify({ orderId, status, eventId, at: new Date().toISOString() });
 
-    // Camada de pub/sub para escalabilidade (várias instâncias do backend partilham o estado via Redis)
+    // Com subscriber ativo, a re-emissão local para os sockets desta instância é feita
+    // pelo subscriber (evita duplicação de eventos com múltiplas réplicas).
+    // Sem Redis, cai no modo degradado de emissão local direta.
+    if (this.subscriber) {
+      void this.redisService.publish(CHANNEL, payload);
+    } else {
+      this.server.to(room).emit('orderUpdated', { orderId, status });
+    }
     this.redisService.set(`order:status:${orderId}`, status, ORDER_STATUS_CACHE_TTL);
-    this.redisService.publish('order:updates', JSON.stringify({ orderId, status, at: new Date().toISOString() }));
   }
 }
