@@ -1,4 +1,4 @@
-const CACHE_NAME = 'senhasfestas-v1';
+const CACHE_NAME = 'senhasfestas-v2';
 const PRECACHE_URLS = [
   '/manifest.webmanifest',
   '/icon-192.png',
@@ -91,7 +91,9 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => cached);
+        .catch(() => {
+          return cached || Response.error();
+        });
       return cached || network;
     }),
   );
