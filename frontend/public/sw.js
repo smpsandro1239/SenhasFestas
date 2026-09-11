@@ -1,4 +1,4 @@
-const CACHE_NAME = 'senhasfestas-v2';
+const CACHE_NAME = 'senhasfestas-v3';
 const PRECACHE_URLS = [
   '/manifest.webmanifest',
   '/icon-192.png',
@@ -34,17 +34,18 @@ function isSameOrigin(url) {
 async function networkFirst(request) {
   const cache = await caches.open(CACHE_NAME);
   try {
-    const response = await fetch(request);
-    if (response && response.ok && request.method === 'GET') {
+    const response = await fetch(request, { cache: 'no-store' });
+    if (response && response.status === 200 && request.method === 'GET') {
       cache.put(request, response.clone());
     }
     return response;
   } catch {
     const cached = await cache.match(request);
     if (cached) return cached;
-    const fallback = await cache.match('/');
+    const files = await cache.matchAll('/');
+    const fallback = files.length ? files[0] : null;
     if (fallback) return fallback;
-    return Response.error();
+    return new Response('', { status: 200, headers: { 'Content-Type': 'text/html' } });
   }
 }
 
@@ -92,7 +93,7 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => {
-          return cached || Response.error();
+          return cached || new Response('', { status: 200, headers: { 'Content-Type': 'text/html' } });
         });
       return cached || network;
     }),
