@@ -28,6 +28,13 @@ export function persistSession(token: string, refreshToken: string, user: unknow
   storage.setItem(TOKEN_KEY, token);
   storage.setItem(REFRESH_KEY, refreshToken);
   storage.setItem(USER_KEY, JSON.stringify(user));
+  setSessionCookie(token);
+}
+
+function setSessionCookie(token: string): void {
+  if (typeof document === 'undefined') return;
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `sf_token=${encodeURIComponent(token)}; Path=/; Max-Age=${60 * 60 * 24 * 7}; SameSite=Lax${secure}`;
 }
 
 export function destroySession(redirect = true): void {
@@ -36,6 +43,9 @@ export function destroySession(redirect = true): void {
     storage.removeItem(TOKEN_KEY);
     storage.removeItem(REFRESH_KEY);
     storage.removeItem(USER_KEY);
+  }
+  if (typeof document !== 'undefined') {
+    document.cookie = 'sf_token=; Path=/; Max-Age=0; SameSite=Lax';
   }
   if (redirect && typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth/login')) {
     window.location.assign('/auth/login');
