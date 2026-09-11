@@ -145,7 +145,16 @@ async function request<T>(
     return undefined as T;
   }
 
-  return response.json() as Promise<T>;
+  const text = await response.text();
+  if (!text) {
+    return undefined as T;
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return text as unknown as T;
+  }
 }
 
 export async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
