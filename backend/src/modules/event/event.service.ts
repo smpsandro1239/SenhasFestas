@@ -1,19 +1,14 @@
 import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
-import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { Repository, DataSource, In } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, In } from 'typeorm';
 import {
   EventEntity,
   EventUserEntity,
   UserEntity,
   OrderEntity,
-  BalanceEntity,
-  ProductEntity,
-  BalanceMovementEntity,
-  CategoryEntity,
-  StationEntity,
   CashClosureEntity,
 } from '../../entities';
-import { CreateEventDto, UpdateEventDto } from './dto';
+import { CreateEventDto, UpdateEventDto, AddMemberDto, EventSettingsDto } from './dto';
 
 @Injectable()
 export class EventService {
@@ -24,14 +19,8 @@ export class EventService {
     private readonly eventUserRepository: Repository<EventUserEntity>,
     @InjectRepository(OrderEntity)
     private readonly orderRepository: Repository<OrderEntity>,
-    @InjectRepository(BalanceEntity)
-    private readonly balanceRepository: Repository<BalanceEntity>,
-    @InjectRepository(ProductEntity)
-    private readonly productRepository: Repository<ProductEntity>,
     @InjectRepository(CashClosureEntity)
     private readonly cashClosureRepository: Repository<CashClosureEntity>,
-    @InjectDataSource()
-    private readonly dataSource: DataSource,
   ) {}
 
   async findByUser(user: any): Promise<EventEntity[]> {
@@ -91,6 +80,22 @@ export class EventService {
     return this.eventRepository.save(event);
   }
 
+  async getSettings(id: string, user: UserEntity): Promise<Record<string, any>> {
+    const event = await this.findOne(id, user);
+    return event.settings ?? {};
+  }
+
+  async updateSettings(
+    id: string,
+    user: UserEntity,
+    settings: EventSettingsDto,
+  ): Promise<Record<string, any>> {
+    const event = await this.findOne(id, user);
+    event.settings = { ...(event.settings ?? {}), ...settings };
+    await this.eventRepository.save(event);
+    return event.settings;
+  }
+
   async addUserRole(eventId: string, userId: string, role: string): Promise<EventUserEntity> {
     const eventUser = this.eventUserRepository.create({
       event: { id: eventId } as any,
@@ -100,7 +105,46 @@ export class EventService {
     return this.eventUserRepository.save(eventUser);
   }
 
-  async remove(id: string, user: UserEntity): Promise<{ deleted: boolean }> {
+  async listMembers(eventId: string, user: UserEntity): Promise<any[]> {
+    await this.findOne(eventId, user);
+    const members = await this.eventUserRepository.find({
+      where: { event: { id: eventId } },
+      relations: { user: true },
+      order: { createdAt: 'ASC' },
+    });
+    return members.map((m) => ({
+      id: m.id,
+      userId: m.user?.id,
+      email: m.user?.email,
+      name: m.user?.name,
+      role: m.role,
+      createdAt: m.createdAt,
+    }));
+  }
+
+  async addMember(eventId: string, user: UserEntity, dto: AddMemberDto): Promise<EventUserEntity> {
+    await this.findOne(eventId, user);
+    const userId = dto.userId;
+    const existing = await this.eventUserRepository.findOne({
+      where: { event: { id: eventId }, user: { id: userId } },
+    });
+    if (existing) {
+      existing.role = dto.role;
+      return this.eventUserRepository.save(existing);
+    }
+    return this.addUserRole(eventId, userId, dto.role);
+  }
+
+  async removeMember(eventId: string, user: UserEntity, userId: string): Promise<{ removed: boolean }> {
+    await this.findOne(eventId, user);
+    await this.eventUserRepository.delete({
+      event: { id: eventId },
+      user: { id: userId },
+    } as any);
+    return { removed: true };
+  }
+
+  async remove(id: string, user: UserEntity): Promise<{ deleted: boolean; softDelete: boolean }> {
     await this.findOne(id, user);
 
     const pedidosAtivos = await this.orderRepository.count({
@@ -117,28 +161,11 @@ export class EventService {
       throw new ConflictException('Feche o caixa antes de eliminar o evento');
     }
 
-    const balanceIds = (
-      await this.balanceRepository.find({ where: { event: { id } as any }, select: { id: true } })
-    ).map((b) => b.id);
+    await this.eventRepository.update(
+      { id },
+      { deletedAt: new Date(), status: 'closed' },
+    );
 
-    await this.dataSource.transaction(async (manager) => {
-      if (balanceIds.length > 0) {
-        await manager
-          .createQueryBuilder()
-          .delete()
-          .from(BalanceMovementEntity)
-          .where('"balanceId" IN (:...balanceIds)', { balanceIds })
-          .execute();
-      }
-      await manager.delete(OrderEntity, { event: { id } as any });
-      await manager.delete(BalanceEntity, { event: { id } as any });
-      await manager.delete(ProductEntity, { event: { id } as any });
-      await manager.delete(CategoryEntity, { event: { id } as any });
-      await manager.delete(StationEntity, { event: { id } as any });
-      await manager.delete(EventUserEntity, { event: { id } as any });
-      await manager.delete(EventEntity, { id });
-    });
-
-    return { deleted: true };
+    return { deleted: true, softDelete: true };
   }
 }

@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { OrderEntity, OrderItemEntity, BalanceMovementEntity, BalanceEntity } from '../../entities';
 import { MembershipService } from '../../common/membership.service';
 import { OrdensQueryDto, SaldoQueryDto, TopProductsQueryDto } from './dto';
+
+const LIMITE_EXPORTACAO = 5000;
 
 @Injectable()
 export class ReportsService {
@@ -19,9 +21,10 @@ export class ReportsService {
     private readonly membershipService: MembershipService,
   ) {}
 
-  async obterOrdens(filtros: OrdensQueryDto, utilizador: any) {
-    const eventIds = await this.membershipService.eventIdsFor(utilizador);
-
+  private construirQueryOrdens(
+    filtros: OrdensQueryDto,
+    eventIds: string[] | null,
+  ): SelectQueryBuilder<OrderEntity> {
     const query = this.orderRepository
       .createQueryBuilder('orden')
       .leftJoinAndSelect('orden.items', 'itens')
@@ -44,14 +47,71 @@ export class ReportsService {
     if (scope) {
       query.andWhere('orden.' + scope.column, scope.params);
     }
+    return query;
+  }
 
+  async obterOrdens(filtros: OrdensQueryDto, utilizador: any) {
+    const eventIds = await this.membershipService.eventIdsFor(utilizador);
     const page = filtros?.page ?? 1;
     const limit = filtros?.limit ?? 20;
-    const [items, total] = await query
+    const [items, total] = await this.construirQueryOrdens(filtros, eventIds)
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();
     return { items, total, page, limit };
+  }
+
+  async exportOrdensCsv(filtros: OrdensQueryDto, utilizador: any): Promise<string> {
+    const eventIds = await this.membershipService.eventIdsFor(utilizador);
+    const items = await this.construirQueryOrdens(filtros, eventIds)
+      .take(LIMITE_EXPORTACAO)
+      .getMany();
+
+    const cabecalho = [
+      'id',
+      'createdAt',
+      'status',
+      'source',
+      'tableNumber',
+      'station',
+      'total',
+      'balanceUsed',
+      'paymentMethod',
+      'eventId',
+      'itens',
+    ];
+    const escapar = (valor: unknown): string => {
+      if (Array.isArray(valor)) {
+        valor = valor
+          .map((item) => `${item.quantity}x ${item.product?.name ?? item.productId ?? ''} (${item.subtotal})`)
+          .join(' | ');
+      }
+      const texto =
+        valor === null || valor === undefined
+          ? ''
+          : typeof valor === 'object'
+            ? JSON.stringify(valor)
+            : String(valor);
+      return `"${texto.replace(/"/g, '""')}"`;
+    };
+    const linhas = items.map((orden) =>
+      [
+        orden.id,
+        orden.createdAt instanceof Date ? orden.createdAt.toISOString() : orden.createdAt,
+        orden.status,
+        orden.source,
+        orden.tableNumber,
+        orden.station,
+        orden.total,
+        orden.balanceUsed,
+        orden.paymentMethod,
+        (orden as any).event?.id,
+        (orden as any).items,
+      ]
+        .map(escapar)
+        .join(','),
+    );
+    return [cabecalho.join(','), ...linhas].join('\n');
   }
 
   async obterSaldo(filtros: SaldoQueryDto, utilizador: any) {

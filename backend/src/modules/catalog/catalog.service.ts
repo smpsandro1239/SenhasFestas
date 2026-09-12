@@ -71,4 +71,10 @@ export class CatalogService {
     Object.assign(product, dto);
     return this.productRepository.save(product);
   }
+
+  async softRemove(id: string, user: UserEntity): Promise<{ deleted: boolean; softDelete: boolean }> {
+    const product = await this.findOne(id, user);
+    await this.productRepository.softDelete(product.id);
+    return { deleted: true, softDelete: true };
+  }
 }
