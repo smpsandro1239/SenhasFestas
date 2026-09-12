@@ -14,8 +14,7 @@ import { AuditService } from './audit.service';
 import { AuditQueryDto } from './dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
-
-const AUDIT_ROLES = ['superadmin', 'organizer', 'treasurer'];
+import { AUDIT_ROLES } from '../../common/roles';
 
 @Controller('audit')
 @UseGuards(AuthGuard('jwt'), RolesGuard)

@@ -19,3 +19,5 @@ export const FINANCE_ROLES = ['superadmin', 'organizer', 'cashier', 'treasurer']
 export const KITCHEN_ROLES = ['superadmin', 'organizer', 'kitchen', 'bar'];
 
 export const ORDER_CREATOR_ROLES = ['superadmin', 'organizer', 'cashier', 'treasurer', 'client'];
+
+export const AUDIT_ROLES = ['superadmin', 'organizer', 'treasurer'];
