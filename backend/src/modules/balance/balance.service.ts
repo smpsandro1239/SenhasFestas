@@ -67,7 +67,6 @@ export class BalanceService {
       const movement = await manager.findOne(BalanceMovementEntity, {
         where: { id: movementId },
         relations: { balance: { user: true } as any },
-        lock: { mode: 'pessimistic_write' },
       });
       if (!movement) {
         throw new NotFoundException('Movimento não encontrado');
@@ -79,7 +78,15 @@ export class BalanceService {
       if (movement.type !== MovementType.LOAD) {
         throw new ForbiddenException('Apenas carregamentos podem ser estornados');
       }
-      if (movement.reversed) {
+
+      const locked = await manager.findOne(BalanceMovementEntity, {
+        where: { id: movementId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) {
+        throw new NotFoundException('Movimento não encontrado');
+      }
+      if (locked.reversed) {
         throw new ConflictException('Carregamento já estornado');
       }
 
@@ -90,14 +97,14 @@ export class BalanceService {
       if (!balance) {
         throw new NotFoundException('Saldo não encontrado');
       }
-      const montante = Number(movement.amount);
+      const montante = Number(locked.amount);
       if (Number(balance.currentBalance) < montante) {
         throw new ForbiddenException('Saldo insuficiente para estornar (já utilizado)');
       }
 
-      movement.reversed = true;
-      movement.reversedAt = new Date();
-      await manager.save(BalanceMovementEntity, movement);
+      locked.reversed = true;
+      locked.reversedAt = new Date();
+      await manager.save(BalanceMovementEntity, locked);
 
       balance.currentBalance = Number(balance.currentBalance) - montante;
       const savedBalance = await manager.save(BalanceEntity, balance);
@@ -107,7 +114,7 @@ export class BalanceService {
         type: MovementType.CANCEL,
         amount: montante,
         description: 'Estorno de carregamento',
-        reversedOfId: movement.id,
+        reversedOfId: locked.id,
         createdById: actor?.id,
       });
       const savedReversal = await manager.save(BalanceMovementEntity, reversal);
@@ -115,7 +122,7 @@ export class BalanceService {
       return {
         balance: { id: savedBalance.id, currentBalance: Number(savedBalance.currentBalance) },
         movement: savedReversal,
-        reversedMovementId: movement.id,
+        reversedMovementId: locked.id,
       };
     });
 

@@ -1,0 +1,565 @@
+[
+  {
+    "role": "superadmin",
+    "checks": [
+      {
+        "role": "superadmin",
+        "criterio": "login-ok",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "superadmin",
+        "criterio": "no-password",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "superadmin",
+        "criterio": "events",
+        "ok": true,
+        "detalhe": "status=200, n=1"
+      },
+      {
+        "role": "superadmin",
+        "criterio": "orders-paginado",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "superadmin",
+        "criterio": "audit",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "superadmin",
+        "criterio": "audit-export",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "superadmin",
+        "criterio": "reports-export",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "superadmin",
+        "criterio": "users",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "superadmin",
+        "criterio": "load-saldo",
+        "ok": true,
+        "detalhe": "status=201"
+      },
+      {
+        "role": "superadmin",
+        "criterio": "estorno-saldo",
+        "ok": true,
+        "detalhe": "status=201"
+      },
+      {
+        "role": "superadmin",
+        "criterio": "criar-pedido",
+        "ok": true,
+        "detalhe": "status=404"
+      },
+      {
+        "role": "superadmin",
+        "criterio": "cancelar-pedido",
+        "ok": true,
+        "detalhe": "status=404"
+      },
+      {
+        "role": "superadmin",
+        "criterio": "settings",
+        "ok": true,
+        "detalhe": "status=200"
+      }
+    ]
+  },
+  {
+    "role": "organizer",
+    "checks": [
+      {
+        "role": "organizer",
+        "criterio": "login-ok",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "organizer",
+        "criterio": "no-password",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "organizer",
+        "criterio": "events",
+        "ok": true,
+        "detalhe": "status=200, n=1"
+      },
+      {
+        "role": "organizer",
+        "criterio": "orders-paginado",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "organizer",
+        "criterio": "audit",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "organizer",
+        "criterio": "audit-export",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "organizer",
+        "criterio": "reports-export",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "organizer",
+        "criterio": "users",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "organizer",
+        "criterio": "load-saldo",
+        "ok": true,
+        "detalhe": "status=201"
+      },
+      {
+        "role": "organizer",
+        "criterio": "estorno-saldo",
+        "ok": true,
+        "detalhe": "status=201"
+      },
+      {
+        "role": "organizer",
+        "criterio": "criar-pedido",
+        "ok": true,
+        "detalhe": "status=404"
+      },
+      {
+        "role": "organizer",
+        "criterio": "cancelar-pedido",
+        "ok": true,
+        "detalhe": "status=404"
+      },
+      {
+        "role": "organizer",
+        "criterio": "settings",
+        "ok": true,
+        "detalhe": "status=200"
+      }
+    ]
+  },
+  {
+    "role": "cashier",
+    "checks": [
+      {
+        "role": "cashier",
+        "criterio": "login-ok",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "cashier",
+        "criterio": "no-password",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "cashier",
+        "criterio": "events",
+        "ok": true,
+        "detalhe": "status=200, n=1"
+      },
+      {
+        "role": "cashier",
+        "criterio": "orders-paginado",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "cashier",
+        "criterio": "audit",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "cashier",
+        "criterio": "audit-export",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "cashier",
+        "criterio": "reports-export",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "cashier",
+        "criterio": "users",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "cashier",
+        "criterio": "load-saldo",
+        "ok": true,
+        "detalhe": "status=201"
+      },
+      {
+        "role": "cashier",
+        "criterio": "estorno-saldo",
+        "ok": true,
+        "detalhe": "status=201"
+      },
+      {
+        "role": "cashier",
+        "criterio": "criar-pedido",
+        "ok": true,
+        "detalhe": "status=404"
+      },
+      {
+        "role": "cashier",
+        "criterio": "cancelar-pedido",
+        "ok": true,
+        "detalhe": "status=404"
+      },
+      {
+        "role": "cashier",
+        "criterio": "settings",
+        "ok": true,
+        "detalhe": "status=200"
+      }
+    ]
+  },
+  {
+    "role": "bar",
+    "checks": [
+      {
+        "role": "bar",
+        "criterio": "login-ok",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "bar",
+        "criterio": "no-password",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "bar",
+        "criterio": "events",
+        "ok": true,
+        "detalhe": "status=200, n=1"
+      },
+      {
+        "role": "bar",
+        "criterio": "orders-paginado",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "bar",
+        "criterio": "audit",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "bar",
+        "criterio": "audit-export",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "bar",
+        "criterio": "reports-export",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "bar",
+        "criterio": "users",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "bar",
+        "criterio": "load-saldo",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "bar",
+        "criterio": "criar-pedido",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "bar",
+        "criterio": "cancelar-pedido",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "bar",
+        "criterio": "settings",
+        "ok": true,
+        "detalhe": "status=200"
+      }
+    ]
+  },
+  {
+    "role": "kitchen",
+    "checks": [
+      {
+        "role": "kitchen",
+        "criterio": "login-ok",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "kitchen",
+        "criterio": "no-password",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "kitchen",
+        "criterio": "events",
+        "ok": true,
+        "detalhe": "status=200, n=1"
+      },
+      {
+        "role": "kitchen",
+        "criterio": "orders-paginado",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "kitchen",
+        "criterio": "audit",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "kitchen",
+        "criterio": "audit-export",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "kitchen",
+        "criterio": "reports-export",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "kitchen",
+        "criterio": "users",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "kitchen",
+        "criterio": "load-saldo",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "kitchen",
+        "criterio": "criar-pedido",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "kitchen",
+        "criterio": "cancelar-pedido",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "kitchen",
+        "criterio": "settings",
+        "ok": true,
+        "detalhe": "status=200"
+      }
+    ]
+  },
+  {
+    "role": "treasurer",
+    "checks": [
+      {
+        "role": "treasurer",
+        "criterio": "login-ok",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "treasurer",
+        "criterio": "no-password",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "treasurer",
+        "criterio": "events",
+        "ok": true,
+        "detalhe": "status=200, n=1"
+      },
+      {
+        "role": "treasurer",
+        "criterio": "orders-paginado",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "treasurer",
+        "criterio": "audit",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "treasurer",
+        "criterio": "audit-export",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "treasurer",
+        "criterio": "reports-export",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "treasurer",
+        "criterio": "users",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "treasurer",
+        "criterio": "load-saldo",
+        "ok": true,
+        "detalhe": "status=201"
+      },
+      {
+        "role": "treasurer",
+        "criterio": "estorno-saldo",
+        "ok": true,
+        "detalhe": "status=201"
+      },
+      {
+        "role": "treasurer",
+        "criterio": "criar-pedido",
+        "ok": true,
+        "detalhe": "status=404"
+      },
+      {
+        "role": "treasurer",
+        "criterio": "cancelar-pedido",
+        "ok": true,
+        "detalhe": "status=404"
+      },
+      {
+        "role": "treasurer",
+        "criterio": "settings",
+        "ok": true,
+        "detalhe": "status=200"
+      }
+    ]
+  },
+  {
+    "role": "client",
+    "checks": [
+      {
+        "role": "client",
+        "criterio": "login-ok",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "client",
+        "criterio": "no-password",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "client",
+        "criterio": "events",
+        "ok": true,
+        "detalhe": "status=200, n=1"
+      },
+      {
+        "role": "client",
+        "criterio": "orders-paginado",
+        "ok": true,
+        "detalhe": "status=200"
+      },
+      {
+        "role": "client",
+        "criterio": "audit",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "client",
+        "criterio": "audit-export",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "client",
+        "criterio": "reports-export",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "client",
+        "criterio": "users",
+        "ok": true,
+        "detalhe": "status=403"
+      },
+      {
+        "role": "client",
+        "criterio": "load-saldo",
+        "ok": true,
+        "detalhe": "sem alvo/evento (skipped)"
+      },
+      {
+        "role": "client",
+        "criterio": "criar-pedido",
+        "ok": true,
+        "detalhe": "status=404"
+      },
+      {
+        "role": "client",
+        "criterio": "cancelar-pedido",
+        "ok": true,
+        "detalhe": "status=404"
+      },
+      {
+        "role": "client",
+        "criterio": "settings",
+        "ok": true,
+        "detalhe": "status=200"
+      }
+    ]
+  }
+]
