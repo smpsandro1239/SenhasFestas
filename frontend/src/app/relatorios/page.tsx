@@ -118,14 +118,14 @@ function RelatoriosPage() {
           <div>
             <h2 className="text-lg font-semibold text-zinc-100 mb-4">Produtos Mais Vendidos</h2>
             {topProducts.length === 0 ? (
-              <div className="text-sm text-zinc-500 py-4">Sem dados disponíveis.</div>
+              <div className="text-sm text-zinc-400 py-4">Sem dados disponíveis.</div>
             ) : (
               <div className="space-y-3 max-w-2xl">
                 {topProducts.map((item, idx) => (
                   <Card key={item.id}>
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-semibold text-zinc-100">
-                        <span className="text-zinc-500 font-medium mr-2">{idx + 1}.</span>
+                        <span className="text-zinc-400 font-medium mr-2">{idx + 1}.</span>
                         {item.name}
                       </span>
                       <span className="text-brand font-medium text-sm">

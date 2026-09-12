@@ -162,7 +162,7 @@ function CozinhaPageInner() {
                     {tabs[0].count} na fila
                   </span>
                 </div>
-                <p className="text-xs text-zinc-500 mt-0.5">Atualização automática a cada 3s</p>
+                <p className="text-xs text-zinc-400 mt-0.5">Atualização automática a cada 3s</p>
               </div>
               </div>
             </div>
@@ -186,11 +186,11 @@ function CozinhaPageInner() {
             <div className="py-20"><Spinner size="lg" label="A carregar pedidos..." /></div>
           ) : filteredOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
-              <div className="p-5 rounded-2xl bg-surface border border-border text-zinc-600 mb-4">
+              <div className="p-5 rounded-2xl bg-surface border border-border text-zinc-400 mb-4">
                 <ChefHatIcon className="h-12 w-12" />
               </div>
               <h2 className="text-xl font-semibold text-zinc-400">Nenhum pedido na fila</h2>
-              <p className="text-zinc-600 mt-2">Os pedidos aparecerão aqui assim que forem feitos</p>
+              <p className="text-zinc-400 mt-2">Os pedidos aparecerão aqui assim que forem feitos</p>
             </div>
           ) : (
             <div className="grid lg:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -224,7 +224,7 @@ function CozinhaPageInner() {
                             <Badge variant="info">{order.station}</Badge>
                           )}
                         </div>
-                        <div className="mt-2 flex items-center gap-3 text-sm text-zinc-500">
+                        <div className="mt-2 flex items-center gap-3 text-sm text-zinc-400">
                           {order.tableNumber && <span>Mesa {order.tableNumber}</span>}
                           {order.source === 'qr' && <Badge variant="brand" size="sm">QR</Badge>}
                           <span>{formatTime(order.createdAt)}</span>
@@ -254,7 +254,7 @@ function CozinhaPageInner() {
                             </span>
                           </span>
                           {item.notes && (
-                            <span className="text-xs text-zinc-500 italic truncate max-w-[40%]">
+                            <span className="text-xs text-zinc-400 italic truncate max-w-[40%]">
                               “{item.notes}”
                             </span>
                           )}

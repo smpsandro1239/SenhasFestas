@@ -58,7 +58,7 @@ export default function PerfilPage() {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-zinc-50">{user.name}</h2>
-                <p className="text-sm text-zinc-500">{user.email}</p>
+                <p className="text-sm text-zinc-400">{user.email}</p>
                 {user.role && (
                   <div className="mt-1.5">
                     <Badge variant="brand">{roleLabel[user.role] || user.role}</Badge>
@@ -77,7 +77,7 @@ export default function PerfilPage() {
                 { label: 'Estado', value: user.isActive ? 'Ativo' : 'Inativo' },
               ].map((field) => (
                 <div key={field.label} className="flex items-center justify-between py-2">
-                  <dt className="text-sm text-zinc-500">{field.label}</dt>
+                  <dt className="text-sm text-zinc-400">{field.label}</dt>
                   <dd className="text-sm font-medium text-zinc-200">{field.value}</dd>
                 </div>
               ))}

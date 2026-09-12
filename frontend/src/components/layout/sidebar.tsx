@@ -75,7 +75,7 @@ export function Sidebar({ className }: SidebarProps) {
           </div>
           <div>
             <div className="font-bold text-zinc-50 tracking-tight">SenhasFestas</div>
-            <div className="text-[11px] text-zinc-500">Gestão de festas</div>
+            <div className="text-[11px] text-zinc-400">Gestão de festas</div>
           </div>
         </Link>
       </div>
@@ -117,7 +117,7 @@ export function Sidebar({ className }: SidebarProps) {
           </div>
           <button
             onClick={logout}
-            className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-surface transition-colors"
+            className="p-2 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-surface transition-colors"
             title="Terminar sessão"
           >
             <LogoutIcon className="h-4 w-4" />

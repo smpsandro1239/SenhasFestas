@@ -51,7 +51,7 @@ export function Tabs({
             {item.icon && <span aria-hidden="true">{item.icon}</span>}
             {item.label}
             {item.count !== undefined && (
-              <span className="text-xs text-zinc-500">({item.count})</span>
+              <span className="text-xs text-zinc-400">({item.count})</span>
             )}
             {activeTab === item.id && (
               <span className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-brand rounded-t-full" />

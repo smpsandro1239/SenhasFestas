@@ -25,7 +25,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
         <div className="relative">
           {icon && (
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none">
               {icon}
             </span>
           )}
@@ -48,7 +48,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           />
         </div>
         {error && <p className="text-sm text-red-400">{error}</p>}
-        {hint && !error && <p className="text-sm text-zinc-500">{hint}</p>}
+        {hint && !error && <p className="text-sm text-zinc-400">{hint}</p>}
       </div>
     );
   },

@@ -50,7 +50,7 @@ export default function RegisterPage() {
           <h2 className="text-2xl font-bold tracking-tight text-zinc-50">
             Criar conta
           </h2>
-          <p className="mt-1 text-sm text-zinc-500">Preencha os seus dados</p>
+          <p className="mt-1 text-sm text-zinc-400">Preencha os seus dados</p>
         </div>
 
         {error && <Alert variant="error" message={error} />}
@@ -114,7 +114,7 @@ export default function RegisterPage() {
         </form>
 
         <div className="pt-2 text-center">
-          <p className="text-zinc-500">
+          <p className="text-zinc-400">
             Já tem conta?{' '}
             <Link href="/auth/login" className="text-brand hover:text-brand-light font-medium transition-colors">
               Iniciar sessão

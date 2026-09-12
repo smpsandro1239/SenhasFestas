@@ -172,7 +172,7 @@ export default function HomePage() {
                     )}
                   </div>
                   <h2 className="mt-4 font-semibold text-zinc-100">{item.title}</h2>
-                  <p className="text-sm text-zinc-500">{item.description}</p>
+                  <p className="text-sm text-zinc-400">{item.description}</p>
                 </Card>
               </Link>
             );
@@ -180,15 +180,15 @@ export default function HomePage() {
         </div>
 
         {/* Footer info */}
-        <footer className="mt-12 pt-6 border-t border-border flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-500">
+        <footer className="mt-12 pt-6 border-t border-border flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-400">
           <span>SenhasFestas v1.1 — Gestão de Pedidos</span>
           {isStaff && (
             <div className="flex items-center gap-4">
-              <Link href="/admin" className="text-zinc-500 hover:text-brand transition-colors">Admin</Link>
+              <Link href="/admin" className="text-zinc-400 hover:text-brand transition-colors">Admin</Link>
               <span className="text-zinc-700">•</span>
-              <Link href="/relatorios" className="text-zinc-500 hover:text-brand transition-colors">Relatórios</Link>
+              <Link href="/relatorios" className="text-zinc-400 hover:text-brand transition-colors">Relatórios</Link>
               <span className="text-zinc-700">•</span>
-              <Link href="/caixa" className="text-zinc-500 hover:text-brand transition-colors">Caixa</Link>
+              <Link href="/caixa" className="text-zinc-400 hover:text-brand transition-colors">Caixa</Link>
             </div>
           )}
         </footer>

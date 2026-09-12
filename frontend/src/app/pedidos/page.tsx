@@ -121,7 +121,7 @@ function PedidosPageInner() {
         <Tabs items={tabs} activeTab={filter} onChange={(id) => setFilter(id as any)} className="mb-6" />
 
         {/* Column header for status legend */}
-        <div className="hidden sm:flex gap-3 mb-4 text-xs text-zinc-500">
+        <div className="hidden sm:flex gap-3 mb-4 text-xs text-zinc-400">
           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-orange-400" /> Recebido</span>
           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand" /> A Preparar</span>
           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Pronto</span>
@@ -173,7 +173,7 @@ function PedidosPageInner() {
                       {order.items?.map((item: any, itemIdx: number) => (
                         <div key={itemIdx} className="text-sm text-zinc-400 flex justify-between gap-2">
                           <span className="truncate">
-                            <span className="text-zinc-500 font-medium">{item.quantity}x</span>{' '}
+                            <span className="text-zinc-400 font-medium">{item.quantity}x</span>{' '}
                             {item.name || item.product?.name}
                           </span>
                         </div>
@@ -185,7 +185,7 @@ function PedidosPageInner() {
                       <span className="text-xl font-bold text-brand tracking-tight">
                         €{Number(order.total ?? 0).toFixed(2)}
                       </span>
-                      <span className="text-xs text-zinc-500">
+                      <span className="text-xs text-zinc-400">
                         {new Date(order.createdAt).toLocaleTimeString('pt-PT')}
                       </span>
                     </div>

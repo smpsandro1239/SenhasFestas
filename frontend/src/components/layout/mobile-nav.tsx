@@ -41,7 +41,7 @@ export function MobileNav() {
               href={item.href}
               className={cn(
                 'flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors',
-                active ? 'text-brand' : 'text-zinc-500 hover:text-zinc-300',
+                active ? 'text-brand' : 'text-zinc-400 hover:text-zinc-300',
               )}
             >
               <Icon className="h-5 w-5" />
@@ -51,7 +51,7 @@ export function MobileNav() {
         })}
         <button
           onClick={logout}
-          className="flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium text-zinc-500 hover:text-red-400"
+          className="flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium text-zinc-400 hover:text-red-400"
         >
           <LogoutIcon className="h-5 w-5" />
           Sair

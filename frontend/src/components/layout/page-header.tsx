@@ -21,7 +21,7 @@ export function PageHeader({ title, subtitle, icon, actions, className }: PageHe
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-50">
             {title}
           </h1>
-          {subtitle && <p className="mt-1 text-sm text-zinc-500">{subtitle}</p>}
+          {subtitle && <p className="mt-1 text-sm text-zinc-400">{subtitle}</p>}
         </div>
       </div>
       {actions && <div className="flex items-center gap-3">{actions}</div>}

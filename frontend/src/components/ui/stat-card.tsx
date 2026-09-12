@@ -63,7 +63,7 @@ export function StatCard({
               {trend}
             </span>
           )}
-          {sub && <span className="text-zinc-500">{sub}</span>}
+          {sub && <span className="text-zinc-400">{sub}</span>}
         </div>
       )}
     </Card>

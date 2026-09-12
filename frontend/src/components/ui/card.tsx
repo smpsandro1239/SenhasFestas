@@ -25,7 +25,7 @@ const paddingStyles: Record<CardPadding, string> = {
 };
 
 const Card = forwardRef<HTMLDivElement, CardProps>(
-  ({ className, variant = 'glass', padding = 'md', hover = false, children, ...props }, ref) => {
+  ({ className, variant = 'default', padding = 'md', hover = false, children, ...props }, ref) => {
     return (
       <div
         ref={ref}

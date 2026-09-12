@@ -24,7 +24,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
           <h1 className="text-3xl font-bold tracking-tight text-gradient">
             SenhasFestas
           </h1>
-          <p className="mt-2 text-zinc-500">{subtitle}</p>
+          <p className="mt-2 text-zinc-400">{subtitle}</p>
         </div>
 
         <div className="glass-strong p-6 sm:p-8 shadow-elevated">

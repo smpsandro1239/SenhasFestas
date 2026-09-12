@@ -133,7 +133,7 @@ function PublicoPage() {
           <h1 className="text-[clamp(2rem,5vw,4.5rem)] font-bold tracking-tight text-gradient">
             📺 SenhasFestas
           </h1>
-          <p className="mt-[1vh] text-[clamp(1rem,2vw,1.75rem)] text-zinc-500">
+          <p className="mt-[1vh] text-[clamp(1rem,2vw,1.75rem)] text-zinc-400">
             {eventSubtitle ?? 'SenhasFestas'}
           </p>
         </header>
@@ -211,7 +211,7 @@ function PublicoPage() {
                                   {getTimeAgo(order.createdAt)}
                                 </div>
                                 {order.tableNumber && (
-                                  <div className="mt-2 text-[clamp(1rem,2vw,1.5rem)] text-zinc-500">
+                                  <div className="mt-2 text-[clamp(1rem,2vw,1.5rem)] text-zinc-400">
                                     Mesa {order.tableNumber}
                                   </div>
                                 )}
@@ -236,7 +236,7 @@ function PublicoPage() {
         </div>
 
         {/* Footer */}
-        <footer className="shrink-0 border-t border-border px-[5vw] py-[2vh] flex items-center justify-between text-[clamp(0.9rem,1.75vw,1.4rem)] text-zinc-600">
+        <footer className="shrink-0 border-t border-border px-[5vw] py-[2vh] flex items-center justify-between text-[clamp(0.9rem,1.75vw,1.4rem)] text-zinc-400">
           <span className="flex items-center gap-3">
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
             Atualização automática em tempo real

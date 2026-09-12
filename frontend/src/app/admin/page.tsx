@@ -303,12 +303,12 @@ export default function AdminPage() {
           <div className="space-y-6">
             <Card>
               <h2 className="text-xl font-bold text-zinc-50 mb-2">Eventos</h2>
-              <p className="text-zinc-500 mb-6 text-sm">
+              <p className="text-zinc-400 mb-6 text-sm">
                 Gerir eventos, criar novos, editar datas e fechar eventos.
               </p>
 
               {loading && events.length === 0 ? null : events.length === 0 ? (
-                <div className="text-sm text-zinc-500 py-4">Nenhum evento criado ainda.</div>
+                <div className="text-sm text-zinc-400 py-4">Nenhum evento criado ainda.</div>
               ) : (
                 <div className="space-y-3">
                   {events.map((event) => (
@@ -320,7 +320,7 @@ export default function AdminPage() {
                           </div>
                           <div>
                             <div className="font-semibold text-zinc-100">{event.name}</div>
-                            <div className="text-sm text-zinc-500 mt-1">
+                            <div className="text-sm text-zinc-400 mt-1">
                               {event.location || 'Local não definido'} •{' '}
                               {new Date(event.startDate).toLocaleDateString('pt-PT')} a{' '}
                               {new Date(event.endDate).toLocaleDateString('pt-PT')}
@@ -390,10 +390,10 @@ export default function AdminPage() {
           <div className="space-y-6">
             <Card>
               <h2 className="text-xl font-bold text-zinc-50 mb-2">Utilizadores</h2>
-              <p className="text-zinc-500 mb-6 text-sm">Gerir perfis e permissões dos utilizadores do evento.</p>
+              <p className="text-zinc-400 mb-6 text-sm">Gerir perfis e permissões dos utilizadores do evento.</p>
 
               {users.length === 0 && !loading ? (
-                <div className="text-sm text-zinc-500 py-4">Nenhum utilizador encontrado.</div>
+                <div className="text-sm text-zinc-400 py-4">Nenhum utilizador encontrado.</div>
               ) : (
                 <div className="space-y-3">
                   {users.map((user, idx) => (
@@ -409,7 +409,7 @@ export default function AdminPage() {
                         </span>
                         <span>
                           <span className="block">{user.name}</span>
-                          <span className="block text-xs text-zinc-500">{user.email}</span>
+                          <span className="block text-xs text-zinc-400">{user.email}</span>
                         </span>
                       </span>
                       <Badge variant={roleVariant[user.role] ?? 'warning'}>{user.role}</Badge>
@@ -421,7 +421,7 @@ export default function AdminPage() {
 
             <Card>
               <h2 className="text-xl font-bold text-zinc-50 mb-2">Associar ao Evento</h2>
-              <p className="text-zinc-500 mb-6 text-sm">
+              <p className="text-zinc-400 mb-6 text-sm">
                 Associe utilizadores a um evento para terem acesso ao menu, caixa e relatórios.
               </p>
 
@@ -486,7 +486,7 @@ export default function AdminPage() {
 
                     <div className="space-y-2 pt-2">
                       {members.length === 0 ? (
-                        <div className="text-sm text-zinc-500">Nenhum membro associado a este evento.</div>
+                        <div className="text-sm text-zinc-400">Nenhum membro associado a este evento.</div>
                       ) : (
                         members.map((m) => (
                           <Card key={m.id} padding="sm" className="flex items-center justify-between bg-surface/50">
@@ -496,7 +496,7 @@ export default function AdminPage() {
                               </span>
                               <span>
                                 <span className="block">{m.name}</span>
-                                <span className="block text-xs text-zinc-500">{m.email}</span>
+                                <span className="block text-xs text-zinc-400">{m.email}</span>
                               </span>
                             </span>
                             <span className="flex items-center gap-3">
@@ -520,12 +520,12 @@ export default function AdminPage() {
           <div className="space-y-6">
             <Card>
               <h2 className="text-xl font-bold text-zinc-50 mb-2">Produtos</h2>
-              <p className="text-zinc-500 mb-6 text-sm">
+              <p className="text-zinc-400 mb-6 text-sm">
                 Catálogo de produtos e preços do evento.
               </p>
 
               {loading && products.length === 0 ? null : products.length === 0 ? (
-                <div className="text-sm text-zinc-500 py-4">Nenhum produto criado ainda.</div>
+                <div className="text-sm text-zinc-400 py-4">Nenhum produto criado ainda.</div>
               ) : (
                 <div className="space-y-3">
                   {products.map((product) => (
@@ -534,7 +534,7 @@ export default function AdminPage() {
                         <div className="flex-1">
                           <div className="font-semibold text-zinc-100">{product.name}</div>
                           {product.description && (
-                            <div className="text-sm text-zinc-500 mt-1">{product.description}</div>
+                            <div className="text-sm text-zinc-400 mt-1">{product.description}</div>
                           )}
                           <div className="flex items-center gap-2 mt-2">
                             <Badge variant="success">€{Number(product.price).toFixed(2)}</Badge>
@@ -632,7 +632,7 @@ export default function AdminPage() {
           <div className="space-y-6">
             <Card>
               <h2 className="text-xl font-bold text-zinc-50 mb-2">Configuração do Evento</h2>
-              <p className="text-zinc-500 mb-6 text-sm">
+              <p className="text-zinc-400 mb-6 text-sm">
                 Configurar moeda, impostos e regras de um evento. As alterações ficam guardadas na base de dados.
               </p>
 
@@ -747,7 +747,7 @@ export default function AdminPage() {
               <div className="flex items-start justify-between gap-4 mb-4">
                 <div>
                   <h2 className="text-xl font-bold text-zinc-50 mb-2">Auditoria</h2>
-                  <p className="text-zinc-500 text-sm">
+                  <p className="text-zinc-400 text-sm">
                     Registo imutável de todas as ações (login, carregamentos, cancelamentos, fecho de caixa...).
                     {auditTotal > 0 && (
                       <span className="text-zinc-400"> • {auditTotal} registos (últimos 50)</span>
@@ -765,9 +765,9 @@ export default function AdminPage() {
               </div>
 
               {auditLoading && auditLogs.length === 0 ? (
-                <div className="text-sm text-zinc-500 py-4">A carregar auditoria...</div>
+                <div className="text-sm text-zinc-400 py-4">A carregar auditoria...</div>
               ) : auditLogs.length === 0 ? (
-                <div className="text-sm text-zinc-500 py-4">Nenhum registo de auditoria.</div>
+                <div className="text-sm text-zinc-400 py-4">Nenhum registo de auditoria.</div>
               ) : (
                 <div className="space-y-2">
                   {auditLogs.map((log) => (
@@ -780,14 +780,14 @@ export default function AdminPage() {
                           <Badge variant="brand">{log.action}</Badge>
                           <span className="text-zinc-300">{log.entity ?? log.resource ?? '—'}</span>
                           {log.entityId && (
-                            <span className="font-mono text-xs text-zinc-600">{String(log.entityId).slice(0, 8)}</span>
+                            <span className="font-mono text-xs text-zinc-400">{String(log.entityId).slice(0, 8)}</span>
                           )}
                         </span>
-                        <span className="text-xs text-zinc-500">
+                        <span className="text-xs text-zinc-400">
                           {log.createdAt ? new Date(log.createdAt).toLocaleString('pt-PT') : '—'}
                         </span>
                       </div>
-                      <div className="mt-1 flex items-center gap-3 text-xs text-zinc-500">
+                      <div className="mt-1 flex items-center gap-3 text-xs text-zinc-400">
                         <span>
                           por{' '}
                           {log.actorRole
@@ -797,7 +797,7 @@ export default function AdminPage() {
                               : 'sistema'}
                         </span>
                         {log.ip && <span>· {log.ip}</span>}
-                        <span className="text-zinc-600">· {log.details?.method ?? ''}</span>
+                        <span className="text-zinc-400">· {log.details?.method ?? ''}</span>
                       </div>
                     </div>
                   ))}

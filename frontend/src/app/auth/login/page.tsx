@@ -52,7 +52,7 @@ export default function LoginPage() {
           <h2 className="text-2xl font-bold tracking-tight text-zinc-50">
             Bem-vindo de volta
           </h2>
-          <p className="mt-1 text-sm text-zinc-500">Faça login para continuar</p>
+          <p className="mt-1 text-sm text-zinc-400">Faça login para continuar</p>
         </div>
 
         {error && <Alert variant="error" message={error} />}
@@ -84,7 +84,7 @@ export default function LoginPage() {
         </form>
 
         <div className="pt-2 text-center">
-          <p className="text-zinc-500">
+          <p className="text-zinc-400">
             Ainda não tem conta?{' '}
             <Link href="/auth/register" className="text-brand hover:text-brand-light font-medium transition-colors">
               Registe-se
@@ -109,14 +109,14 @@ export default function LoginPage() {
                 >
                   <span>
                     <span className="font-medium text-zinc-300">{account.role}</span>{' '}
-                    <span className="text-zinc-500">· {account.email}</span>
+                    <span className="text-zinc-400">· {account.email}</span>
                   </span>
-                  <span className="font-mono text-zinc-600 group-hover:text-zinc-400">{account.password}</span>
+                  <span className="font-mono text-zinc-400 group-hover:text-zinc-400">{account.password}</span>
                 </button>
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-[11px] text-zinc-600">Clique numa conta para preencher email e palavra-passe.</p>
+          <p className="mt-2 text-[11px] text-zinc-400">Clique numa conta para preencher email e palavra-passe.</p>
         </div>
       </div>
     </AuthLayout>

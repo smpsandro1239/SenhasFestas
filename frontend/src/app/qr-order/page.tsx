@@ -143,7 +143,7 @@ function QROrderPage() {
             </Link>
             <div className="flex-1 text-center">
               <h1 className="font-bold text-zinc-50 tracking-tight">Menu da Festa</h1>
-              <p className="text-[11px] text-zinc-500">Bem-vindo à mesa {tableNumber}</p>
+              <p className="text-[11px] text-zinc-400">Bem-vindo à mesa {tableNumber}</p>
             </div>
             <div className="w-9" />
           </div>
@@ -153,14 +153,14 @@ function QROrderPage() {
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-border">
               <QrIcon className="h-4 w-4 text-brand" />
               <div className="flex-1">
-                <div className="text-[10px] text-zinc-500">Mesa</div>
+                <div className="text-[10px] text-zinc-400">Mesa</div>
                 <div className="text-sm font-semibold text-zinc-100">{tableNumber}</div>
               </div>
             </div>
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-border">
               <span className="text-brand text-base leading-none">€</span>
               <div className="flex-1">
-                <div className="text-[10px] text-zinc-500">Saldo</div>
+                <div className="text-[10px] text-zinc-400">Saldo</div>
                 <div className="text-sm font-semibold text-emerald-400">
                   {(balance?.balance ?? 0).toFixed(2)}
                 </div>
@@ -209,7 +209,7 @@ function QROrderPage() {
                       </span>
                     </div>
                     {product.description && (
-                      <p className="text-sm text-zinc-500 mt-0.5 line-clamp-2">
+                      <p className="text-sm text-zinc-400 mt-0.5 line-clamp-2">
                         {product.description}
                       </p>
                     )}
@@ -280,12 +280,12 @@ function QROrderPage() {
                   <CheckIcon className="h-5 w-5" />
                 </div>
                 <h2 id="pedido-confirmado-title" className="text-2xl font-bold text-zinc-50">Pedido Confirmado</h2>
-                <p className="text-zinc-500 text-sm mt-1">A sua encomenda foi enviada para a cozinha!</p>
+                <p className="text-zinc-400 text-sm mt-1">A sua encomenda foi enviada para a cozinha!</p>
               </div>
               <button
                 onClick={() => setShowPaymentModal(false)}
                 aria-label="Fechar diálogo"
-                className="p-2 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-surface"
+                className="p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-surface"
               >
                 <QrIcon className="h-4 w-4" />
               </button>
@@ -295,7 +295,7 @@ function QROrderPage() {
               {(lastOrder.length ? lastOrder : cart).map((item: any) => (
                 <div key={item.id} className="flex justify-between text-sm text-zinc-300">
                   <span>
-                    <span className="text-zinc-500">{item.quantity}x</span> {item.name}
+                    <span className="text-zinc-400">{item.quantity}x</span> {item.name}
                   </span>
                   <span className="font-medium">€{((Number(item.price) || 0) * item.quantity).toFixed(2)}</span>
                 </div>
@@ -303,7 +303,7 @@ function QROrderPage() {
             </div>
 
             <div className="flex justify-between items-center pt-4 border-t border-border">
-              <span className="text-zinc-500 font-medium">Total</span>
+              <span className="text-zinc-400 font-medium">Total</span>
               <span className="text-2xl font-bold text-brand">€{getCartTotal().toFixed(2) || (orderPlaced ? '—' : '0.00')}</span>
             </div>
 
