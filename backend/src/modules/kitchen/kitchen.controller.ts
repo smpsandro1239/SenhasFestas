@@ -4,8 +4,7 @@ import { KitchenService } from './kitchen.service';
 import { KitchenQueryDto } from './dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
-
-const KITCHEN_ROLES = ['superadmin', 'organizer', 'kitchen', 'bar'];
+import { KITCHEN_ROLES } from '../../common/roles';
 
 @Controller('kitchen')
 @UseGuards(AuthGuard('jwt'), RolesGuard)

@@ -4,8 +4,7 @@ import { CashClosureService } from './cash-closure.service';
 import { CreateCashClosureDto, CloseCashClosureDto } from './dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
-
-const STAFF_ROLES = ['superadmin', 'organizer', 'cashier', 'treasurer'];
+import { FINANCE_ROLES } from '../../common/roles';
 
 @Controller('cash-closure')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -13,13 +12,13 @@ export class CashClosureController {
   constructor(private readonly cashClosureService: CashClosureService) {}
 
   @Post('abrir')
-  @Roles(...STAFF_ROLES)
+  @Roles(...FINANCE_ROLES)
   async abrir(@Request() req: any, @Body() dto: CreateCashClosureDto) {
     return this.cashClosureService.abrirCaixa(req.user.id, req.user, dto);
   }
 
   @Post(':id/fechar')
-  @Roles(...STAFF_ROLES)
+  @Roles(...FINANCE_ROLES)
   async fechar(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: any,
@@ -29,19 +28,19 @@ export class CashClosureController {
   }
 
   @Get('event/:eventoId')
-  @Roles(...STAFF_ROLES)
+  @Roles(...FINANCE_ROLES)
   async listar(@Param('eventoId', ParseUUIDPipe) eventoId: string, @Request() req: any) {
     return this.cashClosureService.listarPorEvento(eventoId, req.user);
   }
 
   @Get(':id')
-  @Roles(...STAFF_ROLES)
+  @Roles(...FINANCE_ROLES)
   async obter(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.cashClosureService.obterPorId(id, req.user);
   }
 
   @Get('event/:eventoId/aberta')
-  @Roles(...STAFF_ROLES)
+  @Roles(...FINANCE_ROLES)
   async obterAberta(@Param('eventoId', ParseUUIDPipe) eventoId: string, @Request() req: any) {
     return this.cashClosureService.obterCaixaAberta(eventoId, req.user);
   }

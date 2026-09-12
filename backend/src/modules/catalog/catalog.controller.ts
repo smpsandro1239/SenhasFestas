@@ -3,12 +3,13 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
   UseGuards,
   Request,
   ParseUUIDPipe,
-Query,
+  Query,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CatalogService } from './catalog.service';
@@ -17,6 +18,7 @@ import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { MembershipService } from '../../common/membership.service';
+import { MANAGEMENT_ROLES } from '../../common/roles';
 
 @Controller('products')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -47,18 +49,24 @@ export class CatalogController {
   }
 
   @Post()
-  @Roles('superadmin', 'organizer')
+  @Roles(...MANAGEMENT_ROLES)
   async create(@Request() req: any, @Body() dto: CreateProductDto) {
     return this.catalogService.create(req.user, dto);
   }
 
   @Patch(':id')
-  @Roles('superadmin', 'organizer')
+  @Roles(...MANAGEMENT_ROLES)
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: any,
     @Body() dto: UpdateProductDto,
   ) {
     return this.catalogService.update(id, req.user, dto);
+  }
+
+  @Delete(':id')
+  @Roles(...MANAGEMENT_ROLES)
+  async remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    return this.catalogService.softRemove(id, req.user);
   }
 }

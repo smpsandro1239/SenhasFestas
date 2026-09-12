@@ -1,16 +1,25 @@
-import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Request, Res } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Response } from 'express';
 import { ReportsService } from './reports.service';
 import { OrdensQueryDto, SaldoQueryDto, TopProductsQueryDto } from './dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
-
-const STAFF_ROLES = ['superadmin', 'organizer', 'cashier', 'bar', 'kitchen', 'treasurer'];
+import { STAFF_ROLES } from '../../common/roles';
 
 @Controller('reports')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
+
+  @Get('export.csv')
+  @Roles(...STAFF_ROLES)
+  async exportCsv(@Query() filters: OrdensQueryDto, @Request() req: any, @Res() res: Response) {
+    const csv = await this.reportsService.exportOrdensCsv(filters, req.user);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="ordens.csv"');
+    res.send(csv);
+  }
 
   @Get('ordens')
   @Roles(...STAFF_ROLES)

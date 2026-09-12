@@ -5,8 +5,7 @@ import { CreateOrderDto, UpdateOrderStatusDto } from './dto';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
-
-const STAFF_ROLES = ['superadmin', 'organizer', 'cashier', 'bar', 'kitchen', 'treasurer'];
+import { STAFF_ROLES, FINANCE_ROLES, ORDER_CREATOR_ROLES } from '../../common/roles';
 
 @Controller('orders')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -14,6 +13,7 @@ export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
   @Post()
+  @Roles(...ORDER_CREATOR_ROLES)
   async create(@Request() req: any, @Body() dto: CreateOrderDto) {
     return this.orderService.create(req.user, dto);
   }
@@ -29,8 +29,14 @@ export class OrderController {
   }
 
   @Post(':id/cancel')
+  @Roles(...FINANCE_ROLES, 'client')
   async cancel(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.orderService.cancelOrder(id, req.user);
+  }
+
+  @Get('mine')
+  async mine(@Request() req: any, @Query() query: PaginationQueryDto) {
+    return this.orderService.findAllForUser(req.user, query.page, query.limit);
   }
 
   @Get('event/:eventId')

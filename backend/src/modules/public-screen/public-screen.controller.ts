@@ -3,6 +3,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { PublicScreenService } from './public-screen.service';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { STAFF_ROLES } from '../../common/roles';
 
 @Controller('public')
 export class PublicScreenController {
@@ -35,7 +36,7 @@ export class PublicScreenController {
 
   @Patch('pedidos/:id/entregue')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('superadmin', 'organizer', 'cashier', 'bar', 'kitchen')
+  @Roles(...STAFF_ROLES)
   async entregar(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.publicScreenService.marcarEntregue(id, req.user);
   }
