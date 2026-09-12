@@ -4,8 +4,7 @@ import { BalanceService } from './balance.service';
 import { LoadBalanceDto } from './dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
-
-const STAFF_ROLES = ['superadmin', 'organizer', 'cashier', 'treasurer'];
+import { FINANCE_ROLES } from '../../common/roles';
 
 @Controller('balances')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -27,7 +26,7 @@ export class BalanceController {
   }
 
   @Post(':userId/load')
-  @Roles(...STAFF_ROLES)
+  @Roles(...FINANCE_ROLES)
   async load(
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() dto: LoadBalanceDto,
@@ -37,7 +36,22 @@ export class BalanceController {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
     this.assertStaffEventScope(req.user, dto.eventId);
-    return this.balanceService.loadBalance(userId, dto);
+    return this.balanceService.loadBalance(userId, dto, req.user);
+  }
+
+  @Post(':userId/reverse/:movementId')
+  @Roles(...FINANCE_ROLES)
+  async reverseLoad(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Param('movementId', ParseUUIDPipe) movementId: string,
+    @Request() req: any,
+    @Query('eventId', new ParseUUIDPipe({ optional: true })) eventId?: string,
+  ) {
+    this.assertStaffEventScope(req.user, eventId);
+    if (eventId && req.user.role !== 'superadmin') {
+      await this.balanceService.assertMemberEvent(req.user.id, eventId);
+    }
+    return this.balanceService.reverseLoad(userId, movementId, req.user);
   }
 
   @Get(':userId/history')

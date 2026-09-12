@@ -1,4 +1,4 @@
-﻿import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+﻿import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { BalanceEntity, UserEntity, BalanceMovementEntity, EventEntity, EventUserEntity, MovementType } from '../../entities';
@@ -40,15 +40,93 @@ export class BalanceService {
     });
   }
 
-  async loadBalance(userId: string, dto: LoadBalanceDto): Promise<BalanceEntity> {
-    const updated = await this.runLoadTransaction(userId, dto);
+  async loadBalance(userId: string, dto: LoadBalanceDto, actor?: any): Promise<Partial<BalanceEntity>> {
+    const updated = await this.runLoadTransaction(userId, dto, actor);
     this.orderGateway.emitOrderUpdate(updated.id, 'balance_updated', updated.event?.id);
-    return updated;
+    const { password: _password, ...safeUser } = (updated as any).user ?? {};
+    return {
+      id: updated.id,
+      currentBalance: updated.currentBalance,
+      event: updated.event,
+      user: safeUser,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+    };
+  }
+
+  async reverseLoad(
+    userId: string,
+    movementId: string,
+    actor?: any,
+  ): Promise<{
+    balance: { id: string; currentBalance: number };
+    movement: BalanceMovementEntity;
+    reversedMovementId: string;
+  }> {
+    const resultado = await this.dataSource.transaction(async (manager) => {
+      const movement = await manager.findOne(BalanceMovementEntity, {
+        where: { id: movementId },
+        relations: { balance: { user: true } as any },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!movement) {
+        throw new NotFoundException('Movimento não encontrado');
+      }
+      const donoId = (movement.balance as any)?.user?.id;
+      if (donoId !== userId) {
+        throw new ForbiddenException('Movimento não pertence a este utilizador');
+      }
+      if (movement.type !== MovementType.LOAD) {
+        throw new ForbiddenException('Apenas carregamentos podem ser estornados');
+      }
+      if (movement.reversed) {
+        throw new ConflictException('Carregamento já estornado');
+      }
+
+      const balance = await manager.findOne(BalanceEntity, {
+        where: { id: movement.balance.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!balance) {
+        throw new NotFoundException('Saldo não encontrado');
+      }
+      const montante = Number(movement.amount);
+      if (Number(balance.currentBalance) < montante) {
+        throw new ForbiddenException('Saldo insuficiente para estornar (já utilizado)');
+      }
+
+      movement.reversed = true;
+      movement.reversedAt = new Date();
+      await manager.save(BalanceMovementEntity, movement);
+
+      balance.currentBalance = Number(balance.currentBalance) - montante;
+      const savedBalance = await manager.save(BalanceEntity, balance);
+
+      const reversal = manager.create(BalanceMovementEntity, {
+        balance: { id: balance.id } as any,
+        type: MovementType.CANCEL,
+        amount: montante,
+        description: 'Estorno de carregamento',
+        reversedOfId: movement.id,
+        createdById: actor?.id,
+      });
+      const savedReversal = await manager.save(BalanceMovementEntity, reversal);
+
+      return {
+        balance: { id: savedBalance.id, currentBalance: Number(savedBalance.currentBalance) },
+        movement: savedReversal,
+        reversedMovementId: movement.id,
+      };
+    });
+
+    this.orderGateway.emitOrderUpdate(resultado.balance.id, 'balance_updated', undefined);
+    return resultado;
   }
 
   private async runLoadTransaction(
     userId: string,
     dto: LoadBalanceDto,
+    actor?: any,
     tries = 3,
   ): Promise<BalanceEntity> {
     try {
@@ -90,6 +168,7 @@ export class BalanceService {
           type: MovementType.LOAD,
           amount: dto.amount,
           description: dto.paymentMethod || 'Carregamento',
+          createdById: actor?.id,
         });
         await manager.save(BalanceMovementEntity, movement);
 
@@ -98,7 +177,7 @@ export class BalanceService {
     } catch (error) {
       const code = (error as { code?: string } | null)?.code;
       if (tries > 1 && code === '23505') {
-        return this.runLoadTransaction(userId, dto, tries - 1);
+        return this.runLoadTransaction(userId, dto, actor, tries - 1);
       }
       throw error;
     }
