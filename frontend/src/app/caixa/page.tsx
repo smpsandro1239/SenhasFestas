@@ -13,7 +13,7 @@ import { Alert } from '@/components/ui/alert';
 import { CashIcon } from '@/components/ui/icons';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
-import { getOpenCash, openCash, closeCash, getCashByEvent } from '@/lib/api';
+import { getOpenCash, openCash, closeCash, getCashByEvent, getUsers, loadBalance, getBalance, reverseLoad } from '@/lib/api';
 
 function formatDateTime(value: string | Date): string {
   const date = typeof value === 'string' ? new Date(value) : value;
@@ -39,10 +39,16 @@ function CaixaPage() {
   const [formData, setFormData] = useState({ valorInicial: '', observacoes: '' });
   const [fechoData, setFechoData] = useState({ totalReal: '', observacoes: '' });
   const [movements, setMovements] = useState<any[]>([]);
+  const [movementList, setMovementList] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(eventError);
   const [success, setSuccess] = useState('');
+  const [users, setUsers] = useState<any[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const [loadAmount, setLoadAmount] = useState('');
+  const [userBalance, setUserBalance] = useState<number | null>(null);
 
   const carregarCaixaAberta = useCallback(async () => {
     if (!event) return;
@@ -152,6 +158,76 @@ function CaixaPage() {
     }
   }, [event, user?.name]);
 
+  const pesquisarUtilizadores = async (q: string) => {
+    try {
+      const list = await getUsers(q);
+      setUsers(Array.isArray(list) ? list.filter((u) => u.role === 'client') : []);
+    } catch {
+      setUsers([]);
+    }
+  };
+
+  const selecionarUtilizador = async (u: any) => {
+    setSelectedUser(u);
+    setUserSearch(u.name);
+    setUsers([]);
+    setUserBalance(null);
+    if (!event) return;
+    try {
+      const b = await getBalance(u.id, event.id);
+      setUserBalance(Number(b?.balance ?? 0));
+      setMovementList(Array.isArray(b?.movements) ? b.movements.filter((x) => x.type === 'load') : []);
+    } catch {
+      setUserBalance(0);
+      setMovementList([]);
+    }
+  };
+
+  const estornarMovimento = async (movimento: any) => {
+    if (!selectedUser || !event) return;
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      await reverseLoad(selectedUser.id, movimento.id, event.id);
+      const b = await getBalance(selectedUser.id, event.id);
+      setUserBalance(Number(b?.balance ?? 0));
+      setMovementList(Array.isArray(b?.movements) ? b.movements.filter((x) => x.type === 'load') : []);
+      setSuccess(
+        `Carregamento de €${formatEuro(Math.abs(Number(movimento.amount ?? 0)))} estornado para ${selectedUser.name}`,
+      );
+      setTimeout(() => setSuccess(''), 4000);
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao estornar carregamento');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const carregarSaldo = async () => {
+    if (!selectedUser || !event) return;
+    const valor = parseFloat(loadAmount);
+    if (isNaN(valor) || valor <= 0) {
+      setError('Insira um valor válido para carregar');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      await loadBalance(selectedUser.id, valor, event.id);
+      const b = await getBalance(selectedUser.id, event.id);
+      setUserBalance(Number(b?.balance ?? 0));
+      setLoadAmount('');
+      setSuccess(`Saldo carregado: +€${valor.toFixed(2)} para ${selectedUser.name}`);
+      setTimeout(() => setSuccess(''), 4000);
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao carregar saldo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (event) {
       setError('');
@@ -162,6 +238,7 @@ function CaixaPage() {
 
   const tabs = [
     { id: 'fecho', label: 'Fecho de Caixa' },
+    { id: 'saldo', label: 'Carregar Saldo' },
     { id: 'movimentacoes', label: 'Movimentações' },
     { id: 'historico', label: 'Histórico' },
   ];
@@ -271,6 +348,114 @@ function CaixaPage() {
 
             {success && <div className="mt-4"><Alert variant="success" message={success} /></div>}
             {error && <div className="mt-4"><Alert variant="error" message={error} /></div>}
+          </Card>
+        )}
+
+        {activeTab === 'saldo' && (
+          <Card className="max-w-3xl">
+            <h2 className="text-xl font-bold text-zinc-50 mb-1">Carregar Saldo a Cliente</h2>
+            <p className="text-sm text-zinc-500 mb-6">
+              Procure o cliente, registe o valor recebido e carregue o saldo.
+            </p>
+
+            <div className="space-y-4 max-w-md">
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1.5">
+                  Procurar cliente (nome ou email)
+                </label>
+                <Input
+                  value={userSearch}
+                  onChange={(e) => {
+                    setUserSearch(e.target.value);
+                    setSelectedUser(null);
+                    if (e.target.value.length >= 2) pesquisarUtilizadores(e.target.value);
+                  }}
+                  placeholder="Nome ou email do cliente"
+                />
+                {users.length > 0 && !selectedUser && (
+                  <div className="mt-2 border border-border rounded-xl overflow-hidden bg-surface-solid">
+                    {users.slice(0, 6).map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => selecionarUtilizador(u)}
+                        className="w-full flex items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-surface transition-colors border-b border-border/50 last:border-b-0"
+                      >
+                        <span className="text-zinc-100">{u.name}</span>
+                        <span className="text-zinc-500 text-xs">{u.email}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {selectedUser && (
+                <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-surface border border-border">
+                  <span>
+                    <span className="block font-medium text-zinc-100">{selectedUser.name}</span>
+                    <span className="block text-xs text-zinc-500">{selectedUser.email}</span>
+                  </span>
+                  <span className="text-sm">
+                    Saldo: <span className="font-bold text-emerald-400">€{userBalance?.toFixed(2) ?? '0.00'}</span>
+                  </span>
+                </div>
+              )}
+
+              {selectedUser && (
+                <>
+                  <Input
+                    label="Valor a carregar (€)"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={loadAmount}
+                    onChange={(e) => setLoadAmount(e.target.value)}
+                    placeholder="10.00"
+                    required
+                  />
+                  <Button type="button" onClick={carregarSaldo} loading={loading} variant="success" className="w-full" size="lg">
+                    {loading ? 'A carregar...' : 'Confirmar Carregamento'}
+                  </Button>
+                </>
+              )}
+
+              {success && <div className="mt-4"><Alert variant="success" message={success} /></div>}
+              {error && <div className="mt-4"><Alert variant="error" message={error} /></div>}
+
+              {selectedUser && movementList.length > 0 && (
+                <div className="pt-4 mt-4 border-t border-border/50">
+                  <h3 className="text-sm font-semibold text-zinc-300 mb-2">Carregamentos recentes</h3>
+                  <div className="space-y-2">
+                    {movementList.map((m) => (
+                      <div
+                        key={m.id}
+                        className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-surface/50 border border-border text-sm"
+                      >
+                        <span className="flex items-center gap-3">
+                          <span className="text-emerald-400 font-mono font-semibold">
+                            +€{formatEuro(Math.abs(Number(m.amount ?? 0)))}
+                          </span>
+                          <span className="text-zinc-500 text-xs">
+                            {m.date ? formatDateTime(typeof m.date === 'string' ? m.date : new Date(m.date)) : ''}
+                          </span>
+                          {m.reversed && <Badge variant="warning" size="sm">Estornado</Badge>}
+                        </span>
+                        {!m.reversed && (
+                          <button
+                            type="button"
+                            onClick={() => estornarMovimento(m)}
+                            disabled={loading}
+                            className="text-xs font-medium text-amber-400 hover:text-amber-300 disabled:opacity-50"
+                          >
+                            Estornar
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </Card>
         )}
 
