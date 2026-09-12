@@ -5,6 +5,7 @@ import { CreateUserDto, UpdateUserDto } from './dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { STAFF_ROLES, MANAGEMENT_ROLES } from '../../common/roles';
+import { toPublicUser } from '../../common/serializers';
 
 @Controller('users')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -13,8 +14,7 @@ export class UserController {
 
   @Get('me')
   async me(@Request() req: any) {
-    const { password: _password, ...safe } = req.user;
-    return safe;
+    return toPublicUser(req.user);
   }
 
   @Get()

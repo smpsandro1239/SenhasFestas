@@ -4,6 +4,7 @@ import { Repository, DataSource } from 'typeorm';
 import { BalanceEntity, UserEntity, BalanceMovementEntity, EventEntity, EventUserEntity, MovementType } from '../../entities';
 import { LoadBalanceDto } from './dto';
 import { OrderGateway } from '../../websocket/order.gateway';
+import { toPublicUser } from '../../common/serializers';
 
 @Injectable()
 export class BalanceService {
@@ -43,12 +44,11 @@ export class BalanceService {
   async loadBalance(userId: string, dto: LoadBalanceDto, actor?: any): Promise<Partial<BalanceEntity>> {
     const updated = await this.runLoadTransaction(userId, dto, actor);
     this.orderGateway.emitOrderUpdate(updated.id, 'balance_updated', updated.event?.id);
-    const { password: _password, ...safeUser } = (updated as any).user ?? {};
     return {
       id: updated.id,
       currentBalance: updated.currentBalance,
       event: updated.event,
-      user: safeUser,
+      user: toPublicUser((updated as any).user) as any,
       createdAt: updated.createdAt,
       updatedAt: updated.updatedAt,
     };
