@@ -102,3 +102,6 @@ temp/
 
 # Git
 .git/
+
+# Vercel CLI local state
+.vercel/
