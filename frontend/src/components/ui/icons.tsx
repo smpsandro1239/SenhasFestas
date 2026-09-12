@@ -29,6 +29,15 @@ export function HomeIcon({ className }: IconProps) {
   );
 }
 
+export function ShieldCheckIcon({ className }: IconProps) {
+  return (
+    <svg {...svgProps(className)}>
+      <path d="M12 2.5l7 3v5c0 5-3 8.5-7 10.5-4-2-7-5.5-7-10.5v-5l7-3z" />
+      <path d="M8.5 12l2.5 2.5 4.5-5" />
+    </svg>
+  );
+}
+
 export function ClipboardIcon({ className }: IconProps) {
   return (
     <svg {...svgProps(className)}>

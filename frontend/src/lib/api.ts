@@ -266,6 +266,23 @@ export async function updateProduct(id: string, data: any): Promise<any> {
   });
 }
 
+export async function getEventMembers(eventId: string): Promise<any> {
+  return apiRequest(`/events/${eventId}/members`);
+}
+
+export async function addEventMember(eventId: string, userId: string, role: string): Promise<any> {
+  return apiRequest(`/events/${eventId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, role }),
+  });
+}
+
+export async function removeEventMember(eventId: string, userId: string): Promise<any> {
+  return apiRequest(`/events/${eventId}/members/${userId}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function getEvents(): Promise<any> {
   return apiRequest('/events');
 }
@@ -284,8 +301,9 @@ export async function updateEvent(id: string, data: any): Promise<any> {
   });
 }
 
-export async function getUsers(): Promise<any> {
-  return apiRequest('/users');
+export async function getUsers(q?: string): Promise<any> {
+  const query = q ? `?q=${encodeURIComponent(q)}` : '';
+  return apiRequest(`/users${query}`);
 }
 
 export async function createUser(data: any): Promise<any> {
@@ -319,4 +337,66 @@ export async function closeCash(id: string, data: any): Promise<any> {
 
 export async function getCashByEvent(eventId: string): Promise<any[]> {
   return apiRequest(`/cash-closure/event/${eventId}`);
+}
+
+export async function getOrdersMine(): Promise<any> {
+  return apiRequest('/orders/mine');
+}
+
+export async function reverseLoad(userId: string, movementId: string, eventId?: string): Promise<any> {
+  const query = eventId ? `?eventId=${encodeURIComponent(eventId)}` : '';
+  return apiRequest(`/balances/${userId}/reverse/${movementId}${query}`, {
+    method: 'POST',
+  });
+}
+
+export async function deleteProduct(id: string): Promise<any> {
+  return apiRequest(`/products/${id}`, { method: 'DELETE' });
+}
+
+export async function getEventSettings(eventId: string): Promise<any> {
+  return apiRequest(`/events/${eventId}/settings`);
+}
+
+export async function updateEventSettings(eventId: string, data: any): Promise<any> {
+  return apiRequest(`/events/${eventId}/settings`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export interface AuditQueryParams {
+  page?: number;
+  limit?: number;
+  entity?: string;
+  action?: string;
+  actorId?: string;
+  eventId?: string;
+}
+
+function auditQueryString(params?: AuditQueryParams): string {
+  if (!params) return '';
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') search.set(key, String(value));
+  });
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
+
+export async function getAudit(params?: AuditQueryParams): Promise<any> {
+  return apiRequest(`/audit${auditQueryString(params)}`);
+}
+
+export async function exportAuditCsv(params?: AuditQueryParams): Promise<string> {
+  return apiRequest(`/audit/export.csv${auditQueryString(params)}`);
+}
+
+export async function exportReportsCsv(params?: Record<string, string | number | undefined>): Promise<string> {
+  const search = new URLSearchParams();
+  Object.entries(params ?? {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') search.set(key, String(value));
+  });
+  const query = search.toString();
+  return apiRequest(`/reports/export.csv${query ? `?${query}` : ''}`);
 }
