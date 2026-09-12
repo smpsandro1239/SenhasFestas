@@ -17,6 +17,11 @@ const mockCategoryRepository = {
   save: vi.fn(),
 };
 
+const mockEventRepository = {
+  findOne: vi.fn(),
+  find: vi.fn(),
+};
+
 describe('CatalogService', () => {
   let service: CatalogService;
 
@@ -25,6 +30,7 @@ describe('CatalogService', () => {
     service = new CatalogService(
       mockProductRepository as any,
       mockCategoryRepository as any,
+      mockEventRepository as any,
     );
   });
 
