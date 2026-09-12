@@ -6,6 +6,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { UserEntity, RefreshTokenEntity } from '../../entities';
+import { toPublicUser } from '../../common/serializers';
 
 export interface JwtPayload {
   sub: string;
@@ -55,8 +56,7 @@ export class AuthService {
   }
 
   private sanitizeUser(user: UserEntity): Partial<UserEntity> {
-    const { password: _, ...rest } = user;
-    return rest;
+    return (toPublicUser(user) ?? {}) as Partial<UserEntity>;
   }
 
   private async assertUserActive(userId: string): Promise<UserEntity> {

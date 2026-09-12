@@ -1,23 +1,15 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, ILike, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { UserEntity, EventUserEntity } from '../../entities';
 import { CreateUserDto, UpdateUserDto } from './dto';
 import { MembershipService } from '../../common/membership.service';
+import { PUBLIC_USER_SELECT, toPublicUser } from '../../common/serializers';
 
 const SEM_MEMBROS = '00000000-0000-0000-0000-000000000000';
 
-const CAMPOS_PUBLICOS = {
-  id: true,
-  email: true,
-  name: true,
-  role: true,
-  phone: true,
-  isActive: true,
-  createdAt: true,
-  updatedAt: true,
-} as const;
+const CAMPOS_PUBLICOS = PUBLIC_USER_SELECT;
 
 @Injectable()
 export class UserService {
@@ -38,18 +30,36 @@ export class UserService {
     return membros.map((m) => m.user?.id).filter((id): id is string => Boolean(id));
   }
 
-  async findAll(utilizador?: any): Promise<Partial<UserEntity>[]> {
+  async findAll(utilizador?: any, q?: string): Promise<Partial<UserEntity>[]> {
     const scope = await this.membershipService.eventIdsFor(utilizador);
+    const search = q
+      ? [
+          { name: ILike(`%${q}%`) },
+          { email: ILike(`%${q}%`) },
+        ]
+      : undefined;
     if (scope === null) {
-      return this.userRepository.find({ select: CAMPOS_PUBLICOS });
+      if (!search) {
+        return this.userRepository.find({ select: CAMPOS_PUBLICOS, order: { name: 'ASC' } });
+      }
+      return this.userRepository.find({
+        where: search,
+        select: CAMPOS_PUBLICOS,
+        order: { name: 'ASC' },
+      });
     }
     if (scope.length === 0) {
       return [];
     }
     const ids = await this.idsDeMembros(scope);
+    const filter = ids.length ? { id: In(ids) } : { id: SEM_MEMBROS };
+    const where = search
+      ? search.map((s) => ({ ...filter, ...s }))
+      : (filter as any);
     return this.userRepository.find({
-      where: ids.length ? { id: In(ids) } : { id: SEM_MEMBROS },
+      where,
       select: CAMPOS_PUBLICOS as any,
+      order: { name: 'ASC' },
     });
   }
 
@@ -88,8 +98,7 @@ export class UserService {
     });
 
     const savedUser = await this.userRepository.save(user);
-    const { password: _password, ...safe } = savedUser;
-    return safe;
+    return toPublicUser(savedUser) as Partial<UserEntity>;
   }
 
   async update(id: string, dto: UpdateUserDto): Promise<Partial<UserEntity>> {
@@ -99,23 +108,15 @@ export class UserService {
     }
     Object.assign(user, dto);
     const savedUser = await this.userRepository.save(user);
-    return {
-      id: savedUser.id,
-      email: savedUser.email,
-      name: savedUser.name,
-      role: savedUser.role,
-      phone: savedUser.phone,
-      isActive: savedUser.isActive,
-      createdAt: savedUser.createdAt,
-      updatedAt: savedUser.updatedAt,
-    };
+    return toPublicUser(savedUser) as Partial<UserEntity>;
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string): Promise<{ deleted: boolean; softDelete: boolean }> {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('Utilizador não encontrado');
     }
-    await this.userRepository.remove(user);
+    await this.userRepository.softDelete(id);
+    return { deleted: true, softDelete: true };
   }
 }
