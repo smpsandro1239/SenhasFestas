@@ -21,8 +21,8 @@ interface User {
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  register: (data: any) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
+  register: (data: any) => Promise<User>;
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
@@ -49,18 +49,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<User> => {
     const { token: newToken, refreshToken, user: userData } = await apiLogin(email, password);
     persistSession(newToken, refreshToken, userData);
     setToken(newToken);
     setUser(userData);
+    return userData;
   };
 
-  const register = async (data: any) => {
+  const register = async (data: any): Promise<User> => {
     const { token: newToken, refreshToken, user: userData } = await apiRegister(data);
     persistSession(newToken, refreshToken, userData);
     setToken(newToken);
     setUser(userData);
+    return userData;
   };
 
   const logout = () => {

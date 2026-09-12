@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { UserIcon, LockIcon } from '@/components/ui/icons';
+import { homeForRole } from '@/lib/roles';
 
 const TEST_ACCOUNTS = [
   { role: 'superadmin', email: 'admin@senhasfestas.com', password: 'admin123' },
@@ -35,8 +36,8 @@ export default function LoginPage() {
     setError('');
 
     try {
-      await login(email, password);
-      router.push('/');
+      const user = await login(email, password);
+      router.push(homeForRole(user?.role));
     } catch (err: any) {
       setError(err.message || 'Erro no login');
     } finally {

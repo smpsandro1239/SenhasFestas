@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { MinusIcon, PlusIcon, QrIcon, ArrowLeftIcon, CheckIcon } from '@/components/ui/icons';
 import { useAuth } from '@/lib/auth-context';
+import { useCurrentEvent } from '@/lib/use-current-event';
 import { getProducts, getBalance, createOrder } from '@/lib/api';
 
 export default function QROrderPageWrapper() {
@@ -21,8 +22,9 @@ export default function QROrderPageWrapper() {
 
 function QROrderPage() {
   const searchParams = useSearchParams();
-  const eventId = searchParams.get('event') ?? '';
-  const tableNumber = searchParams.get('mesa') ?? 'A05';
+  const { event, loading: eventLoading } = useCurrentEvent();
+  const eventId = searchParams.get('event') ?? event?.id ?? '';
+  const tableNumber = searchParams.get('mesa') ?? searchParams.get('table') ?? 'A05';
   const { user } = useAuth();
   const [products, setProducts] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
@@ -48,8 +50,9 @@ function QROrderPage() {
   }, [eventId]);
 
   useEffect(() => {
+    if (!eventId || eventLoading) return;
     fetchProducts();
-  }, [fetchProducts]);
+  }, [fetchProducts, eventId, eventLoading]);
 
   useEffect(() => {
     if (!user) return;
@@ -177,6 +180,8 @@ function QROrderPage() {
               <div key={i} className="shimmer h-24 rounded-2xl" />
             ))}
           </div>
+        ) : !eventId ? (
+          <Alert variant="info" message="Evento não identificado. Peça o código QR da sua mesa para fazer pedidos." />
         ) : error ? (
           <Alert variant="error" message={error} />
         ) : products.length === 0 ? (

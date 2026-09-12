@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { UserIcon, LockIcon, BellIcon } from '@/components/ui/icons';
+import { homeForRole } from '@/lib/roles';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
@@ -33,8 +34,8 @@ export default function RegisterPage() {
     }
 
     try {
-      await register({ name, email, phone, password });
-      router.push('/');
+      const user = await register({ name, email, phone, password });
+      router.push(homeForRole(user?.role));
     } catch (err: any) {
       setError(err.message || 'Erro no registo');
     } finally {
