@@ -1,4 +1,5 @@
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -13,21 +14,23 @@ import { PublicScreenModule } from './modules/public-screen/public-screen.module
 import { ReportsModule } from './modules/reports/reports.module';
 import { CashClosureModule } from './modules/cash-closure/cash-closure.module';
 import { UserModule } from './modules/user/user.module';
+import { AuditModule } from './modules/audit/audit.module';
 import { RedisModule } from './common/redis/redis.module';
 import { MembershipModule } from './common/membership.module';
 import { WebSocketModule } from './websocket/websocket.module';
 import { DatabaseSeederService } from './seeds/database.seeder';
 import { ProductSeederService } from './seeds/product.seeder';
-import { UserEntity, CategoryEntity, ProductEntity, AuditLogEntity } from './entities';
+import { UserEntity, CategoryEntity, ProductEntity } from './entities';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HealthController } from './health/health.controller';
 import {
-  AuditMiddleware,
+  RequestLogMiddleware,
   RateLimitMiddleware,
   LoginRateLimitMiddleware,
 } from './middleware/audit.middleware';
 import { SecurityMiddleware } from './middleware/security.middleware';
+import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 
 @Module({
   imports: [
@@ -52,7 +55,7 @@ import { SecurityMiddleware } from './middleware/security.middleware';
     WebSocketModule,
     MembershipModule,
     ScheduleModule.forRoot(),
-    TypeOrmModule.forFeature([UserEntity, CategoryEntity, ProductEntity, AuditLogEntity]),
+    TypeOrmModule.forFeature([UserEntity, CategoryEntity, ProductEntity]),
     AuthModule,
     EventModule,
     CatalogModule,
@@ -63,14 +66,20 @@ import { SecurityMiddleware } from './middleware/security.middleware';
     ReportsModule,
     CashClosureModule,
     UserModule,
+    AuditModule,
   ],
   controllers: [AppController, HealthController],
-  providers: [AppService, DatabaseSeederService, ProductSeederService],
+  providers: [
+    AppService,
+    DatabaseSeederService,
+    ProductSeederService,
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
-      .apply(SecurityMiddleware, RateLimitMiddleware, AuditMiddleware)
+      .apply(SecurityMiddleware, RateLimitMiddleware, RequestLogMiddleware)
       .forRoutes('*')
       .apply(LoginRateLimitMiddleware)
       .forRoutes('auth/login');

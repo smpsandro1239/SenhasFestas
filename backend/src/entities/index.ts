@@ -4,6 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  DeleteDateColumn,
   ManyToOne,
   OneToMany,
   Index,
@@ -41,6 +42,9 @@ export class UserEntity {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @DeleteDateColumn()
+  deletedAt?: Date;
 }
 
 @Entity('events')
@@ -88,6 +92,9 @@ export class EventEntity {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @DeleteDateColumn()
+  deletedAt?: Date;
 }
 
 @Entity('event_users')
@@ -191,6 +198,9 @@ export class ProductEntity {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @DeleteDateColumn()
+  deletedAt?: Date;
 }
 
 @Entity('balances')
@@ -245,6 +255,18 @@ export class BalanceMovementEntity {
 
   @Column({ type: 'uuid', nullable: true })
   orderId?: string;
+
+  @Column({ default: false })
+  reversed: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  reversedAt?: Date;
+
+  @Column({ type: 'uuid', nullable: true })
+  reversedOfId?: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  createdById?: string;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -330,21 +352,42 @@ export class OrderItemEntity {
 
 @Entity('audit_logs')
 @Index(['createdAt'])
+@Index(['entity'])
+@Index(['actorId'])
+@Index(['eventId'])
 export class AuditLogEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid' })
-  userId: string;
-
   @Column()
   action: string;
 
-  @Column()
-  resource: string;
+  @Column({ nullable: true })
+  entity?: string;
 
-  @Column({ type: 'uuid' })
-  resourceId: string;
+  @Column({ type: 'uuid', nullable: true })
+  entityId?: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  actorId?: string;
+
+  @Column({ nullable: true })
+  actorRole?: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  eventId?: string;
+
+  @Column({ type: 'jsonb', nullable: true })
+  before?: Record<string, any>;
+
+  @Column({ type: 'jsonb', nullable: true })
+  after?: Record<string, any>;
+
+  @Column({ nullable: true })
+  resource?: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  resourceId?: string;
 
   @Column({ type: 'jsonb', nullable: true })
   details?: Record<string, any>;

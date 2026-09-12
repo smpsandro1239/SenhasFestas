@@ -1,8 +1,5 @@
 import { Injectable, NestMiddleware, Logger, HttpStatus } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { AuditLogEntity } from '../entities';
 import { RedisService } from '../common/redis/redis.service';
 
 const RL_IP_PREFIX = 'rl:ip:';
@@ -13,37 +10,12 @@ function nunca(timestamps: number[], windowMs: number, now: number): number[] {
 }
 
 @Injectable()
-export class AuditMiddleware implements NestMiddleware {
-  private readonly logger = new Logger(AuditMiddleware.name);
-
-  constructor(
-    @InjectRepository(AuditLogEntity)
-    private readonly auditLogRepository: Repository<AuditLogEntity>,
-  ) {}
+export class RequestLogMiddleware implements NestMiddleware {
+  private readonly logger = new Logger(RequestLogMiddleware.name);
 
   use(req: Request, res: Response, next: NextFunction) {
-    const { method, originalUrl, ip, headers } = req;
-    const userAgent = headers['user-agent'] || '';
+    const { method, originalUrl } = req;
     const timestamp = new Date().toISOString();
-
-    if (method !== 'GET') {
-      const userId = (req as any).user?.id || null;
-      const segment = originalUrl.split('/').filter(Boolean);
-      const resourceId = segment[segment.length - 1] || null;
-      void this.auditLogRepository
-        .save(
-          this.auditLogRepository.create({
-            userId,
-            action: method.toLowerCase(),
-            resource: originalUrl,
-            resourceId,
-            ip,
-            userAgent,
-            details: { method, query: req.query },
-          }),
-        )
-        .catch(() => this.logger.warn('Falha ao registar audit log'));
-    }
 
     res.on('finish', () => {
       const { statusCode } = res;
