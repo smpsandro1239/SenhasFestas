@@ -63,7 +63,9 @@ export class AuditInterceptor implements NestInterceptor {
     const res = http.getResponse<Response>();
     const metodo = (req.method || 'GET').toUpperCase();
 
-    if (['GET', 'HEAD', 'OPTIONS'].includes(metodo)) {
+    const caminhoAtual = this.caminho(req);
+    const eExportacao = caminhoAtual.endsWith('/export.csv');
+    if (['GET', 'HEAD', 'OPTIONS'].includes(metodo) && !eExportacao) {
       return next.handle();
     }
 
