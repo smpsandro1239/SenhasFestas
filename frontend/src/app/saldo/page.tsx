@@ -68,7 +68,7 @@ function BalancePage() {
   return (
     <AuthLayout subtitle="Carregue saldo na sua conta para consumir">
       <div className="flex items-center gap-3">
-        <div className="p-2.5 rounded-xl bg-brand/10 border border-brand/20 text-brand">
+        <div className="p-2.5 rounded-xl brand-chip">
           <WalletIcon className="h-5 w-5" />
         </div>
         <div>

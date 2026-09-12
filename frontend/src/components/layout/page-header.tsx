@@ -13,7 +13,7 @@ export function PageHeader({ title, subtitle, icon, actions, className }: PageHe
     <div className={cn('flex flex-wrap items-start justify-between gap-4 mb-8', className)}>
       <div className="flex items-start gap-4">
         {icon && (
-          <div className="p-3 rounded-2xl bg-surface-solid border border-border text-brand">
+          <div className="p-3 rounded-2xl brand-chip">
             {icon}
           </div>
         )}

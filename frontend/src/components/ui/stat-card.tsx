@@ -13,7 +13,7 @@ export interface StatCardProps {
 }
 
 const colorMap: Record<NonNullable<StatCardProps['color']>, { text: string; glow: string }> = {
-  brand: { text: 'text-brand', glow: 'glow-amber' },
+  brand: { text: 'text-amber-300', glow: 'glow-fest' },
   green: { text: 'text-emerald-400', glow: 'glow-green' },
   orange: { text: 'text-orange-400', glow: 'glow-orange' },
   blue: { text: 'text-blue-400', glow: 'glow-blue' },

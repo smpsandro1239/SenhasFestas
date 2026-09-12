@@ -147,7 +147,7 @@ function CozinhaPageInner() {
                 <ArrowLeftIcon className="h-5 w-5" />
               </Link>
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-brand/10 border border-brand/20 text-brand glow-amber">
+                <div className="p-2.5 rounded-xl brand-chip">
                   <ChefHatIcon className="h-6 w-6" />
                 </div>
 <div>
@@ -157,7 +157,7 @@ function CozinhaPageInner() {
                   </h1>
                   <span
                     aria-live="polite"
-                    className="px-2.5 py-1 rounded-full bg-brand/10 border border-brand/25 text-brand font-semibold text-xs tabular-nums"
+                    className="px-2.5 py-1 rounded-full brand-chip font-semibold text-xs tabular-nums"
                   >
                     {tabs[0].count} na fila
                   </span>

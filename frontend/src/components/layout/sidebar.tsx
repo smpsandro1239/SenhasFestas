@@ -70,8 +70,8 @@ export function Sidebar({ className }: SidebarProps) {
       {/* Brand */}
       <div className="px-6 py-6 border-b border-border">
         <Link href="/" className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-brand/15 border border-brand/30 flex items-center justify-center glow-amber">
-            <span className="text-lg">🍷</span>
+          <div className="h-9 w-9 rounded-xl brand-chip flex items-center justify-center">
+            <span className="text-sm font-black tracking-tight text-gradient">SF</span>
           </div>
           <div>
             <div className="font-bold text-zinc-50 tracking-tight">SenhasFestas</div>
@@ -92,7 +92,7 @@ export function Sidebar({ className }: SidebarProps) {
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',
                 active
-                  ? 'bg-brand/10 text-brand border border-brand/20'
+                  ? 'gradient-brand-soft text-amber-200 border border-amber-300/25'
                   : 'text-zinc-400 hover:text-zinc-100 hover:bg-surface',
               )}
             >
@@ -106,7 +106,7 @@ export function Sidebar({ className }: SidebarProps) {
       {/* User */}
       <div className="px-4 py-4 border-t border-border">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-brand/30 to-brand/10 border border-brand/30 flex items-center justify-center text-sm font-bold text-brand">
+          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-amber-400/40 via-pink-500/30 to-violet-500/40 border border-amber-300/30 flex items-center justify-center text-sm font-bold text-amber-200">
             {(user?.name || 'U').charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">

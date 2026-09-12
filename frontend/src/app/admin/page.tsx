@@ -315,7 +315,7 @@ export default function AdminPage() {
                     <Card key={event.id} hover className="bg-surface/50 border-border-hover">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex items-start gap-3">
-                          <div className="p-2.5 rounded-xl bg-brand/10 border border-brand/20 text-brand">
+                          <div className="p-2.5 rounded-xl brand-chip">
                             <CalendarIcon className="h-5 w-5" />
                           </div>
                           <div>

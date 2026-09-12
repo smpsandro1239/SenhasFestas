@@ -32,7 +32,7 @@ const shortcuts = [
     description: 'Criar e gerir pedidos',
     icon: ClipboardIcon,
     valueKey: 'total' as const,
-    color: 'bg-brand/10 text-brand border-brand/20',
+    color: 'gradient-brand-soft text-amber-200 border-amber-300/25',
   },
   {
     href: '/cozinha',
@@ -58,7 +58,7 @@ const clientShortcuts = [
     title: 'Menu da Festa',
     description: 'Ver menu e fazer pedidos',
     icon: QrIcon,
-    color: 'bg-brand/10 text-brand border-brand/20',
+    color: 'gradient-brand-soft text-amber-200 border-amber-300/25',
   },
   {
     href: '/saldo',

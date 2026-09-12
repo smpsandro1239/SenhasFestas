@@ -15,7 +15,7 @@ const variantStyles: Record<BadgeVariant, string> = {
   danger: 'bg-red-500/10 text-red-400 border-red-500/20',
   info: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   neutral: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20',
-  brand: 'bg-brand/10 text-brand border-brand/20',
+  brand: 'gradient-brand-soft text-amber-200 border-amber-300/25',
 };
 
 const dotColors: Record<BadgeVariant, string> = {
@@ -24,7 +24,7 @@ const dotColors: Record<BadgeVariant, string> = {
   danger: 'bg-red-400',
   info: 'bg-blue-400',
   neutral: 'bg-zinc-400',
-  brand: 'bg-brand',
+  brand: 'gradient-brand',
 };
 
 const sizeStyles: Record<'sm' | 'md', string> = {
