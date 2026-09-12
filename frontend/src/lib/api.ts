@@ -306,6 +306,10 @@ export async function getUsers(q?: string): Promise<any> {
   return apiRequest(`/users${query}`);
 }
 
+export async function getUserById(userId: string): Promise<any> {
+  return apiRequest(`/users/${userId}`);
+}
+
 export async function createUser(data: any): Promise<any> {
   return apiRequest('/users', {
     method: 'POST',

@@ -10,10 +10,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs } from '@/components/ui/tabs';
 import { Alert } from '@/components/ui/alert';
-import { CashIcon } from '@/components/ui/icons';
+import { CashIcon, QrIcon } from '@/components/ui/icons';
+import { QrScanner } from '@/components/ui/qr-scanner';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
-import { getOpenCash, openCash, closeCash, getCashByEvent, getUsers, loadBalance, getBalance, reverseLoad } from '@/lib/api';
+import { getOpenCash, openCash, closeCash, getCashByEvent, getUsers, getUserById, loadBalance, getBalance, reverseLoad } from '@/lib/api';
 
 function formatDateTime(value: string | Date): string {
   const date = typeof value === 'string' ? new Date(value) : value;
@@ -49,6 +50,7 @@ function CaixaPage() {
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [loadAmount, setLoadAmount] = useState('');
   const [userBalance, setUserBalance] = useState<number | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const carregarCaixaAberta = useCallback(async () => {
     if (!event) return;
@@ -183,6 +185,24 @@ function CaixaPage() {
     }
   };
 
+  const tratarQr = async (code: string) => {
+    setScannerOpen(false);
+    setError('');
+    setSuccess('');
+    try {
+      const u = await getUserById(code.trim());
+      if (!u || u.role !== 'client') {
+        setError('O código lido não corresponde a um cliente.');
+        return;
+      }
+      await selecionarUtilizador(u);
+      setSuccess(`Cliente ${u.name} identificado por QR.`);
+      setTimeout(() => setSuccess(''), 3000);
+    } catch {
+      setError('Não foi possível identificar o cliente pelo código QR.');
+    }
+  };
+
   const estornarMovimento = async (movimento: any) => {
     if (!selectedUser || !event) return;
     setLoading(true);
@@ -300,14 +320,14 @@ function CaixaPage() {
                       { label: 'Evento', value: caixaAberta.evento },
                       { label: 'Aberto em', value: caixaAberta.abertoEm },
                     ].map((field) => (
-                      <Card key={field.label} padding="sm" className="bg-surface/50">
-                        <div className="text-xs text-zinc-500">{field.label}</div>
+                      <Card key={field.label} padding="sm">
+                        <div className="text-xs text-zinc-400">{field.label}</div>
                         <div className="font-semibold text-zinc-100">{field.value}</div>
                       </Card>
                     ))}
-                    <Card padding="sm" className="bg-emerald-500/5 border-emerald-500/20">
-                      <div className="text-xs text-zinc-500">Valor Inicial</div>
-                      <div className="font-bold text-emerald-400">€{caixaAberta.valorInicial.toFixed(2)}</div>
+<Card padding="sm" className="bg-emerald-500/10 border-emerald-500/25">
+                    <div className="text-xs text-zinc-400">Valor Inicial</div>
+                    <div className="font-bold text-emerald-400">€{caixaAberta.valorInicial.toFixed(2)}</div>
                     </Card>
                   </div>
 
@@ -354,7 +374,7 @@ function CaixaPage() {
         {activeTab === 'saldo' && (
           <Card className="max-w-3xl">
             <h2 className="text-xl font-bold text-zinc-50 mb-1">Carregar Saldo a Cliente</h2>
-            <p className="text-sm text-zinc-500 mb-6">
+            <p className="text-sm text-zinc-400 mb-6">
               Procure o cliente, registe o valor recebido e carregue o saldo.
             </p>
 
@@ -363,15 +383,27 @@ function CaixaPage() {
                 <label className="block text-sm font-medium text-zinc-400 mb-1.5">
                   Procurar cliente (nome ou email)
                 </label>
-                <Input
-                  value={userSearch}
-                  onChange={(e) => {
-                    setUserSearch(e.target.value);
-                    setSelectedUser(null);
-                    if (e.target.value.length >= 2) pesquisarUtilizadores(e.target.value);
-                  }}
-                  placeholder="Nome ou email do cliente"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    value={userSearch}
+                    onChange={(e) => {
+                      setUserSearch(e.target.value);
+                      setSelectedUser(null);
+                      if (e.target.value.length >= 2) pesquisarUtilizadores(e.target.value);
+                    }}
+                    placeholder="Nome ou email do cliente"
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setScannerOpen(true)}
+                    icon={<QrIcon className="h-4 w-4" />}
+                    className="shrink-0"
+                  >
+                    Escanear QR
+                  </Button>
+                </div>
                 {users.length > 0 && !selectedUser && (
                   <div className="mt-2 border border-border rounded-xl overflow-hidden bg-surface-solid">
                     {users.slice(0, 6).map((u) => (
@@ -382,7 +414,7 @@ function CaixaPage() {
                         className="w-full flex items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-surface transition-colors border-b border-border/50 last:border-b-0"
                       >
                         <span className="text-zinc-100">{u.name}</span>
-                        <span className="text-zinc-500 text-xs">{u.email}</span>
+                        <span className="text-zinc-400 text-xs">{u.email}</span>
                       </button>
                     ))}
                   </div>
@@ -393,7 +425,7 @@ function CaixaPage() {
                 <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-surface border border-border">
                   <span>
                     <span className="block font-medium text-zinc-100">{selectedUser.name}</span>
-                    <span className="block text-xs text-zinc-500">{selectedUser.email}</span>
+                    <span className="block text-xs text-zinc-400">{selectedUser.email}</span>
                   </span>
                   <span className="text-sm">
                     Saldo: <span className="font-bold text-emerald-400">€{userBalance?.toFixed(2) ?? '0.00'}</span>
@@ -435,7 +467,7 @@ function CaixaPage() {
                           <span className="text-emerald-400 font-mono font-semibold">
                             +€{formatEuro(Math.abs(Number(m.amount ?? 0)))}
                           </span>
-                          <span className="text-zinc-500 text-xs">
+                          <span className="text-zinc-400 text-xs">
                             {m.date ? formatDateTime(typeof m.date === 'string' ? m.date : new Date(m.date)) : ''}
                           </span>
                           {m.reversed && <Badge variant="warning" size="sm">Estornado</Badge>}
@@ -466,7 +498,7 @@ function CaixaPage() {
                 <thead>
                   <tr className="bg-surface/70 border-b border-border">
                     {['Hora', 'Tipo', 'Valor', 'Operador', 'Observação'].map((h) => (
-                      <th key={h} className="px-4 py-3 text-left font-medium text-zinc-500">{h}</th>
+                      <th key={h} className="px-4 py-3 text-left font-medium text-zinc-400">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -479,7 +511,7 @@ function CaixaPage() {
                       </td>
                       <td className={`px-4 py-3 font-mono font-semibold ${m.tipo === 'Entrada' ? 'text-emerald-400' : 'text-red-400'}`}>{m.valor}</td>
                       <td className="px-4 py-3 text-zinc-300">{m.operador}</td>
-                      <td className="px-4 py-3 text-zinc-500">{m.obs}</td>
+                      <td className="px-4 py-3 text-zinc-400">{m.obs}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -494,7 +526,7 @@ function CaixaPage() {
               <Card key={h.numero} className="flex items-center justify-between">
                 <div>
                   <div className="font-semibold text-zinc-100">Fechamento {h.numero}</div>
-                  <div className="text-sm text-zinc-500 mt-0.5">{h.desc}</div>
+                  <div className="text-sm text-zinc-400 mt-0.5">{h.desc}</div>
                 </div>
                 <Badge variant={h.variant} dot>{h.status}</Badge>
               </Card>
@@ -502,6 +534,13 @@ function CaixaPage() {
           </div>
         )}
       </AppShell>
+
+      <QrScanner
+        open={scannerOpen}
+        onResult={tratarQr}
+        onClose={() => setScannerOpen(false)}
+        title="Carregar Saldo a Cliente"
+      />
     </>
   );
 }

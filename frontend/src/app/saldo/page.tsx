@@ -11,6 +11,7 @@ import { cn } from '@/lib/cn';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
 import { getBalance, loadBalance } from '@/lib/api';
+import { QRCodeSVG } from 'qrcode.react';
 
 const QUICK_AMOUNTS = [5, 10, 20, 50];
 const STAFF_ROLES = ['superadmin', 'organizer', 'cashier', 'treasurer'];
@@ -73,18 +74,30 @@ function BalancePage() {
         </div>
         <div>
           <h2 className="text-xl font-bold tracking-tight text-zinc-50">O Meu Saldo</h2>
-          <p className="text-sm text-zinc-500">Consulta do saldo da conta</p>
+          <p className="text-sm text-zinc-400">Consulta do saldo da conta</p>
         </div>
       </div>
 
       {currentBalance !== null && (
         <div className="mt-6 flex items-center justify-between px-4 py-3 rounded-xl bg-surface border border-border">
-          <span className="text-sm text-zinc-500">Saldo atual</span>
+          <span className="text-sm text-zinc-400">Saldo atual</span>
           <span className="text-lg font-bold text-emerald-400">€{currentBalance.toFixed(2)}</span>
         </div>
       )}
 
       {error && <div className="mt-4"><Alert variant="error" message={error} /></div>}
+
+      {!isStaff && user && (
+        <div className="mt-6 rounded-xl border border-amber-300/25 gradient-brand-soft p-4 text-center">
+          <p className="text-sm font-semibold text-amber-200">QR para recarga na caixa</p>
+          <div className="mt-3 mx-auto bg-white p-3 rounded-xl w-fit">
+            <QRCodeSVG value={user.id} size={128} />
+          </div>
+          <p className="mt-3 text-xs text-zinc-400">
+            Mostra este código na caixa para carregar saldo.
+          </p>
+        </div>
+      )}
 
       {!isStaff ? (
         <div className="mt-6">
@@ -93,7 +106,7 @@ function BalancePage() {
             message="Para carregar saldo, dirija-se ao bar ou ao caixa do evento. O carregamento é feito presencialmente pela equipa."
           />
           <div className="text-center mt-6">
-            <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-300 transition-colors">
+            <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-300 transition-colors">
               <ArrowLeftIcon className="h-4 w-4" />
               Voltar ao menu
             </Link>
@@ -112,7 +125,7 @@ function BalancePage() {
               placeholder="10.00"
               required
               inputSize="lg"
-              icon={<span className="text-zinc-500 font-semibold">€</span>}
+              icon={<span className="text-zinc-400 font-semibold">€</span>}
             />
 
             <div className="grid grid-cols-4 gap-2">
@@ -142,7 +155,7 @@ function BalancePage() {
           </Button>
 
           <div className="text-center">
-            <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-300 transition-colors">
+            <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-300 transition-colors">
               <ArrowLeftIcon className="h-4 w-4" />
               Voltar ao menu
             </Link>
