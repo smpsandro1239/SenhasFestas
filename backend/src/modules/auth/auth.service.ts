@@ -7,6 +7,7 @@ import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { UserEntity, RefreshTokenEntity } from '../../entities';
 import { toPublicUser } from '../../common/serializers';
+import { codigoAcessoUnico } from '../../common/access-code';
 
 export interface JwtPayload {
   sub: string;
@@ -172,6 +173,9 @@ export class AuthService {
       name,
       role: 'client',
       phone,
+      accessCode: await codigoAcessoUnico(async (c) =>
+        Boolean(await this.userRepository.findOne({ where: { accessCode: c } })),
+      ),
       isActive: true,
     });
 

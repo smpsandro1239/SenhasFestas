@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Post, Body, Query, UseGuards, Request, ForbiddenException, ParseUUIDPipe } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { BalanceService } from './balance.service';
-import { LoadBalanceDto } from './dto';
+import { LoadBalanceDto, DeductBalanceDto } from './dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { FINANCE_ROLES } from '../../common/roles';
@@ -52,6 +52,20 @@ export class BalanceController {
       await this.balanceService.assertMemberEvent(req.user.id, eventId);
     }
     return this.balanceService.reverseLoad(userId, movementId, req.user);
+  }
+
+  @Post(':userId/deduct')
+  @Roles(...FINANCE_ROLES)
+  async deduct(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() dto: DeductBalanceDto,
+    @Request() req: any,
+  ) {
+    if (dto.eventId && req.user.role !== 'superadmin') {
+      await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
+    }
+    this.assertStaffEventScope(req.user, dto.eventId);
+    return this.balanceService.deductBalance(userId, dto, req.user);
   }
 
   @Get(':userId/history')

@@ -30,6 +30,7 @@ export const AUDIT_ENTITIES_FINANCEIRAS = [
 
 export const AUDIT_ACOES_FINANCEIRAS = [
   'LOAD',
+  'DEDUCT',
   'REVERSAL',
   'CANCEL',
   'CANCELAR',

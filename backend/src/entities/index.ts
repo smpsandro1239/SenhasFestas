@@ -22,6 +22,10 @@ export class UserEntity {
   @Column()
   password: string;
 
+  @Column({ name: 'access_code', nullable: true })
+  @Index({ unique: true })
+  accessCode?: string;
+
   @Column()
   name: string;
 

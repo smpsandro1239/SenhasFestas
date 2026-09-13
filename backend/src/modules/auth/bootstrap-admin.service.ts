@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { UserEntity } from '../../entities';
+import { codigoAcessoUnico } from '../../common/access-code';
 
 @Injectable()
 export class BootstrapAdminService implements OnApplicationBootstrap {
@@ -32,6 +33,9 @@ export class BootstrapAdminService implements OnApplicationBootstrap {
         password: hashedPassword,
         name: 'Administrador',
         role: 'superadmin',
+        accessCode: await codigoAcessoUnico(async (c) =>
+          Boolean(await this.userRepository.findOne({ where: { accessCode: c } })),
+        ),
         isActive: true,
       }),
     );

@@ -31,6 +31,7 @@ const SUFIXOS: Array<[string, string]> = [
   ['/reverse', 'REVERSAL'],
   ['/reversal', 'REVERSAL'],
   ['/load', 'LOAD'],
+  ['/deduct', 'DEDUCT'],
   ['/abrir', 'OPEN'],
   ['/fechar', 'CLOSE'],
   ['/cancel', 'CANCEL'],

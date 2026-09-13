@@ -6,6 +6,7 @@ import { UserEntity, EventUserEntity } from '../../entities';
 import { CreateUserDto, UpdateUserDto } from './dto';
 import { MembershipService } from '../../common/membership.service';
 import { PUBLIC_USER_SELECT, toPublicUser } from '../../common/serializers';
+import { codigoAcessoUnico } from '../../common/access-code';
 
 const SEM_MEMBROS = '00000000-0000-0000-0000-000000000000';
 
@@ -36,6 +37,7 @@ export class UserService {
       ? [
           { name: ILike(`%${q}%`) },
           { email: ILike(`%${q}%`) },
+          ...(/^\d+$/.test(q) ? [{ accessCode: ILike(`${q}%`) }] : []),
         ]
       : undefined;
     if (scope === null) {
@@ -94,6 +96,9 @@ export class UserService {
       name: dto.name,
       role: dto.role,
       phone: dto.phone,
+      accessCode: await codigoAcessoUnico(async (c) =>
+        Boolean(await this.userRepository.findOne({ where: { accessCode: c } })),
+      ),
       isActive: true,
     });
 

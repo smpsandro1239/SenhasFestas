@@ -2,7 +2,7 @@
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { BalanceEntity, UserEntity, BalanceMovementEntity, EventEntity, EventUserEntity, MovementType } from '../../entities';
-import { LoadBalanceDto } from './dto';
+import { LoadBalanceDto, DeductBalanceDto } from './dto';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { toPublicUser } from '../../common/serializers';
 
@@ -188,6 +188,53 @@ export class BalanceService {
       }
       throw error;
     }
+  }
+
+  async deductBalance(
+    userId: string,
+    dto: DeductBalanceDto,
+    actor?: any,
+  ): Promise<{ id: string; currentBalance: number; movement: BalanceMovementEntity }> {
+    const resultado = await this.dataSource.transaction(async (manager) => {
+      const balance = await manager.findOne(BalanceEntity, {
+        where: dto.eventId
+          ? ({ user: { id: userId }, event: { id: dto.eventId } } as any)
+          : ({ user: { id: userId } } as any),
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!balance) {
+        throw new NotFoundException('Saldo não encontrado para este cliente/evento');
+      }
+
+      const montante = Number(dto.amount);
+      if (montante <= 0) {
+        throw new ForbiddenException('Valor de desconto inválido');
+      }
+      if (Number(balance.currentBalance) < montante) {
+        throw new ForbiddenException('Saldo insuficiente para descontar');
+      }
+
+      balance.currentBalance = Number(balance.currentBalance) - montante;
+      const savedBalance = await manager.save(BalanceEntity, balance);
+
+      const movement = manager.create(BalanceMovementEntity, {
+        balance: savedBalance,
+        type: MovementType.CONSUME,
+        amount: montante,
+        description: dto.description || 'Desconto de saldo (caixa)',
+        createdById: actor?.id,
+      });
+      const savedMovement = await manager.save(BalanceMovementEntity, movement);
+
+      return {
+        id: savedBalance.id,
+        currentBalance: Number(savedBalance.currentBalance),
+        movement: savedMovement,
+      };
+    });
+
+    this.orderGateway.emitOrderUpdate(resultado.id, 'balance_updated', dto.eventId);
+    return resultado;
   }
 
   async getBalanceHistory(

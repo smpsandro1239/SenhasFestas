@@ -13,3 +13,17 @@ export class LoadBalanceDto {
   @IsOptional()
   eventId?: string;
 }
+
+export class DeductBalanceDto {
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  amount: number;
+
+  @IsUUID()
+  @IsOptional()
+  eventId?: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+}

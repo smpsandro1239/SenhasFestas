@@ -6,6 +6,7 @@ export const PUBLIC_USER_SELECT = {
   name: true,
   role: true,
   phone: true,
+  accessCode: true,
   isActive: true,
   createdAt: true,
   updatedAt: true,
