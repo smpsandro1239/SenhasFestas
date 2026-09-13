@@ -10,7 +10,7 @@ import { WalletIcon, ArrowLeftIcon } from '@/components/ui/icons';
 import { cn } from '@/lib/cn';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
-import { getBalance, loadBalance } from '@/lib/api';
+import { getBalance, loadBalance, getMe } from '@/lib/api';
 import { QRCodeSVG } from 'qrcode.react';
 
 const QUICK_AMOUNTS = [5, 10, 20, 50];
@@ -30,16 +30,34 @@ function BalancePage() {
   const { event } = useCurrentEvent();
   const eventId = event?.id;
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
+  const [me, setMe] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const accessCode = (me?.accessCode as string | undefined) || (user?.accessCode as string | undefined);
+
   useEffect(() => {
     if (!user) return;
+    getMe()
+      .then((meResult) => setMe(meResult))
+      .catch(() => setMe(null));
     getBalance(user.id, eventId)
       .then((b) => setCurrentBalance(Number(b?.balance ?? 0)))
       .catch((err: any) => setError(err?.message ?? 'Não foi possível carregar o saldo'));
   }, [user, eventId]);
+
+  const copiarCodigo = async () => {
+    if (!accessCode) return;
+    try {
+      await navigator.clipboard.writeText(accessCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setError('Não foi possível copiar o código');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,6 +111,22 @@ function BalancePage() {
           <div className="mt-3 mx-auto bg-white p-3 rounded-xl w-fit">
             <QRCodeSVG value={user.id} size={128} />
           </div>
+          {accessCode && (
+            <div className="mt-3">
+              <p className="text-xs text-zinc-400">ou digite o código na caixa</p>
+              <button
+                type="button"
+                onClick={copiarCodigo}
+                className="mt-1 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-surface border border-border hover:border-amber-300/40 transition-colors"
+                title="Copiar código"
+              >
+                <span className="text-2xl font-bold tracking-[0.35em] text-amber-200 font-mono">
+                  {accessCode}
+                </span>
+                <span className="text-xs text-zinc-400">{copied ? 'Copiado' : 'Copiar'}</span>
+              </button>
+            </div>
+          )}
           <p className="mt-3 text-xs text-zinc-400">
             Mostra este código na caixa para carregar saldo.
           </p>

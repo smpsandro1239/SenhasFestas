@@ -229,6 +229,16 @@ export async function loadBalance(userId: string, amount: number, eventId?: stri
   });
 }
 
+export async function deductBalance(userId: string, amount: number, eventId?: string, description?: string): Promise<any> {
+  const body: Record<string, unknown> = { amount };
+  if (eventId) body.eventId = eventId;
+  if (description) body.description = description;
+  return apiRequest(`/balances/${userId}/deduct`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export async function getBalanceHistory(userId: string, eventId?: string): Promise<any> {
   const query = eventId ? `?eventId=${encodeURIComponent(eventId)}` : '';
   return apiRequest(`/balances/${userId}/history${query}`);

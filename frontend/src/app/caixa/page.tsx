@@ -14,7 +14,7 @@ import { CashIcon, QrIcon } from '@/components/ui/icons';
 import { QrScanner } from '@/components/ui/qr-scanner';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
-import { getOpenCash, openCash, closeCash, getCashByEvent, getUsers, getUserById, loadBalance, getBalance, reverseLoad } from '@/lib/api';
+import { getOpenCash, openCash, closeCash, getCashByEvent, getUsers, getUserById, loadBalance, deductBalance, getBalance, reverseLoad } from '@/lib/api';
 
 function formatDateTime(value: string | Date): string {
   const date = typeof value === 'string' ? new Date(value) : value;
@@ -51,6 +51,8 @@ function CaixaPage() {
   const [loadAmount, setLoadAmount] = useState('');
   const [userBalance, setUserBalance] = useState<number | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [movementMode, setMovementMode] = useState<'load' | 'deduct'>('load');
+  const [codigoInput, setCodigoInput] = useState('');
 
   const carregarCaixaAberta = useCallback(async () => {
     if (!event) return;
@@ -169,6 +171,15 @@ function CaixaPage() {
     }
   };
 
+  const atualizarDoBal = (b: any) => {
+    setUserBalance(Number(b?.balance ?? 0));
+    setMovementList(
+      Array.isArray(b?.movements)
+        ? b.movements.filter((x) => x.type === 'load' || x.type === 'consume')
+        : [],
+    );
+  };
+
   const selecionarUtilizador = async (u: any) => {
     setSelectedUser(u);
     setUserSearch(u.name);
@@ -177,8 +188,7 @@ function CaixaPage() {
     if (!event) return;
     try {
       const b = await getBalance(u.id, event.id);
-      setUserBalance(Number(b?.balance ?? 0));
-      setMovementList(Array.isArray(b?.movements) ? b.movements.filter((x) => x.type === 'load') : []);
+      atualizarDoBal(b);
     } catch {
       setUserBalance(0);
       setMovementList([]);
@@ -203,6 +213,37 @@ function CaixaPage() {
     }
   };
 
+  const pesquisarPorCodigo = async (codigo?: string) => {
+    const c = (codigo ?? codigoInput).trim();
+    if (!/^\d{6}$/.test(c)) {
+      setError('O código tem 6 dígitos');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      const resultado = await getUsers(c);
+      const candidatos = Array.isArray(resultado)
+        ? resultado.filter((u: any) => u.role === 'client')
+        : [];
+      const cliente =
+        candidatos.find((u: any) => String(u.accessCode ?? '').trim() === c) ?? candidatos[0];
+      if (!cliente) {
+        setError('Nenhum cliente encontrado com esse código.');
+        return;
+      }
+      setCodigoInput('');
+      await selecionarUtilizador(cliente);
+      setSuccess(`Cliente ${cliente.name} identificado pelo código.`);
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao procurar o código');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const estornarMovimento = async (movimento: any) => {
     if (!selectedUser || !event) return;
     setLoading(true);
@@ -211,8 +252,7 @@ function CaixaPage() {
     try {
       await reverseLoad(selectedUser.id, movimento.id, event.id);
       const b = await getBalance(selectedUser.id, event.id);
-      setUserBalance(Number(b?.balance ?? 0));
-      setMovementList(Array.isArray(b?.movements) ? b.movements.filter((x) => x.type === 'load') : []);
+      atualizarDoBal(b);
       setSuccess(
         `Carregamento de €${formatEuro(Math.abs(Number(movimento.amount ?? 0)))} estornado para ${selectedUser.name}`,
       );
@@ -224,25 +264,33 @@ function CaixaPage() {
     }
   };
 
-  const carregarSaldo = async () => {
+  const efetuarMovimento = async () => {
     if (!selectedUser || !event) return;
     const valor = parseFloat(loadAmount);
     if (isNaN(valor) || valor <= 0) {
-      setError('Insira um valor válido para carregar');
+      setError(`Insira um valor válido para ${movementMode === 'load' ? 'carregar' : 'descontar'}`);
       return;
     }
     setLoading(true);
     setError('');
     setSuccess('');
     try {
-      await loadBalance(selectedUser.id, valor, event.id);
+      if (movementMode === 'load') {
+        await loadBalance(selectedUser.id, valor, event.id);
+      } else {
+        await deductBalance(selectedUser.id, valor, event.id);
+      }
       const b = await getBalance(selectedUser.id, event.id);
-      setUserBalance(Number(b?.balance ?? 0));
+      atualizarDoBal(b);
       setLoadAmount('');
-      setSuccess(`Saldo carregado: +€${valor.toFixed(2)} para ${selectedUser.name}`);
+      setSuccess(
+        movementMode === 'load'
+          ? `Saldo carregado: +€${valor.toFixed(2)} para ${selectedUser.name}`
+          : `Saldo descontado: -€${valor.toFixed(2)} a ${selectedUser.name}`,
+      );
       setTimeout(() => setSuccess(''), 4000);
     } catch (err: any) {
-      setError(err?.message ?? 'Erro ao carregar saldo');
+      setError(err?.message ?? `Erro ao ${movementMode === 'load' ? 'carregar' : 'descontar'} saldo`);
     } finally {
       setLoading(false);
     }
@@ -373,10 +421,29 @@ function CaixaPage() {
 
         {activeTab === 'saldo' && (
           <Card className="max-w-3xl">
-            <h2 className="text-xl font-bold text-zinc-50 mb-1">Carregar Saldo a Cliente</h2>
+            <h2 className="text-xl font-bold text-zinc-50 mb-1">Movimento de Saldo</h2>
             <p className="text-sm text-zinc-400 mb-6">
-              Procure o cliente, registe o valor recebido e carregue o saldo.
+              Escolha a operação, procure ou escaneie o cliente e confirme o valor.
             </p>
+
+            <div className="flex gap-1 p-1 rounded-xl bg-surface border border-border mb-6 max-w-md">
+              {(['load', 'deduct'] as const).map((modo) => (
+                <button
+                  key={modo}
+                  type="button"
+                  onClick={() => setMovementMode(modo)}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    movementMode === modo
+                      ? modo === 'load'
+                        ? 'bg-emerald-500/15 text-emerald-300'
+                        : 'bg-red-500/15 text-red-300'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  {modo === 'load' ? 'Carregar Saldo' : 'Descontar Saldo'}
+                </button>
+              ))}
+            </div>
 
             <div className="space-y-4 max-w-md">
               <div>
@@ -421,11 +488,49 @@ function CaixaPage() {
                 )}
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1.5">
+                  Ou digite o código de recarga (6 dígitos)
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    value={codigoInput}
+                    onChange={(e) => {
+                      const c = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setCodigoInput(c);
+                      if (c.length === 6) pesquisarPorCodigo(c);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        pesquisarPorCodigo();
+                      }
+                    }}
+                    placeholder="000000"
+                    className="flex-1 font-mono"
+                    inputMode="numeric"
+                    maxLength={6}
+                  />
+                  <Button type="button" variant="secondary" onClick={() => pesquisarPorCodigo()} className="shrink-0">
+                    Ir
+                  </Button>
+                </div>
+              </div>
+
+              <div className="text-center text-xs text-zinc-500">
+                O cliente mostra o QR ou o código na página «O Meu Saldo».
+              </div>
+
               {selectedUser && (
                 <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-surface border border-border">
                   <span>
                     <span className="block font-medium text-zinc-100">{selectedUser.name}</span>
                     <span className="block text-xs text-zinc-400">{selectedUser.email}</span>
+                    {selectedUser.accessCode && (
+                      <span className="block text-xs text-zinc-500 font-mono mt-0.5">
+                        Código: {selectedUser.accessCode}
+                      </span>
+                    )}
                   </span>
                   <span className="text-sm">
                     Saldo: <span className="font-bold text-emerald-400">€{userBalance?.toFixed(2) ?? '0.00'}</span>
@@ -436,7 +541,7 @@ function CaixaPage() {
               {selectedUser && (
                 <>
                   <Input
-                    label="Valor a carregar (€)"
+                    label={movementMode === 'load' ? 'Valor a carregar (€)' : 'Valor a descontar (€)'}
                     type="number"
                     min="0.01"
                     step="0.01"
@@ -445,8 +550,19 @@ function CaixaPage() {
                     placeholder="10.00"
                     required
                   />
-                  <Button type="button" onClick={carregarSaldo} loading={loading} variant="success" className="w-full" size="lg">
-                    {loading ? 'A carregar...' : 'Confirmar Carregamento'}
+                  <Button
+                    type="button"
+                    onClick={efetuarMovimento}
+                    loading={loading}
+                    variant={movementMode === 'load' ? 'success' : 'danger'}
+                    className="w-full"
+                    size="lg"
+                  >
+                    {loading
+                      ? 'A processar...'
+                      : movementMode === 'load'
+                        ? 'Confirmar Carregamento'
+                        : 'Confirmar Desconto'}
                   </Button>
                 </>
               )}
@@ -456,7 +572,7 @@ function CaixaPage() {
 
               {selectedUser && movementList.length > 0 && (
                 <div className="pt-4 mt-4 border-t border-border/50">
-                  <h3 className="text-sm font-semibold text-zinc-300 mb-2">Carregamentos recentes</h3>
+                  <h3 className="text-sm font-semibold text-zinc-300 mb-2">Movimentos recentes</h3>
                   <div className="space-y-2">
                     {movementList.map((m) => (
                       <div
@@ -464,15 +580,20 @@ function CaixaPage() {
                         className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-surface/50 border border-border text-sm"
                       >
                         <span className="flex items-center gap-3">
-                          <span className="text-emerald-400 font-mono font-semibold">
-                            +€{formatEuro(Math.abs(Number(m.amount ?? 0)))}
+                          <span
+                            className={`font-mono font-semibold ${
+                              m.type === 'load' ? 'text-emerald-400' : 'text-red-400'
+                            }`}
+                          >
+                            {m.type === 'load' ? '+' : '−'}€{formatEuro(Math.abs(Number(m.amount ?? 0)))}
                           </span>
                           <span className="text-zinc-400 text-xs">
                             {m.date ? formatDateTime(typeof m.date === 'string' ? m.date : new Date(m.date)) : ''}
                           </span>
-                          {m.reversed && <Badge variant="warning" size="sm">Estornado</Badge>}
+                          {m.type === 'load' && m.reversed && <Badge variant="warning" size="sm">Estornado</Badge>}
+                          {m.type === 'consume' && <Badge variant="neutral" size="sm">Desconto</Badge>}
                         </span>
-                        {!m.reversed && (
+                        {m.type === 'load' && !m.reversed && (
                           <button
                             type="button"
                             onClick={() => estornarMovimento(m)}
@@ -539,7 +660,7 @@ function CaixaPage() {
         open={scannerOpen}
         onResult={tratarQr}
         onClose={() => setScannerOpen(false)}
-        title="Carregar Saldo a Cliente"
+        title="Identificar Cliente"
       />
     </>
   );

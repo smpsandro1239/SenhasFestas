@@ -15,6 +15,7 @@ interface User {
   name: string;
   role: string;
   phone?: string;
+  accessCode?: string;
   isActive: boolean;
 }
 
