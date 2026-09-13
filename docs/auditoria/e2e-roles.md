@@ -1,6 +1,6 @@
 # Evidências E2E por role — SenhasFestas
 
-Gerado: 2026-09-12T20:41:27.998Z
+Gerado: 2026-09-13T08:16:50.140Z
 
 | Role | Critério | Resultado | Detalhe |
 | --- | --- | --- | --- |

@@ -1,0 +1,302 @@
+[
+  {
+    "role": "superadmin",
+    "criterio": "login",
+    "ok": true,
+    "detalhe": "ok"
+  },
+  {
+    "role": "organizer",
+    "criterio": "login",
+    "ok": true,
+    "detalhe": "ok"
+  },
+  {
+    "role": "cashier",
+    "criterio": "login",
+    "ok": true,
+    "detalhe": "ok"
+  },
+  {
+    "role": "bar",
+    "criterio": "login",
+    "ok": true,
+    "detalhe": "ok"
+  },
+  {
+    "role": "kitchen",
+    "criterio": "login",
+    "ok": true,
+    "detalhe": "ok"
+  },
+  {
+    "role": "treasurer",
+    "criterio": "login",
+    "ok": true,
+    "detalhe": "ok"
+  },
+  {
+    "role": "client",
+    "criterio": "login",
+    "ok": true,
+    "detalhe": "ok"
+  },
+  {
+    "role": "setup",
+    "criterio": "evento-disponivel",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "setup",
+    "criterio": "menu-visivel-para-client",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "setup",
+    "criterio": "produto-para-fluxo",
+    "ok": true,
+    "detalhe": "price=3.5"
+  },
+  {
+    "role": "setup",
+    "criterio": "membros-resolvidos",
+    "ok": true,
+    "detalhe": "ids apanhados"
+  },
+  {
+    "role": "client",
+    "criterio": "accessCode-6-digitos",
+    "ok": true,
+    "detalhe": "code=295393"
+  },
+  {
+    "role": "cashier",
+    "criterio": "carregar-saldo",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "kitchen",
+    "criterio": "nao-pode-carregar-saldo",
+    "ok": true,
+    "detalhe": "status=403"
+  },
+  {
+    "role": "cashier",
+    "criterio": "descontar-saldo",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "client",
+    "criterio": "nao-pode-descontar",
+    "ok": true,
+    "detalhe": "status=403"
+  },
+  {
+    "role": "bar",
+    "criterio": "nao-pode-descontar",
+    "ok": true,
+    "detalhe": "status=403"
+  },
+  {
+    "role": "cashier",
+    "criterio": "saldo-descontado-correcto",
+    "ok": true,
+    "detalhe": "esperado=13.50 obtido=13.50"
+  },
+  {
+    "role": "client",
+    "criterio": "movimento-desconto-registado",
+    "ok": true,
+    "detalhe": "amount=0.50"
+  },
+  {
+    "role": "cashier",
+    "criterio": "encontrar-cliente-por-codigo",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "publico",
+    "criterio": "sem-accessCode-em-api-publica",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "client",
+    "criterio": "compra-com-saldo-sem-500",
+    "ok": true,
+    "detalhe": "status=201 "
+  },
+  {
+    "role": "client",
+    "criterio": "nao-pode-avancar-estado",
+    "ok": true,
+    "detalhe": "status=403"
+  },
+  {
+    "role": "kitchen",
+    "criterio": "iniciar-preparacao",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "bar",
+    "criterio": "marcar-pronto",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "cashier",
+    "criterio": "marcar-entregue(sem-500)",
+    "ok": true,
+    "detalhe": "status=200 "
+  },
+  {
+    "role": "client",
+    "criterio": "consumo-debitado-e-registado",
+    "ok": true,
+    "detalhe": "amount=3.50"
+  },
+  {
+    "role": "cashier",
+    "criterio": "re-carregar-para-cancelamento",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "client",
+    "criterio": "criar-2o-pedido",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "client",
+    "criterio": "cancelar-reembolsa-saldo",
+    "ok": true,
+    "detalhe": "status=201 "
+  },
+  {
+    "role": "client",
+    "criterio": "reembolso-quantia-certa",
+    "ok": true,
+    "detalhe": "esperado=15.00 obtido=15.00"
+  },
+  {
+    "role": "client",
+    "criterio": "movimento-refund-registado",
+    "ok": true,
+    "detalhe": "amount=3.50"
+  },
+  {
+    "role": "organizer",
+    "criterio": "estornar-carregamento",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "client",
+    "criterio": "carregamento-assinalado-estornado",
+    "ok": true,
+    "detalhe": "reversed=true"
+  },
+  {
+    "role": "cashier",
+    "criterio": "abrir-caixa",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "cashier",
+    "criterio": "fechar-caixa",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "kitchen",
+    "criterio": "nao-pode-abrir-caixa",
+    "ok": true,
+    "detalhe": "status=403"
+  },
+  {
+    "role": "organizer",
+    "criterio": "criar-produto",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "organizer",
+    "criterio": "editar-produto",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "organizer",
+    "criterio": "apagar-produto",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "client",
+    "criterio": "nao-pode-editar-produto",
+    "ok": true,
+    "detalhe": "status=403"
+  },
+  {
+    "role": "organizer",
+    "criterio": "guardar-settings",
+    "ok": true,
+    "detalhe": "settings=200 patch=200"
+  },
+  {
+    "role": "superadmin",
+    "criterio": "criar-utilizador",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "superadmin",
+    "criterio": "apagar-utilizador",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "superadmin",
+    "criterio": "exportar-auditoria",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "organizer",
+    "criterio": "criar-utilizador",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "treasurer",
+    "criterio": "carregar-saldo",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "treasurer",
+    "criterio": "descontar-saldo",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "treasurer",
+    "criterio": "ver-auditoria",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "treasurer",
+    "criterio": "ver-catalogo",
+    "ok": true,
+    "detalhe": "status=200"
+  }
+]

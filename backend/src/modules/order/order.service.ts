@@ -269,7 +269,10 @@ export class OrderService {
       if (!order.balanceId) {
         throw new ForbiddenException('Não pode cancelar este pedido');
       }
-      const balance = await this.balanceRepository.findOne({ where: { id: order.balanceId } });
+      const balance = await this.balanceRepository.findOne({
+        where: { id: order.balanceId },
+        relations: { user: true },
+      });
       if (!balance || balance.user?.id !== user.id) {
         throw new ForbiddenException('Não pode cancelar o pedido de outro utilizador');
       }
@@ -303,13 +306,13 @@ export class OrderService {
           lock: { mode: 'pessimistic_write' },
         });
         if (balance) {
-          balance.currentBalance += currentOrder.balanceUsed;
+          balance.currentBalance = Number(balance.currentBalance) + Number(currentOrder.balanceUsed);
           await manager.save(BalanceEntity, balance);
 
           const refund = manager.create(BalanceMovementEntity, {
             balance,
             type: MovementType.REFUND,
-            amount: currentOrder.balanceUsed,
+            amount: Number(currentOrder.balanceUsed),
             orderId: updatedOrder.id,
             description: 'Reembolso por cancelamento',
           });
