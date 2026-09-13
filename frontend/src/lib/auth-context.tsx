@@ -7,6 +7,7 @@ import {
   logout as apiLogout,
   persistSession,
   destroySession,
+  ensureFreshToken,
 } from './api';
 
 interface User {
@@ -46,7 +47,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        return;
       }
+      ensureFreshToken();
+      const refreshInterval = setInterval(() => {
+        ensureFreshToken();
+      }, 60_000);
+      return () => clearInterval(refreshInterval);
     }
   }, []);
 

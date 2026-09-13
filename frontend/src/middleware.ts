@@ -23,19 +23,21 @@ function matchesGate(pathname: string): string | null {
   return null;
 }
 
-async function verifySessionToken(token: string): Promise<{ role?: string } | null> {
+async function verifySessionToken(
+  token: string,
+): Promise<{ ok: boolean; role?: string; expired?: boolean }> {
   const secretEnv = process.env.JWT_SECRET;
   if (!secretEnv) {
-    return null;
+    return { ok: false, expired: true };
   }
   try {
     const { payload } = await jwtVerify(token, new TextEncoder().encode(secretEnv), {
       issuer: 'senhasfestas-api',
       audience: 'senhasfestas-app',
     });
-    return payload as { role?: string };
-  } catch {
-    return null;
+    return { ok: true, role: payload.role as string | undefined };
+  } catch (erro) {
+    return { ok: false, expired: (erro as Error & { code?: string })?.code === 'ERR_JWT_EXPIRED' };
   }
 }
 
@@ -55,7 +57,10 @@ export async function middleware(request: NextRequest) {
   }
 
   const payload = await verifySessionToken(token);
-  if (!payload) {
+  if (!payload.ok) {
+    if (payload.expired) {
+      return NextResponse.next();
+    }
     const loginUrl = new URL('/auth/login', request.url);
     loginUrl.searchParams.set('from', pathname);
     return NextResponse.redirect(loginUrl);

@@ -61,7 +61,7 @@ const clientShortcuts = [
     color: 'gradient-brand-soft text-amber-200 border-amber-300/25',
   },
   {
-    href: '/meus-pedidos',
+    href: '/pedidos',
     title: 'Os Meus Pedidos',
     description: 'Acompanhar o estado dos pedidos',
     icon: ClipboardIcon,

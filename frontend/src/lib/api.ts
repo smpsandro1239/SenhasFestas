@@ -63,6 +63,30 @@ async function readErrorBody(response: Response): Promise<string | null> {
 
 let refreshing: Promise<boolean> | null = null;
 
+function tokenExpiry(token: string): number | null {
+  try {
+    const part = token.split('.')[1];
+    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'));
+    return (JSON.parse(json) as { exp?: number }).exp ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function needsRefresh(): boolean {
+  if (typeof window === 'undefined') return false;
+  const token = getStorage()?.getItem(TOKEN_KEY);
+  if (!token) return false;
+  const exp = tokenExpiry(token);
+  if (exp === null) return false;
+  return exp < Math.floor(Date.now() / 1000) + 60;
+}
+
+export async function ensureFreshToken(): Promise<boolean> {
+  if (!needsRefresh()) return true;
+  return tryRefreshToken();
+}
+
 async function tryRefreshToken(): Promise<boolean> {
   const storage = getStorage();
   const refreshToken = storage?.getItem(REFRESH_KEY);

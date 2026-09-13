@@ -28,7 +28,7 @@ const getNavItems = (role?: string) => {
 
   return [
     { href: '/', label: 'Início', icon: HomeIcon },
-    { href: '/pedidos', label: 'Pedidos', icon: ClipboardIcon, staffOnly: true },
+    { href: '/pedidos', label: 'Pedidos', icon: ClipboardIcon },
     { href: '/cozinha', label: 'Cozinha', icon: ChefHatIcon, roles: ['superadmin', 'organizer', 'kitchen', 'bar'] },
     { href: '/caixa', label: 'Caixa', icon: CashIcon, staffOnly: true },
     { href: '/relatorios', label: 'Relatórios', icon: ChartIcon, staffOnly: true },

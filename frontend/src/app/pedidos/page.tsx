@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { fetchWithAuth } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
 import { useOrderSocket } from '@/lib/use-order-socket';
 import { AppShell } from '@/components/layout/app-shell';
@@ -41,6 +42,9 @@ const statusMeta: Record<string, { label: string; variant: BadgeVariant }> = {
 };
 
 function PedidosPageInner() {
+  const { user } = useAuth();
+  const isClient = user?.role === 'client';
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -50,7 +54,7 @@ function PedidosPageInner() {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const data = await fetchWithAuth<any>('/orders');
+      const data = await fetchWithAuth<any>(isClient ? '/orders/mine' : '/orders');
       setOrders(data?.items ?? []);
       setError('');
     } catch {
@@ -58,7 +62,7 @@ function PedidosPageInner() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isClient]);
 
   useOrderSocket(fetchOrders, eventoAtual?.id);
 
@@ -77,6 +81,17 @@ function PedidosPageInner() {
       await fetchOrders();
     } catch {
       setError('Erro ao atualizar estado');
+    }
+  };
+
+  const cancelar = async (orderId: string) => {
+    try {
+      await fetchWithAuth(`/orders/${orderId}/cancel`, {
+        method: 'POST',
+      });
+      await fetchOrders();
+    } catch {
+      setError('Erro ao cancelar o pedido');
     }
   };
 
@@ -102,12 +117,12 @@ function PedidosPageInner() {
 
   return (
     <>
-      <title>Pedidos - SenhasFestas</title>
+      <title>{isClient ? 'Os Meus Pedidos' : 'Pedidos'} - SenhasFestas</title>
 
       <AppShell>
         <PageHeader
-          title="Gestão de Pedidos"
-          subtitle="Acompanhe e atualize o estado de cada pedido"
+          title={isClient ? 'Os Meus Pedidos' : 'Gestão de Pedidos'}
+          subtitle={isClient ? 'Acompanha o estado dos teus pedidos' : 'Acompanhe e atualize o estado de cada pedido'}
           icon={<ClipboardIcon className="h-5 w-5" />}
           actions={
             <Button variant="secondary" onClick={fetchOrders} icon={<RefreshIcon className="h-4 w-4" />}>
@@ -120,12 +135,14 @@ function PedidosPageInner() {
 
         <Tabs items={tabs} activeTab={filter} onChange={(id) => setFilter(id as any)} className="mb-6" />
 
-        {/* Column header for status legend */}
-        <div className="hidden sm:flex gap-3 mb-4 text-xs text-zinc-400">
-          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-orange-400" /> Recebido</span>
-          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand" /> A Preparar</span>
-          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Pronto</span>
-        </div>
+        {/* Column header for status legend (staff) */}
+        {!isClient && (
+          <div className="hidden sm:flex gap-3 mb-4 text-xs text-zinc-400">
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-orange-400" /> Recebido</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand" /> A Preparar</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Pronto</span>
+          </div>
+        )}
 
         {loading ? (
           <div className="py-16"><Spinner label="A carregar pedidos..." /></div>
@@ -136,8 +153,12 @@ function PedidosPageInner() {
               title="Nenhum pedido encontrado"
               description={
                 filter === 'active'
-                  ? 'Não há pedidos ativos neste momento.'
-                  : 'Não há pedidos concluídos para mostrar.'
+                  ? isClient
+                    ? 'Ainda não tens pedidos em curso.'
+                    : 'Não há pedidos ativos neste momento.'
+                  : isClient
+                    ? 'Ainda não tens pedidos concluídos.'
+                    : 'Não há pedidos concluídos para mostrar.'
               }
             />
           </Card>
@@ -145,7 +166,7 @@ function PedidosPageInner() {
           <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filteredOrders.map((order, idx) => {
               const meta = statusMeta[order.status];
-              const actions = orderActions[order.status];
+              const actions = isClient ? [] : orderActions[order.status];
               const canCancel = !['delivered', 'cancelled'].includes(order.status);
 
               return (
@@ -191,7 +212,7 @@ function PedidosPageInner() {
                     </div>
 
                     {/* Actions */}
-                    {(actions || canCancel) && (
+                    {(actions?.length || canCancel) && (
                       <div className="flex gap-2 mt-3">
                         {actions?.map((action) => (
                           <Button
@@ -206,12 +227,13 @@ function PedidosPageInner() {
                         ))}
                         {canCancel && (
                           <Button
-                            onClick={() => updateStatus(order.id, 'cancelled')}
+                            onClick={() => cancelar(order.id)}
                             variant="danger"
-                            className={cn(!actions && 'flex-1')}
+                            className={cn((!actions || actions.length === 0) && 'flex-1')}
                             aria-label="Cancelar pedido"
                           >
                             <CloseIcon className="h-4 w-4" />
+                            {isClient && 'Cancelar pedido'}
                           </Button>
                         )}
                       </div>
