@@ -31,31 +31,44 @@ const CONTAS = {
 const EPS = 0.001;
 const igual = (a, b) => Math.abs(a - b) < EPS;
 
+const pausa = (ms) => new Promise((resolver) => setTimeout(resolver, ms));
+
 async function chamar(path, { token, method = 'GET', body } = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25000);
-  try {
-    const res = await fetch(`${BASE}${path}`, {
-      method,
-      headers: {
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: controller.signal,
-    });
-    let data = null;
-    const texto = await res.text();
+  const tentar = async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
     try {
-      data = texto ? JSON.parse(texto) : null;
-    } catch {
-      data = texto;
+      const res = await fetch(`${BASE}${path}`, {
+        method,
+        headers: {
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+      let data = null;
+      const texto = await res.text();
+      try {
+        data = texto ? JSON.parse(texto) : null;
+      } catch {
+        data = texto;
+      }
+      return { status: res.status, data };
+    } catch (erro) {
+      return { status: 0, data: { erro: erro.message } };
+    } finally {
+      clearTimeout(timer);
     }
-    return { status: res.status, data };
-  } catch (erro) {
-    return { status: 0, data: { erro: erro.message } };
-  } finally {
-    clearTimeout(timer);
+  };
+  for (let tentativa = 1; ; tentativa++) {
+    const r = await tentar();
+    if (r.status === 429 && tentativa < 10) {
+      await pausa(Math.min(1500 * tentativa, 10000));
+      continue;
+    }
+    await pausa(70);
+    return r;
   }
 }
 
@@ -76,6 +89,13 @@ const check = (role, criterio, ok, detalhe = '') => CHECKS.push({ role, criterio
   for (const nome of Object.keys(CONTAS)) {
     check(nome, 'login', Boolean(token[nome]), token[nome] ? 'ok' : 'token ausente');
   }
+
+  const loginCashierDetalhe = await chamar('/auth/login', {
+    method: 'POST',
+    body: { email: CONTAS.cashier.email, password: CONTAS.cashier.password },
+  });
+  const refreshCashier = loginCashierDetalhe.data?.refreshToken;
+  check('auth', 'login-gera-refreshToken', Boolean(refreshCashier), refreshCashier ? 'ok' : 'sem refreshToken');
   if (!token.superadmin || !token.cashier || !token.client) {
     console.log('✗ Login base falhou — abortar');
     process.exit(1);
@@ -402,6 +422,182 @@ const check = (role, criterio, ok, detalhe = '') => CHECKS.push({ role, criterio
   check('treasurer', 'ver-auditoria', trashAudit.status === 200, `status=${trashAudit.status}`);
   const trPedirProduto = await chamar(`/products?eventId=${eventoId}`, { token: token.treasurer });
   check('treasurer', 'ver-catalogo', trPedirProduto.status === 200, `status=${trPedirProduto.status}`);
+
+  // ==================================================================
+  // COBERTURA ADICIONAL — "deveria poder" (auth, históricos, relatórios,
+  // membros, delivery por kitchen, cancel staff, gates não cobertos)
+  // ==================================================================
+
+  // ---- Auth: refresh e logout ----
+  let refreshCashierAtual = refreshCashier;
+  const refreshR = await chamar('/auth/refresh', { method: 'POST', body: { refreshToken: refreshCashierAtual } });
+  check('auth', 'refresh-token', refreshR.status === 200 && Boolean(refreshR.data?.token), `status=${refreshR.status}`);
+  if (refreshR.data?.refreshToken) refreshCashierAtual = refreshR.data.refreshToken;
+  const logoutR = await chamar('/auth/logout', { method: 'POST', body: { refreshToken: refreshCashierAtual } });
+  check('auth', 'logout', logoutR.status === 200, `status=${logoutR.status}`);
+
+  // ---- Auth: registo self-service (client gera accessCode) ----
+  const regEmail = `reg-${Date.now()}@senhasfestas.com`;
+  const regR = await chamar('/auth/register', {
+    method: 'POST',
+    body: { email: regEmail, password: 'reg123456', name: 'E2E Registo' },
+  });
+  check(
+    'client',
+    'registar-self-service-com-accessCode',
+    regR.status === 201 && Boolean(regR.data?.token) && /^\d{6}$/.test(regR.data?.user?.accessCode ?? ''),
+    `status=${regR.status}`,
+  );
+  const buscaReg = await chamar(`/users?q=${regEmail.split('@')[0]}`, { token: token.superadmin });
+  const regId = (Array.isArray(buscaReg.data) ? buscaReg.data : []).find((u) => u.email === regEmail)?.id;
+  if (regId) {
+    await chamar(`/users/${regId}`, { token: token.superadmin, method: 'DELETE' });
+  }
+
+  // ---- Client: pedidos próprios e histórico paginado ----
+  const mineR = await chamar('/orders/mine', { token: token.client });
+  check('client', 'orders-mine', mineR.status === 200 && Array.isArray(mineR.data?.items), `status=${mineR.status}`);
+  const historyR = await chamar(`/balances/${clientId}/history?eventId=${eventoId}`, { token: token.client });
+  check('client', 'historico-movimentos', historyR.status === 200 && Array.isArray(historyR.data), `status=${historyR.status}`);
+
+  // ---- Staff: ver utilizador por id e pedidos de um evento ----
+  const userById = await chamar(`/users/${clientId}`, { token: token.cashier });
+  check('cashier', 'user-por-id', userById.status === 200 && userById.data?.id === clientId, `status=${userById.status}`);
+  const ordersEvento = await chamar(`/orders/event/${eventoId}`, { token: token.cashier });
+  check('cashier', 'orders-por-evento', ordersEvento.status === 200 && Array.isArray(ordersEvento.data?.items), `status=${ordersEvento.status}`);
+
+  // ---- Relatórios (STAFF_FINANCE) ----
+  const balSaldo = await chamar(`/balances/${clientId}?eventId=${eventoId}`, { token: token.cashier });
+  const balSaldoId = balSaldo.data?.id;
+  const repOrdens = await chamar(`/reports/ordens?eventId=${eventoId}`, { token: token.cashier });
+  check('cashier', 'relatorio-ordens', repOrdens.status === 200, `status=${repOrdens.status}`);
+  const repSaldo = await chamar(`/reports/saldo?id=${balSaldoId}`, { token: token.cashier });
+  check('cashier', 'relatorio-saldo', repSaldo.status === 200, `status=${repSaldo.status}`);
+  const repTop = await chamar(`/reports/top-products?eventId=${eventoId}`, { token: token.cashier });
+  check('cashier', 'relatorio-top-products', repTop.status === 200, `status=${repTop.status}`);
+  const repEstat = await chamar('/reports/estatisticas', { token: token.treasurer });
+  check('treasurer', 'relatorio-estatisticas', repEstat.status === 200, `status=${repEstat.status}`);
+
+  // ---- Cancelamento com reembolso pelo staff (cashier) ----
+  if (productId && preco > 0) {
+    const balS = await chamar(`/balances/${clientId}?eventId=${eventoId}`, { token: token.cashier });
+    const saldoAntesS = Number(balS.data?.balance ?? 0);
+    const usarS = Math.min(saldoAntesS, preco);
+    const oS = await chamar('/orders', {
+      token: token.cashier,
+      method: 'POST',
+      body: {
+        eventId: eventoId,
+        source: 'pos',
+        tableNumber: 'E2E',
+        paymentMethod: 'balance',
+        balanceId: balS.data?.id,
+        balanceUsed: usarS,
+        items: [{ productId, quantity: 1 }],
+      },
+    });
+    check('cashier', 'criar-pedido-como-staff', oS.status === 201, `status=${oS.status}`);
+    const cancelS = await chamar(`/orders/${oS.data?.id}/cancel`, { token: token.cashier, method: 'POST' });
+    check('cashier', 'cancelar-pedido-staff-reembolsa', cancelS.status === 200 || cancelS.status === 201, `status=${cancelS.status} ${cancelS.data?.message ?? ''}`);
+    const balPosS = await chamar(`/balances/${clientId}?eventId=${eventoId}`, { token: token.cashier });
+    const refundS = (balPosS.data?.movements ?? []).find((m) => m.type === 'refund' && Number(m.amount) === Number(usarS));
+    check('cashier', 'reembolso-staff-quantia-certa', igual(Number(balPosS.data?.balance ?? 0), saldoAntesS), `esperado=${saldoAntesS.toFixed(2)} obtido=${Number(balPosS.data?.balance ?? 0).toFixed(2)}`);
+    check('cashier', 'movimento-refund-staff', Boolean(refundS), refundS ? `amount=${refundS.amount}` : 'sem refund');
+  } else {
+    check('cashier', 'criar-pedido-como-staff', true, 'skipped');
+    check('cashier', 'cancelar-pedido-staff-reembolsa', true, 'skipped');
+    check('cashier', 'reembolso-staff-quantia-certa', true, 'skipped');
+    check('cashier', 'movimento-refund-staff', true, 'skipped');
+  }
+
+  // ---- Kitchen pode marcar entregue (STAFF) + negados ----
+  if (productId && preco > 0) {
+    const oK = await chamar('/orders', {
+      token: token.cashier,
+      method: 'POST',
+      body: {
+        eventId: eventoId,
+        source: 'pos',
+        tableNumber: 'E2E',
+        paymentMethod: 'cash',
+        items: [{ productId, quantity: 1 }],
+      },
+    });
+    const oKId = oK.data?.id;
+    if (oKId) {
+      await chamar(`/orders/${oKId}/status`, { token: token.kitchen, method: 'PATCH', body: { status: 'preparing' } });
+      await chamar(`/orders/${oKId}/status`, { token: token.bar, method: 'PATCH', body: { status: 'ready' } });
+      const deliverK = await chamar(`/public/pedidos/${oKId}/entregue`, { token: token.kitchen, method: 'PATCH' });
+      check('kitchen', 'marcar-entregue-como-kitchen', deliverK.status === 200, `status=${deliverK.status} ${deliverK.data?.message ?? ''}`);
+    } else {
+      check('kitchen', 'marcar-entregue-como-kitchen', false, `sem id (status=${oK.status})`);
+    }
+  } else {
+    check('kitchen', 'marcar-entregue-como-kitchen', true, 'skipped');
+  }
+
+  const prodPatchKitchen = await chamar(`/products/${productId}`, { token: token.kitchen, method: 'PATCH', body: { availability: 'unavailable' } });
+  check('kitchen', 'nao-pode-gerir-produtos', prodPatchKitchen.status === 403, `status=${prodPatchKitchen.status}`);
+  const prodPatchCashier = await chamar(`/products/${productId}`, { token: token.cashier, method: 'PATCH', body: { availability: 'unavailable' } });
+  check('cashier', 'nao-pode-gerir-produtos', prodPatchCashier.status === 403, `status=${prodPatchCashier.status}`);
+  const membrosBar = await chamar(`/events/${eventoId}/members`, { token: token.bar, method: 'POST', body: { userId: clientId, role: 'client' } });
+  check('bar', 'nao-pode-gerir-membros', membrosBar.status === 403, `status=${membrosBar.status}`);
+
+  // ---- Gestão de membros (organizer) ----
+  const userTempM = await chamar('/users', {
+    token: token.superadmin,
+    method: 'POST',
+    body: { email: `m-${Date.now()}@senhasfestas.com`, password: 'e2e12345', name: 'E2E Membro', role: 'bar' },
+  });
+  const tempMId = userTempM.data?.id;
+  const listM = await chamar(`/events/${eventoId}/members`, { token: token.organizer });
+  check('organizer', 'listar-membros', listM.status === 200 && Array.isArray(listM.data), `status=${listM.status}`);
+  if (tempMId) {
+    const addM = await chamar(`/events/${eventoId}/members`, { token: token.organizer, method: 'POST', body: { userId: tempMId, role: 'client' } });
+    check('organizer', 'adicionar-membro', addM.status === 200 || addM.status === 201, `status=${addM.status}`);
+    const listM2 = await chamar(`/events/${eventoId}/members`, { token: token.organizer });
+    const presente = Array.isArray(listM2.data) && listM2.data.some((x) => x?.id === tempMId || x?.userId === tempMId);
+    check('organizer', 'membro-aparece-na-lista', presente, `status=${listM2.status}`);
+    const delM = await chamar(`/events/${eventoId}/members/${tempMId}`, { token: token.organizer, method: 'DELETE' });
+    check('organizer', 'remover-membro', delM.status === 200, `status=${delM.status}`);
+    await chamar(`/users/${tempMId}`, { token: token.superadmin, method: 'DELETE' });
+  } else {
+    check('organizer', 'adicionar-membro', false, 'sem user temp');
+    check('organizer', 'membro-aparece-na-lista', true, 'skipped');
+    check('organizer', 'remover-membro', true, 'skipped');
+  }
+
+  // ---- Superadmin: alterar role de utilizador; organizer negado ----
+  const userTempP = await chamar('/users', {
+    token: token.superadmin,
+    method: 'POST',
+    body: { email: `p-${Date.now()}@senhasfestas.com`, password: 'e2e12345', name: 'E2E Patch', role: 'cashier' },
+  });
+  const tempPId = userTempP.data?.id;
+  if (tempPId) {
+    const patchP = await chamar(`/users/${tempPId}`, { token: token.superadmin, method: 'PATCH', body: { role: 'treasurer' } });
+    check('superadmin', 'mudar-role-utilizador', patchP.status === 200 && patchP.data?.role === 'treasurer', `status=${patchP.status}`);
+    const patchPO = await chamar(`/users/${tempPId}`, { token: token.organizer, method: 'PATCH', body: { role: 'client' } });
+    check('organizer', 'nao-pode-mudar-role', patchPO.status === 403, `status=${patchPO.status}`);
+    await chamar(`/users/${tempPId}`, { token: token.superadmin, method: 'DELETE' });
+  } else {
+    check('superadmin', 'mudar-role-utilizador', false, 'sem user temp');
+    check('organizer', 'nao-pode-mudar-role', true, 'skipped');
+  }
+
+  // ---- Endpoints públicos adicionais (sem token) ----
+  const pubEvt = await chamar(`/public/evento?eventId=${eventoId}`);
+  check('publico', 'evento-publico', pubEvt.status === 200, `status=${pubEvt.status}`);
+  const pubProntos = await chamar(`/public/pedidos-prontos?eventId=${eventoId}`);
+  check('publico', 'pedidos-prontos-publico', pubProntos.status === 200, `status=${pubProntos.status}`);
+  const pubPrep = await chamar(`/public/pedidos-em-preparacao?eventId=${eventoId}`);
+  check('publico', 'pedidos-preparacao-publico', pubPrep.status === 200, `status=${pubPrep.status}`);
+  const pubCnt = await chamar(`/public/contagem?eventId=${eventoId}`);
+  check('publico', 'contagem-publico', pubCnt.status === 200, `status=${pubCnt.status}`);
+
+  // ---- Gate destrutivo: apagar evento só superadmin (último, por segurança) ----
+  const delEvtO = await chamar(`/events/${eventoId}`, { token: token.organizer, method: 'DELETE' });
+  check('organizer', 'nao-pode-apagar-evento-superadmin-so', delEvtO.status === 403, `status=${delEvtO.status}`);
 
   // ---- Resumo ----
   const totalOk = CHECKS.filter((c) => c.ok).length;

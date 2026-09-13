@@ -42,6 +42,12 @@
     "detalhe": "ok"
   },
   {
+    "role": "auth",
+    "criterio": "login-gera-refreshToken",
+    "ok": true,
+    "detalhe": "ok"
+  },
+  {
     "role": "setup",
     "criterio": "evento-disponivel",
     "ok": true,
@@ -105,7 +111,7 @@
     "role": "cashier",
     "criterio": "saldo-descontado-correcto",
     "ok": true,
-    "detalhe": "esperado=13.50 obtido=13.50"
+    "detalhe": "esperado=17.50 obtido=17.50"
   },
   {
     "role": "client",
@@ -183,7 +189,7 @@
     "role": "client",
     "criterio": "reembolso-quantia-certa",
     "ok": true,
-    "detalhe": "esperado=15.00 obtido=15.00"
+    "detalhe": "esperado=19.00 obtido=19.00"
   },
   {
     "role": "client",
@@ -298,5 +304,185 @@
     "criterio": "ver-catalogo",
     "ok": true,
     "detalhe": "status=200"
+  },
+  {
+    "role": "auth",
+    "criterio": "refresh-token",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "auth",
+    "criterio": "logout",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "client",
+    "criterio": "registar-self-service-com-accessCode",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "client",
+    "criterio": "orders-mine",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "client",
+    "criterio": "historico-movimentos",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "cashier",
+    "criterio": "user-por-id",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "cashier",
+    "criterio": "orders-por-evento",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "cashier",
+    "criterio": "relatorio-ordens",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "cashier",
+    "criterio": "relatorio-saldo",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "cashier",
+    "criterio": "relatorio-top-products",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "treasurer",
+    "criterio": "relatorio-estatisticas",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "cashier",
+    "criterio": "criar-pedido-como-staff",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "cashier",
+    "criterio": "cancelar-pedido-staff-reembolsa",
+    "ok": true,
+    "detalhe": "status=201 "
+  },
+  {
+    "role": "cashier",
+    "criterio": "reembolso-staff-quantia-certa",
+    "ok": true,
+    "detalhe": "esperado=14.00 obtido=14.00"
+  },
+  {
+    "role": "cashier",
+    "criterio": "movimento-refund-staff",
+    "ok": true,
+    "detalhe": "amount=3.50"
+  },
+  {
+    "role": "kitchen",
+    "criterio": "marcar-entregue-como-kitchen",
+    "ok": true,
+    "detalhe": "status=200 "
+  },
+  {
+    "role": "kitchen",
+    "criterio": "nao-pode-gerir-produtos",
+    "ok": true,
+    "detalhe": "status=403"
+  },
+  {
+    "role": "cashier",
+    "criterio": "nao-pode-gerir-produtos",
+    "ok": true,
+    "detalhe": "status=403"
+  },
+  {
+    "role": "bar",
+    "criterio": "nao-pode-gerir-membros",
+    "ok": true,
+    "detalhe": "status=403"
+  },
+  {
+    "role": "organizer",
+    "criterio": "listar-membros",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "organizer",
+    "criterio": "adicionar-membro",
+    "ok": true,
+    "detalhe": "status=201"
+  },
+  {
+    "role": "organizer",
+    "criterio": "membro-aparece-na-lista",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "organizer",
+    "criterio": "remover-membro",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "superadmin",
+    "criterio": "mudar-role-utilizador",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "organizer",
+    "criterio": "nao-pode-mudar-role",
+    "ok": true,
+    "detalhe": "status=403"
+  },
+  {
+    "role": "publico",
+    "criterio": "evento-publico",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "publico",
+    "criterio": "pedidos-prontos-publico",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "publico",
+    "criterio": "pedidos-preparacao-publico",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "publico",
+    "criterio": "contagem-publico",
+    "ok": true,
+    "detalhe": "status=200"
+  },
+  {
+    "role": "organizer",
+    "criterio": "nao-pode-apagar-evento-superadmin-so",
+    "ok": true,
+    "detalhe": "status=403"
   }
 ]
