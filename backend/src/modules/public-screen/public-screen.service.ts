@@ -88,36 +88,43 @@ export class PublicScreenService {
 
   async marcarEntregue(id: string, utilizador: any): Promise<any> {
     return this.dataSource.transaction(async (manager) => {
-      const pedido = await manager.findOne(OrderEntity, {
-        where: { id },
-        relations: { event: true },
-        lock: { mode: 'pessimistic_write' },
+const pedidoCtx = await manager.findOne(OrderEntity, {
+      where: { id },
+      relations: { event: true },
+    });
+    if (!pedidoCtx) {
+      throw new NotFoundException('Pedido não encontrado');
+    }
+
+    if (utilizador?.role !== 'superadmin') {
+      const eventId = pedidoCtx.event?.id;
+      if (!eventId) {
+        throw new ForbiddenException('Pedido sem evento associado');
+      }
+      const membro = await manager.findOne(EventUserEntity, {
+        where: { event: { id: eventId }, user: { id: utilizador?.id } },
       });
-      if (!pedido) {
-        throw new NotFoundException('Pedido não encontrado');
+      if (!membro) {
+        throw new ForbiddenException('Não pertence a este evento');
       }
+    }
 
-      if (utilizador?.role !== 'superadmin') {
-        const eventId = pedido.event?.id;
-        if (!eventId) {
-          throw new ForbiddenException('Pedido sem evento associado');
-        }
-        const membro = await manager.findOne(EventUserEntity, {
-          where: { event: { id: eventId }, user: { id: utilizador?.id } },
-        });
-        if (!membro) {
-          throw new ForbiddenException('Não pertence a este evento');
-        }
-      }
+    const pedido = await manager.findOne(OrderEntity, {
+      where: { id },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!pedido) {
+      throw new NotFoundException('Pedido não encontrado');
+    }
 
-      if (pedido.status !== 'ready') {
-        throw new BadRequestException('Pedido não está pronto para entrega');
-      }
-      pedido.status = 'delivered';
-      const pedidoAtualizado = await manager.save(OrderEntity, pedido);
+    if (pedido.status !== 'ready') {
+      throw new BadRequestException('Pedido não está pronto para entrega');
+    }
+    pedido.status = 'delivered';
+    const pedidoAtualizado = await manager.save(OrderEntity, pedido);
 
-      // Emitir evento WebSocket para o ecrã público
-      this.orderGateway.emitOrderUpdate(pedidoAtualizado.id, pedidoAtualizado.status, pedido.event?.id);
+    // Emitir evento WebSocket para o ecrã público
+    this.orderGateway.emitOrderUpdate(pedidoAtualizado.id, pedidoAtualizado.status, pedidoCtx.event?.id);
 
       return pedidoAtualizado;
     });

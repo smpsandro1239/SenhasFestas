@@ -122,29 +122,36 @@ export class OrderService {
     orderId: string,
     eventId: string,
   ): Promise<void> {
-    const balance = await manager.findOne(BalanceEntity, {
+    const balanceCtx = await manager.findOne(BalanceEntity, {
       where: { id: balanceId },
       relations: { user: true, event: true },
+    });
+    if (!balanceCtx) {
+      throw new NotFoundException('Saldo não encontrado');
+    }
+    const isClient = user?.role === 'client';
+    if (isClient && balanceCtx.user?.id !== user.id) {
+      throw new ForbiddenException('Não pode usar o saldo de outro utilizador');
+    }
+    if (balanceCtx.event?.id && balanceCtx.event.id !== eventId) {
+      throw new ForbiddenException('Saldo não pertence a este evento');
+    }
+
+    const balance = await manager.findOne(BalanceEntity, {
+      where: { id: balanceId },
       lock: { mode: 'pessimistic_write' },
     });
     if (!balance) {
       throw new NotFoundException('Saldo não encontrado');
     }
-    const isClient = user?.role === 'client';
-    if (isClient && balance.user?.id !== user.id) {
-      throw new ForbiddenException('Não pode usar o saldo de outro utilizador');
-    }
-    if (balance.event?.id && balance.event.id !== eventId) {
-      throw new ForbiddenException('Saldo não pertence a este evento');
-    }
-    if (balance.currentBalance < amount) {
+    if (Number(balance.currentBalance) < amount) {
       throw new ForbiddenException('Saldo insuficiente');
     }
 
     const updated = await manager.update(
       BalanceEntity,
       { id: balanceId, currentBalance: balance.currentBalance },
-      { currentBalance: balance.currentBalance - amount },
+      { currentBalance: Number(balance.currentBalance) - amount },
     );
     if (!updated.affected) {
       throw new ForbiddenException('Saldo alterado, tente novamente');
