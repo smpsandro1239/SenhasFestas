@@ -61,6 +61,13 @@ const clientShortcuts = [
     color: 'gradient-brand-soft text-amber-200 border-amber-300/25',
   },
   {
+    href: '/meus-pedidos',
+    title: 'Os Meus Pedidos',
+    description: 'Acompanhar o estado dos pedidos',
+    icon: ClipboardIcon,
+    color: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  },
+  {
     href: '/saldo',
     title: 'Saldo e Recargas',
     description: 'Ver saldo e histórico',

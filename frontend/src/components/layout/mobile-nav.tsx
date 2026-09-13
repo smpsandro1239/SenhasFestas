@@ -22,10 +22,11 @@ export function MobileNav() {
   const items = [
     { href: '/', label: 'Início', icon: HomeIcon },
     { href: '/pedidos', label: 'Pedidos', icon: ClipboardIcon, staffOnly: true },
+    { href: '/meus-pedidos', label: 'Pedidos', icon: ClipboardIcon, clientOnly: true },
     { href: '/cozinha', label: 'Cozinha', icon: ChefHatIcon, staffOnly: true },
     { href: '/saldo', label: 'Saldo', icon: WalletIcon },
     { href: '/qr-order', label: 'Menu', icon: QrIcon },
-  ].filter((item) => !item.staffOnly || isStaff);
+  ].filter((item) => ((item.staffOnly && isStaff) || (item.clientOnly && !isStaff)) || (!item.staffOnly && !item.clientOnly));
 
   return (
     <nav className="fixed bottom-0 inset-x-0 z-40 lg:hidden bg-surface-solid/80 backdrop-blur-xl border-t border-border pb-[env(safe-area-inset-bottom)]">
