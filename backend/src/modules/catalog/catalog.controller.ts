@@ -48,6 +48,18 @@ export class CatalogController {
     return product;
   }
 
+  @Get(':id/suggestions')
+  async findSuggestions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: { eventId?: string; limit?: number },
+    @Request() req: any,
+  ) {
+    if (req.user.role !== 'superadmin' && query.eventId) {
+      await this.membershipService.assertMember(req.user, query.eventId);
+    }
+    return this.catalogService.findSuggestions(query.eventId, id, query.limit);
+  }
+
   @Post()
   @Roles(...MANAGEMENT_ROLES)
   async create(@Request() req: any, @Body() dto: CreateProductDto) {

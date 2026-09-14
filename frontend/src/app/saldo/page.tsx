@@ -2,7 +2,8 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { AuthLayout } from '@/components/layout/auth-layout';
+import { AppShell } from '@/components/layout/app-shell';
+import { PageHeader } from '@/components/layout/page-header';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
@@ -85,7 +86,13 @@ function BalancePage() {
   };
 
   return (
-    <AuthLayout subtitle="Carregue saldo na sua conta para consumir">
+    <AppShell>
+      <PageHeader
+        title="Saldo e Recargas"
+        subtitle="Carregue saldo na sua conta para consumir"
+        icon={<WalletIcon className="h-5 w-5" />}
+      />
+      <div className="mx-auto w-full max-w-md space-y-6">
       <div className="flex items-center gap-3">
         <div className="p-2.5 rounded-xl brand-chip">
           <WalletIcon className="h-5 w-5" />
@@ -196,6 +203,7 @@ function BalancePage() {
           </div>
         </form>
       )}
-    </AuthLayout>
+      </div>
+    </AppShell>
   );
 }

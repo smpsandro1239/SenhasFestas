@@ -146,7 +146,7 @@ async function request<T>(
       signal: controller.signal,
     });
   } catch {
-    throw new ApiError('Não foi possível contactar o servidor. Tente novamente.', 0);
+    throw new ApiError('NÃ£o foi possÃ­vel contactar o servidor. Tente novamente.', 0);
   } finally {
     clearTimeout(timer);
   }
@@ -157,11 +157,11 @@ async function request<T>(
       return request<T>(endpoint, options, false);
     }
     destroySession();
-    throw new ApiError('Sessão expirada. Inicie sessão novamente.', 401);
+    throw new ApiError('SessÃ£o expirada. Inicie sessÃ£o novamente.', 401);
   }
 
   if (!response.ok) {
-    const message = (await readErrorBody(response)) || `Erro na requisição (${response.status})`;
+    const message = (await readErrorBody(response)) || `Erro na requisiÃ§Ã£o (${response.status})`;
     throw new ApiError(message, response.status);
   }
 
@@ -211,7 +211,7 @@ export async function logout(refreshToken?: string): Promise<void> {
         body: JSON.stringify({ refreshToken }),
       });
     } catch {
-      // sessão local é sempre limpa no fim
+      // sessÃ£o local Ã© sempre limpa no fim
     }
   }
   destroySession(false);
@@ -284,6 +284,11 @@ export async function getReports(type: string, params?: any): Promise<any> {
 export async function getProducts(eventId?: string): Promise<any> {
   const query = eventId ? `?eventId=${encodeURIComponent(eventId)}` : '';
   return apiRequest(`/products${query}`);
+}
+
+export async function getProductSuggestions(productId: string, eventId?: string): Promise<any> {
+  const query = eventId ? `?eventId=${encodeURIComponent(eventId)}` : '';
+  return apiRequest(`/products/${productId}/suggestions${query}`);
 }
 
 export async function createProduct(data: any): Promise<any> {

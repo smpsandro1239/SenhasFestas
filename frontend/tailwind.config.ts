@@ -9,10 +9,10 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          DEFAULT: '#f59e0b',
-          hover: '#d97706',
-          light: '#fbbf24',
-          glow: 'rgba(245,158,11,0.15)',
+          DEFAULT: '#3b82f6',
+          hover: '#2563eb',
+          light: '#60a5fa',
+          glow: 'rgba(59,130,246,0.15)',
         },
         surface: {
           DEFAULT: 'rgba(255,255,255,0.03)',
@@ -29,8 +29,8 @@ const config: Config = {
         '4xl': '2rem',
       },
       boxShadow: {
-        'glow': '0 0 20px rgba(245,158,11,0.15)',
-        'glow-sm': '0 0 10px rgba(245,158,11,0.1)',
+        'glow': '0 0 20px rgba(59,130,246,0.15)',
+        'glow-sm': '0 0 10px rgba(59,130,246,0.1)',
         'glass': '0 8px 32px rgba(0,0,0,0.4)',
         'elevated': '0 20px 60px rgba(0,0,0,0.5)',
       },
@@ -68,8 +68,8 @@ const config: Config = {
           '100%': { backgroundPosition: '200% 0' },
         },
         glowPulse: {
-          '0%, 100%': { boxShadow: '0 0 20px rgba(245,158,11,0.1)' },
-          '50%': { boxShadow: '0 0 30px rgba(245,158,11,0.25)' },
+          '0%, 100%': { boxShadow: '0 0 20px rgba(59,130,246,0.1)' },
+          '50%': { boxShadow: '0 0 30px rgba(59,130,246,0.25)' },
         },
       },
       fontFamily: {

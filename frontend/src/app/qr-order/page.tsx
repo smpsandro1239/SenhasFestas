@@ -10,7 +10,7 @@ import { Alert } from '@/components/ui/alert';
 import { MinusIcon, PlusIcon, QrIcon, ArrowLeftIcon, CheckIcon } from '@/components/ui/icons';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
-import { getProducts, getBalance, createOrder } from '@/lib/api';
+import { getProducts, getBalance, createOrder, getProductSuggestions } from '@/lib/api';
 
 export default function QROrderPageWrapper() {
   return (
@@ -35,6 +35,8 @@ function QROrderPage() {
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [lastOrder, setLastOrder] = useState<any[]>([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [lastCartId, setLastCartId] = useState<string | null>(null);
   const router = useRouter();
 
   const fetchProducts = useCallback(async () => {
@@ -53,6 +55,31 @@ function QROrderPage() {
     if (!eventId || eventLoading) return;
     fetchProducts();
   }, [fetchProducts, eventId, eventLoading]);
+
+  useEffect(() => {
+    if (!lastCartId || !eventId) return;
+    let active = true;
+    getProductSuggestions(lastCartId, eventId)
+      .then((data) => {
+        if (!active) return;
+        setSuggestions(Array.isArray(data) ? data : data?.items ?? []);
+      })
+      .catch(() => {
+        if (active) setSuggestions([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [lastCartId, eventId]);
+
+  useEffect(() => {
+    if (cart.length > 0) {
+      setLastCartId(cart[cart.length - 1].id);
+    } else {
+      setLastCartId(null);
+      setSuggestions([]);
+    }
+  }, [cart]);
 
   useEffect(() => {
     if (!user) return;
@@ -245,6 +272,42 @@ function QROrderPage() {
           </div>
         )}
       </main>
+
+      {/* Suggestions: people who ordered this also ordered */}
+      {cart.length > 0 && suggestions.length > 0 && (
+        <section
+          aria-labelledby="sugestoes-title"
+          className="mt-4 rounded-2xl border border-brand/20 bg-brand/5 p-4"
+        >
+          <h3 id="sugestoes-title" className="text-sm font-bold text-zinc-100 mb-3">
+            Quem pediu isto também pediu
+          </h3>
+          <ul className="space-y-2">
+            {suggestions
+              .filter((s: any) => !cart.some((c: any) => c.id === s.id))
+              .map((s: any) => (
+                <li key={s.id} className="flex items-center gap-3">
+                  <span className="text-lg text-gray-200">€{((s.price ?? 0) / 100).toFixed(2)}</span>
+                  <button
+                    type="button"
+                    onClick={() => addToCart(s)}
+                    className="flex-1 text-left text-sm font-semibold text-zinc-100 hover:text-brand transition-colors"
+                  >
+                    {s.name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addToCart(s)}
+                    aria-label={'Adicionar ' + s.name + ' ao pedido'}
+                    className="btnAddSuggestions bg-brand hover:bg-brand-hover text-black font-bold h-8 w-8 rounded-full flex items-center justify-center"
+                  >
+                    +
+                  </button>
+                </li>
+              ))}
+          </ul>
+        </section>
+      )}
 
       {/* Cart bottom bar */}
       <div
