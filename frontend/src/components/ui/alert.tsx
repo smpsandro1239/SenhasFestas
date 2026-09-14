@@ -4,6 +4,7 @@ export type AlertVariant = 'success' | 'error' | 'warning' | 'info';
 
 export interface AlertProps {
   variant?: AlertVariant;
+  title?: string;
   message: string;
   className?: string;
   onClose?: () => void;
@@ -32,7 +33,7 @@ const variantStyles: Record<AlertVariant, { container: string; icon: string; ico
   },
 };
 
-export function Alert({ variant = 'info', message, className, onClose }: AlertProps) {
+export function Alert({ variant = 'info', title, message, className, onClose }: AlertProps) {
   const styles = variantStyles[variant];
 
   return (
@@ -48,7 +49,10 @@ export function Alert({ variant = 'info', message, className, onClose }: AlertPr
       <svg className={cn('h-5 w-5 shrink-0 mt-0.5', styles.icon)} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d={styles.iconPath} />
       </svg>
-      <div className="flex-1">{message}</div>
+      <div className="flex-1">
+        {title && <p className="font-semibold text-[15px] mb-0.5">{title}</p>}
+        {message}
+      </div>
       {onClose && (
         <button
           onClick={onClose}

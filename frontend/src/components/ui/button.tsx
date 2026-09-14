@@ -1,7 +1,7 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
+type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -9,11 +9,14 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize;
   loading?: boolean;
   icon?: React.ReactNode;
+  fullWidth?: boolean;
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
     'gradient-brand text-zinc-950 font-semibold hover:brightness-110 active:brightness-95 shadow-lg shadow-pink-500/20 hover:shadow-pink-500/35',
+  outline:
+    'border border-border bg-transparent text-zinc-100 hover:bg-surface-hover hover:border-border-hover active:bg-surface-active',
   secondary:
     'bg-surface border border-border text-zinc-100 hover:bg-surface-hover hover:border-border-hover active:bg-surface-active',
   ghost:
@@ -31,7 +34,7 @@ const sizeStyles: Record<ButtonSize, string> = {
 };
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'primary', size = 'md', loading, icon, children, disabled, ...props }, ref) => {
+  ({ className, variant = 'primary', size = 'md', loading, fullWidth, icon, children, disabled, ...props }, ref) => {
     return (
       <button
         ref={ref}
@@ -41,6 +44,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           'disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none',
           variantStyles[variant],
           sizeStyles[size],
+          fullWidth ? 'w-full' : '',
           className,
         )}
         disabled={disabled || loading}
