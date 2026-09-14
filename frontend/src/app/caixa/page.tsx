@@ -426,12 +426,17 @@ function CaixaPage() {
               Escolha a operação, procure ou escaneie o cliente e confirme o valor.
             </p>
 
-            <div className="flex gap-1 p-1 rounded-xl bg-surface border border-border mb-6 max-w-md">
+            <div
+              role="group"
+              aria-label="Tipo de movimento de saldo"
+              className="flex gap-1 p-1 rounded-xl bg-surface border border-border mb-6 max-w-md"
+            >
               {(['load', 'deduct'] as const).map((modo) => (
                 <button
                   key={modo}
                   type="button"
                   onClick={() => setMovementMode(modo)}
+                  aria-pressed={movementMode === modo}
                   className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
                     movementMode === modo
                       ? modo === 'load'
