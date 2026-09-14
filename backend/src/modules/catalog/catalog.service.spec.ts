@@ -47,6 +47,7 @@ describe('CatalogService', () => {
       });
       expect(mockProductRepository.findAndCount).toHaveBeenCalledWith({
         where: { isActive: true },
+        relations: { category: true, event: true },
         skip: 0,
         take: 20,
         order: { createdAt: 'DESC' },
