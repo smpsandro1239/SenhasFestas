@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
 import ServiceWorkerRegister from './sw-register';
+import OnlineIndicator from './online-indicator';
 import { ThemeProvider } from './theme-provider';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -41,6 +42,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
           <AuthProvider>{children}</AuthProvider>
         </ThemeProvider>
+        <OnlineIndicator />
         <ServiceWorkerRegister />
       </body>
     </html>

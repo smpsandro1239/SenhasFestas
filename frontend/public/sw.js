@@ -1,8 +1,9 @@
-const CACHE_NAME = 'senhasfestas-v3';
+const CACHE_NAME = 'senhasfestas-v4';
 const PRECACHE_URLS = [
   '/manifest.webmanifest',
   '/icon-192.png',
   '/icon-512.png',
+  '/offline',
 ];
 
 self.addEventListener('install', (event) => {
@@ -42,6 +43,8 @@ async function networkFirst(request) {
   } catch {
     const cached = await cache.match(request);
     if (cached) return cached;
+    const offlinePage = await cache.match('/offline');
+    if (offlinePage) return offlinePage;
     const files = await cache.matchAll('/');
     const fallback = files.length ? files[0] : null;
     if (fallback) return fallback;
