@@ -4,17 +4,17 @@
 
 @layer base {
   :root {
-    --color-bg: #09090b;
+    --color-bg: #090a0f;
     --color-surface: rgba(255,255,255,0.03);
     --color-surface-hover: rgba(255,255,255,0.06);
     --color-border: rgba(255,255,255,0.08);
-    --color-text: #fafafa;
-    --color-text-muted: #a1a1aa;
-    --color-brand: #3b82f6;
-    --color-success: #22c55e;
-    --color-warning: #f97316;
+    --color-text: #e0e2ef;
+    --color-text-muted: #8d90a0;
+    --color-brand: #2563eb;
+    --color-success: #10b981;
+    --color-warning: #f59e0b;
     --color-danger: #ef4444;
-    --color-info: #3b82f6;
+    --color-info: #0ea5e9;
   }
 
   html {
@@ -100,7 +100,7 @@
 
   /* Brand gradient identity (blue -> indigo -> violet) */
   .gradient-brand {
-    background-image: linear-gradient(135deg, #3b82f6 0%, #2563eb 55%, #6366f1 100%);
+    background-image: linear-gradient(135deg, #2563eb 0%, #1d4ed8 55%, #312e81 100%);
   }
   .gradient-brand-soft {
     background-image: linear-gradient(135deg, rgba(59,130,246,0.18) 0%, rgba(99,102,241,0.12) 55%, rgba(37,99,235,0.18) 100%);

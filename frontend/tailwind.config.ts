@@ -9,10 +9,10 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          DEFAULT: '#3b82f6',
-          hover: '#2563eb',
+          DEFAULT: '#2563eb',
+          hover: '#1d4ed8',
           light: '#60a5fa',
-          glow: 'rgba(59,130,246,0.15)',
+          glow: 'rgba(37,99,235,0.18)',
         },
         surface: {
           DEFAULT: 'rgba(255,255,255,0.03)',
