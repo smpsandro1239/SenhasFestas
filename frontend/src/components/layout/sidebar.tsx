@@ -106,7 +106,7 @@ export function Sidebar({ className }: SidebarProps) {
       {/* User */}
       <div className="px-4 py-4 border-t border-border">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-amber-400/40 via-pink-500/30 to-violet-500/40 border border-amber-300/30 flex items-center justify-center text-sm font-bold text-amber-200">
+          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-brand to-brand-hover border border-brand-light/40 flex items-center justify-center text-sm font-bold text-black shadow-lg shadow-brand/20 shadow-lg shadow-black/20">
             {(user?.name || 'U').charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
