@@ -193,7 +193,7 @@ function CozinhaPageInner() {
               <p className="text-zinc-400 mt-2">Os pedidos aparecerão aqui assim que forem feitos</p>
             </div>
           ) : (
-            <div className="grid lg:grid-cols-2 xl:grid-cols-3 gap-5">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-5">
               {filteredOrders.map((order, idx) => {
                 const meta = statusMeta[order.status];
                 const elapsed = elapsedSince(order.createdAt);
@@ -216,7 +216,7 @@ function CozinhaPageInner() {
                     <div className="flex items-start justify-between gap-4 px-6 pt-5">
                       <div>
                         <div className="flex items-center gap-3 flex-wrap">
-                          <h2 className="text-2xl font-bold tracking-tight text-zinc-50">
+                          <h2 className="text-3xl lg:text-4xl font-black tracking-tight text-zinc-50 tabular-nums">
                             Pedido <span className="font-mono">#{order.id.slice(-4)}</span>
                           </h2>
                           <Badge variant={meta.variant} dot>{meta.label}</Badge>
@@ -273,7 +273,7 @@ function CozinhaPageInner() {
                           <button
                             onClick={() => updateStatus(order.id, 'preparing')}
                             disabled={updatingId !== null}
-                            className="flex items-center gap-2 px-6 py-3.5 rounded-xl bg-orange-500/15 border border-orange-500/30 text-orange-400 font-bold text-base hover:bg-orange-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="flex items-center gap-2 px-6 py-5 rounded-xl bg-orange-500/15 border border-orange-500/30 text-orange-400 font-bold text-lg hover:bg-orange-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[60px]"
                           >
                             <PlayIcon className="h-4 w-4" />
                             Iniciar Preparação
