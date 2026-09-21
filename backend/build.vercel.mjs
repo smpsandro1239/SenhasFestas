@@ -2,9 +2,11 @@ import { execSync } from 'node:child_process';
 import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
-const root = process.cwd();
+const backendRoot = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(backendRoot, '..');
 const funcDir = path.join(root, '.vercel', 'output', 'functions', 'api', 'index.js.func');
 const outputDir = path.join(root, '.vercel', 'output');
 const depsDir = path.join(tmpdir(), 'sf-vercel-func-dep');
@@ -15,10 +17,10 @@ mkdirSync(funcDir, { recursive: true });
 mkdirSync(depsDir, { recursive: true });
 writeFileSync(path.join(depsDir, 'package.json'), '{}');
 
-execSync('npx nest build', { stdio: 'inherit', cwd: root });
+execSync('npx nest build', { stdio: 'inherit', cwd: backendRoot });
 
 await build({
-  entryPoints: [path.join(root, 'dist', 'serverless.main.js')],
+  entryPoints: [path.join(backendRoot, 'dist', 'serverless.main.js')],
   bundle: true,
   platform: 'node',
   format: 'cjs',
@@ -32,9 +34,7 @@ execSync('npm install pg@^8.23.0 --no-audit --no-fund --omit=dev --legacy-peer-d
   stdio: 'ignore',
   cwd: depsDir,
 });
-execSync(`cp -R "${path.join(depsDir, 'node_modules')}" "${path.join(funcDir, 'node_modules')}"`, {
-  stdio: 'ignore',
-});
+cpSync(path.join(depsDir, 'node_modules'), path.join(funcDir, 'node_modules'), { recursive: true });
 
 writeFileSync(
   path.join(funcDir, '.vc-config.json'),
