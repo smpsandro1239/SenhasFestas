@@ -8,6 +8,8 @@ import {
   persistSession,
   destroySession,
   ensureFreshToken,
+  hydrateSession,
+  getAccessToken,
 } from './api';
 
 interface User {
@@ -38,51 +40,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
-    if (storedToken && storedUser) {
-      setToken(storedToken);
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        return;
+    let cancelled = false;
+    (async () => {
+      const session = await hydrateSession();
+      if (cancelled) return;
+      if (session) {
+        setUser(session as User);
+        setToken(getAccessToken());
+      } else {
+        destroySession(false);
       }
+    })();
+
+    const refreshInterval = setInterval(() => {
       ensureFreshToken();
-      const refreshInterval = setInterval(() => {
-        ensureFreshToken();
-      }, 60_000);
-      return () => clearInterval(refreshInterval);
-    }
+    }, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(refreshInterval);
+    };
   }, []);
 
   const login = async (email: string, password: string): Promise<User> => {
-    const { token: newToken, refreshToken, user: userData } = await apiLogin(email, password);
-    persistSession(newToken, refreshToken, userData);
+    const { token: newToken, user: userData } = await apiLogin(email, password);
+    persistSession(newToken, userData);
     setToken(newToken);
     setUser(userData);
     return userData;
   };
 
   const register = async (data: any): Promise<User> => {
-    const { token: newToken, refreshToken, user: userData } = await apiRegister(data);
-    persistSession(newToken, refreshToken, userData);
+    const { token: newToken, user: userData } = await apiRegister(data);
+    persistSession(newToken, userData);
     setToken(newToken);
     setUser(userData);
     return userData;
   };
 
   const logout = () => {
-    const refreshToken =
-      typeof window !== 'undefined' ? window.localStorage.getItem('refreshToken') : null;
     setUser(null);
     setToken(null);
-    if (refreshToken) {
-      apiLogout(refreshToken);
-    } else {
-      destroySession(false);
-    }
+    apiLogout();
   };
 
   return (

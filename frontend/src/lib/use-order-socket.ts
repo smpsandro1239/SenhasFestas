@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { io, type Socket } from 'socket.io-client';
+import { getAccessToken } from './api';
 
 export function useOrderSocket(refetch: () => void, eventId?: string | null): void {
   const refetchRef = useRef(refetch);
@@ -12,7 +13,10 @@ export function useOrderSocket(refetch: () => void, eventId?: string | null): vo
     if (!rawUrl || !eventId) {
       return;
     }
-    const token = typeof window !== 'undefined' ? window.localStorage.getItem('token') ?? '' : '';
+    const token = typeof window !== 'undefined' ? getAccessToken() ?? '' : '';
+    if (!token) {
+      return;
+    }
     const socket: Socket = io(rawUrl.replace(/\/+$/, ''), {
       auth: { token },
       transports: ['websocket'],

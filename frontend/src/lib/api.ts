@@ -1,12 +1,16 @@
-const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-const API_URL = rawApiUrl.replace(/\/+$/, '').replace(/\/api$/, '');
-const API_BASE = API_URL ? `${API_URL}/api` : '/api';
+// Sessão same-origin: o Next rewrite /api/:path* encaminha para a API.
+// Cookies ficam host-only no domínio do frontend — sem Domain, sem CORS, sem PSL.
+const API_BASE = '/api';
 
 const TIMEOUT_MS = 10000;
 
-const TOKEN_KEY = 'token';
-const REFRESH_KEY = 'refreshToken';
 const USER_KEY = 'user';
+
+let accessToken: string | null = null;
+
+export function getAccessToken(): string | null {
+  return accessToken;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -22,30 +26,18 @@ function getStorage(): Storage | null {
   return typeof window !== 'undefined' ? window.localStorage : null;
 }
 
-export function persistSession(token: string, refreshToken: string, user: unknown): void {
+export function persistSession(token: string, user: unknown): void {
+  accessToken = token;
   const storage = getStorage();
   if (!storage) return;
-  storage.setItem(TOKEN_KEY, token);
-  storage.setItem(REFRESH_KEY, refreshToken);
   storage.setItem(USER_KEY, JSON.stringify(user));
-  setSessionCookie(token);
-}
-
-function setSessionCookie(token: string): void {
-  if (typeof document === 'undefined') return;
-  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
-  document.cookie = `sf_token=${encodeURIComponent(token)}; Path=/; Max-Age=${60 * 60 * 24 * 7}; SameSite=Lax${secure}`;
 }
 
 export function destroySession(redirect = true): void {
+  accessToken = null;
   const storage = getStorage();
   if (storage) {
-    storage.removeItem(TOKEN_KEY);
-    storage.removeItem(REFRESH_KEY);
     storage.removeItem(USER_KEY);
-  }
-  if (typeof document !== 'undefined') {
-    document.cookie = 'sf_token=; Path=/; Max-Age=0; SameSite=Lax';
   }
   if (redirect && typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth/login')) {
     window.location.assign('/auth/login');
@@ -75,7 +67,7 @@ function tokenExpiry(token: string): number | null {
 
 export function needsRefresh(): boolean {
   if (typeof window === 'undefined') return false;
-  const token = getStorage()?.getItem(TOKEN_KEY);
+  const token = accessToken;
   if (!token) return false;
   const exp = tokenExpiry(token);
   if (exp === null) return false;
@@ -88,10 +80,6 @@ export async function ensureFreshToken(): Promise<boolean> {
 }
 
 async function tryRefreshToken(): Promise<boolean> {
-  const storage = getStorage();
-  const refreshToken = storage?.getItem(REFRESH_KEY);
-  if (!refreshToken) return false;
-
   if (!refreshing) {
     refreshing = (async () => {
       try {
@@ -100,7 +88,7 @@ async function tryRefreshToken(): Promise<boolean> {
         const response = await fetch(`${API_BASE}/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken }),
+          credentials: 'include',
           signal: controller.signal,
         });
         clearTimeout(timer);
@@ -108,10 +96,9 @@ async function tryRefreshToken(): Promise<boolean> {
 
         const data = (await response.json()) as {
           token: string;
-          refreshToken: string;
           user: unknown;
         };
-        persistSession(data.token, data.refreshToken, data.user);
+        persistSession(data.token, data.user);
         return true;
       } catch {
         return false;
@@ -123,13 +110,24 @@ async function tryRefreshToken(): Promise<boolean> {
   return refreshing;
 }
 
+export async function hydrateSession(): Promise<unknown | null> {
+  const refreshed = await tryRefreshToken();
+  if (!refreshed) {
+    return null;
+  }
+  try {
+    return await request<unknown>('/users/me', {}, false);
+  } catch {
+    return null;
+  }
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {},
   retryOn401 = true,
 ): Promise<T> {
-  const storage = typeof window !== 'undefined' ? window.localStorage : null;
-  const token = storage?.getItem(TOKEN_KEY) ?? null;
+  const token = typeof window !== 'undefined' ? accessToken : null;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -140,9 +138,9 @@ async function request<T>(
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(options.headers as Record<string, string>),
       },
+      credentials: 'include',
       signal: controller.signal,
     });
   } catch {
@@ -203,16 +201,14 @@ export async function register(data: any): Promise<any> {
   });
 }
 
-export async function logout(refreshToken?: string): Promise<void> {
-  if (refreshToken) {
-    try {
-      await apiRequest('/auth/logout', {
-        method: 'POST',
-        body: JSON.stringify({ refreshToken }),
-      });
-    } catch {
-      // sessÃ£o local Ã© sempre limpa no fim
-    }
+export async function logout(): Promise<void> {
+  try {
+    await apiRequest('/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+    });
+  } catch {
+    // sessÃ£o local Ã© sempre limpa no fim
   }
   destroySession(false);
 }
