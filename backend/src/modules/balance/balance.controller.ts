@@ -83,8 +83,14 @@ export class BalanceController {
   }
 
   private assertCanAccess(requestUser: any, userId: string) {
-    if (requestUser.role === 'client' && requestUser.id !== userId) {
-      throw new ForbiddenException('Não pode consultar o saldo de outro utilizador');
+    if (requestUser.role === 'client') {
+      if (requestUser.id !== userId) {
+        throw new ForbiddenException('Não pode consultar o saldo de outro utilizador');
+      }
+      return;
+    }
+    if (!FINANCE_ROLES.includes(requestUser.role)) {
+      throw new ForbiddenException('Sem permissão para consultar saldos');
     }
   }
 
