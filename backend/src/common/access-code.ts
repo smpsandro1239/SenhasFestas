@@ -1,3 +1,5 @@
+import { ConflictException } from '@nestjs/common';
+
 export function gerarCodigoAcesso(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
@@ -11,5 +13,5 @@ export async function codigoAcessoUnico(
       return codigo;
     }
   }
-  return gerarCodigoAcesso();
+  throw new ConflictException('Não foi possível gerar um código de acesso único após 100 tentativas');
 }
