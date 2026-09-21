@@ -53,7 +53,7 @@ describe('AuthController', () => {
   });
 
   describe('login', () => {
-    it('should return access token when login is successful', async () => {
+    it('devolve token+user e define cookies httpOnly (access + refresh)', async () => {
       const loginDto = { email: 'test@example.com', password: 'password' };
       const result = {
         token: 'test-token',
@@ -63,17 +63,40 @@ describe('AuthController', () => {
 
       vi.spyOn(service, 'login').mockResolvedValue(result);
 
-      const req = { secure: false, get: () => undefined, headers: {} };
+      const req = { secure: false, get: () => undefined, headers: {}, cookies: {} };
       const res = { cookie: vi.fn(), clearCookie: vi.fn() };
 
-      await expect(controller.login(req as any, res as any, loginDto)).resolves.toEqual(result);
+      await expect(controller.login(req as any, res as any, loginDto)).resolves.toEqual({
+        token: 'test-token',
+        user: result.user,
+      });
       expect(service.login).toHaveBeenCalledWith(loginDto.email, loginDto.password);
       expect(res.cookie).toHaveBeenCalledWith('sf_token', 'test-token', expect.objectContaining({ httpOnly: true }));
+      expect(res.cookie).toHaveBeenCalledWith('sf_refresh', 'refresh-1', expect.objectContaining({ httpOnly: true }));
+      expect(JSON.stringify(await controller.login(req as any, res as any, loginDto))).not.toContain('refreshToken');
+    });
+
+    it('grava cookies host-only (sem Domain) — contrato same-origin via rewrite', async () => {
+      const loginDto = { email: 'test@example.com', password: 'password' };
+      const result = {
+        token: 'test-token',
+        refreshToken: 'refresh-1',
+        user: { id: '1', email: 'test@example.com' },
+      };
+      vi.spyOn(service, 'login').mockResolvedValue(result);
+
+      const req = { secure: false, get: () => undefined, headers: {}, cookies: {} };
+      const res = { cookie: vi.fn(), clearCookie: vi.fn() };
+
+      await controller.login(req as any, res as any, loginDto);
+      for (const call of res.cookie.mock.calls) {
+        expect(call[2]).not.toHaveProperty('domain');
+      }
     });
   });
 
   describe('refresh', () => {
-    it('should rotate tokens', async () => {
+    it('roda refresh com cookie httpOnly, roda tokens e não expõe refreshToken no body', async () => {
       const result = {
         token: 'new-token',
         refreshToken: 'refresh-2',
@@ -82,10 +105,16 @@ describe('AuthController', () => {
 
       vi.spyOn(service, 'refresh').mockResolvedValue(result);
 
-      const req = { secure: false, get: () => undefined, headers: {} };
+      const req = { secure: false, get: () => undefined, headers: {}, cookies: { sf_refresh: 'refresh-1' } };
       const res = { cookie: vi.fn(), clearCookie: vi.fn() };
 
-      await expect(controller.refresh(req as any, res as any, { refreshToken: 'refresh-1' })).resolves.toEqual(result);
+      await expect(controller.refresh(req as any, res as any)).resolves.toEqual({
+        token: 'new-token',
+        user: result.user,
+      });
+      expect(service.refresh).toHaveBeenCalledWith('refresh-1');
+      expect(res.cookie).toHaveBeenCalledWith('sf_token', 'new-token', expect.objectContaining({ httpOnly: true }));
+      expect(res.cookie).toHaveBeenCalledWith('sf_refresh', 'refresh-2', expect.objectContaining({ httpOnly: true }));
     });
   });
 });

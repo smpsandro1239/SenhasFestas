@@ -3,6 +3,15 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
+import { TOKEN_COOKIE } from './auth.controller';
+
+function cookieExtractor(req: any): string | null {
+  const cookieValue = req?.cookies?.[TOKEN_COOKIE];
+  if (typeof cookieValue === 'string' && cookieValue.length > 0) {
+    return cookieValue;
+  }
+  return null;
+}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -15,7 +24,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new Error('Configuração inválida: define JWT_SECRET no .env');
     }
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        cookieExtractor,
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ]),
       ignoreExpiration: false,
       secretOrKey: jwtSecret,
       algorithms: ['HS256'],

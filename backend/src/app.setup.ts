@@ -1,6 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
+import cookieParser from 'cookie-parser';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { AppModule } from './app.module';
 
@@ -33,6 +34,8 @@ export async function criarAplicacao(opcoes: CriarAplicacaoOpcoes = {}): Promise
       next();
     });
   }
+
+  app.use(cookieParser());
 
   app.setGlobalPrefix('api', { exclude: ['api/docs'] });
 
