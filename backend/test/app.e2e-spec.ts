@@ -1,15 +1,47 @@
 import { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { Client } from 'pg';
 import request from 'supertest';
 import * as bcrypt from 'bcryptjs';
 import { criarAplicacao } from '../src/app.setup';
 import { UserEntity } from '../src/entities';
 import { AuthService } from '../src/modules/auth/auth.service';
 
+const PROBE_TIMEOUT_MS = 5000;
+
+async function verificarBaseDadosDisponivel(): Promise<void> {
+  const url = process.env.DATABASE_URL;
+  const client = new Client({
+    connectionString: url || undefined,
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    user: process.env.DB_USERNAME || 'postgres',
+    password: process.env.DB_PASSWORD || 'postgres',
+    database: process.env.DB_NAME || 'senhasfestas',
+    ssl: url ? { rejectUnauthorized: false } : undefined,
+  });
+  await Promise.race([
+    client.connect(),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`timeout após ${PROBE_TIMEOUT_MS}ms`)), PROBE_TIMEOUT_MS),
+    ),
+  ]);
+  await client.end();
+}
+
 describe('App e2e (Postgres + Redis)', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
+    try {
+      await verificarBaseDadosDisponivel();
+    } catch (error) {
+      throw new Error(
+        `e2e requer Postgres local acessível. Rejeitado no pré-voo: ${(error as Error).message}. ` +
+          'Corre `docker compose up -d postgres redis` na raiz do repositório (com POSTGRES_PASSWORD definido no .env raiz) e tenta de novo.',
+      );
+    }
+
     app = await criarAplicacao({ swagger: false });
     await app.init();
 
