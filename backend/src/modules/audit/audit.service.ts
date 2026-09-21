@@ -68,7 +68,10 @@ export class AuditService {
       });
       await this.auditLogRepository.save(log);
     } catch (error) {
-      this.logger.warn(`Falha ao registar auditoria (${input.action}): ${(error as Error).message}`);
+      this.logger.error(
+        `Falha ao registar auditoria action=${input.action} entity=${input.entity ?? '-'} entityId=${input.entityId ?? '-'} actorId=${input.actorId ?? '-'}`,
+        (error as Error).stack,
+      );
     }
   }
 
