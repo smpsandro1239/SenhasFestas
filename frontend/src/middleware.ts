@@ -8,6 +8,7 @@ const ROLE_GATES: Record<string, string[]> = {
   '/relatorios': ['superadmin', 'organizer', 'cashier', 'treasurer'],
   '/caixa': ['superadmin', 'organizer', 'cashier', 'treasurer'],
   '/cozinha': ['superadmin', 'organizer', 'kitchen', 'bar'],
+  '/pos': ['superadmin', 'organizer', 'cashier', 'treasurer'],
 };
 
 function isPublic(pathname: string): boolean {
