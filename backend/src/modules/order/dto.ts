@@ -2,7 +2,10 @@ import {
   IsString,
   IsUUID,
   IsInt,
+  IsNumber,
   Min,
+  Max,
+  MaxLength,
   IsArray,
   IsOptional,
   IsEnum,
@@ -16,10 +19,12 @@ export class CreateOrderItemDto {
 
   @IsInt()
   @Min(1)
+  @Max(999)
   quantity: number;
 
   @IsString()
   @IsOptional()
+  @MaxLength(200)
   notes?: string;
 }
 
@@ -32,10 +37,12 @@ export class CreateOrderDto {
 
   @IsString()
   @IsOptional()
+  @MaxLength(50)
   tableNumber?: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(50)
   station?: string;
 
   @IsUUID()
@@ -46,6 +53,7 @@ export class CreateOrderDto {
   @IsOptional()
   paymentMethod?: string;
 
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @IsOptional()
   balanceUsed?: number;
