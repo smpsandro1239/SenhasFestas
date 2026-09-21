@@ -1,10 +1,11 @@
-import { IsString, IsNumber, IsOptional, IsUUID } from 'class-validator';
+import { IsNumber, IsOptional, IsPositive, IsString, IsUUID } from 'class-validator';
 
 export class CreateCashClosureDto {
   @IsUUID()
   eventId: string;
 
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
   @IsOptional()
   openingBalance?: number;
 
@@ -18,7 +19,8 @@ export class CreateCashClosureDto {
 }
 
 export class CloseCashClosureDto {
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
   totalActual: number;
 
   @IsString()

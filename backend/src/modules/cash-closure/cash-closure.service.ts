@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { CashClosureEntity } from '../../entities';
 import { MembershipService } from '../../common/membership.service';
 import { CreateCashClosureDto, CloseCashClosureDto } from './dto';
+import { centavos } from '../../common/money';
 
 @Injectable()
 export class CashClosureService {
@@ -22,7 +23,7 @@ export class CashClosureService {
     const novoFecho = this.cashClosureRepository.create({
       eventId: dto.eventId,
       openedById: operadorId,
-      openingBalance: dto.openingBalance || 0,
+      openingBalance: dto.openingBalance === undefined ? 0 : centavos(dto.openingBalance),
       openedAt: new Date(),
       notes: dto.notes,
       status: 'open',
@@ -49,7 +50,7 @@ export class CashClosureService {
     }
 
     fecho.closedAt = new Date();
-    fecho.closingBalance = dto.totalActual;
+    fecho.closingBalance = centavos(dto.totalActual);
     fecho.status = 'closed';
     if (dto.notes) fecho.notes = dto.notes;
 
