@@ -70,8 +70,9 @@ export class RegisterDto {
 }
 
 export class RefreshTokenDto {
+  @IsOptional()
   @IsString()
-  refreshToken: string;
+  refreshToken?: string;
 }
 
 @Controller('auth')

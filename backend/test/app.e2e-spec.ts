@@ -1,19 +1,16 @@
 import { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
+import * as bcrypt from 'bcryptjs';
+import { criarAplicacao } from '../src/app.setup';
+import { UserEntity } from '../src/entities';
+import { AuthService } from '../src/modules/auth/auth.service';
 
 describe('App e2e (Postgres + Redis)', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleRef.createNestApplication();
-    app.setGlobalPrefix('api', { exclude: ['api/docs'] });
+    app = await criarAplicacao({ swagger: false });
     await app.init();
 
     const dataSource = app.get(DataSource);
@@ -27,6 +24,29 @@ describe('App e2e (Postgres + Redis)', () => {
       await app.close();
     }
   }, 30000);
+
+  async function criarUtilizadorTeste(email: string): Promise<{ email: string; password: string }> {
+    const dataSource = app.get(DataSource);
+    const userRepo = dataSource.getRepository(UserEntity);
+    const password = 'password123';
+    await userRepo.save(
+      userRepo.create({
+        email,
+        password: await bcrypt.hash(password, 10),
+        name: 'Teste E2E',
+        role: 'client',
+        accessCode: '123456',
+        isActive: true,
+      }),
+    );
+    return { email, password };
+  }
+
+  async function refreshTokenDe(email: string, password: string): Promise<string> {
+    const authService = app.get(AuthService);
+    const { refreshToken } = await authService.login(email, password);
+    return refreshToken;
+  }
 
   it('deve responder na rota de liveness', async () => {
     const response = await request(app.getHttpServer()).get('/api/health/live').expect(200);
@@ -51,5 +71,49 @@ describe('App e2e (Postgres + Redis)', () => {
     if (max < totalRequests) {
       expect(statuses).toContain(429);
     }
+  });
+
+  it('refresh aceita cookie httpOnly sem body (contrato de sessão do frontend)', async () => {
+    const { email, password } = await criarUtilizadorTeste('refresh-cookie@example.com');
+    const refreshToken = await refreshTokenDe(email, password);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .set('Cookie', `sf_refresh=${refreshToken}`)
+      .set('Content-Type', 'application/json')
+      .expect(200);
+
+    expect(response.body.token).toBeDefined();
+    expect(response.body.refreshToken).toBeUndefined();
+    const setCookie = response.headers['set-cookie'] as string[];
+    expect(setCookie.join(';')).toContain('HttpOnly');
+    expect(setCookie.join(';')).not.toContain('Domain=');
+  });
+
+  it('logout sem body limpa a sessão (200) e revoga o refresh token', async () => {
+    const { email, password } = await criarUtilizadorTeste('logout-cookie@example.com');
+    const refreshToken = await refreshTokenDe(email, password);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/logout')
+      .set('Cookie', `sf_refresh=${refreshToken}`)
+      .set('Content-Type', 'application/json')
+      .expect(200);
+
+    expect(response.headers['set-cookie']).toBeDefined();
+
+    const reutilizado = await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .set('Cookie', `sf_refresh=${refreshToken}`)
+      .set('Content-Type', 'application/json')
+      .expect(401);
+    expect(reutilizado.body.statusCode).toBe(401);
+  });
+
+  it('refresh sem cookie nem body devolve 401 (token em falta), não 400', async () => {
+    await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .set('Content-Type', 'application/json')
+      .expect(401);
   });
 });
