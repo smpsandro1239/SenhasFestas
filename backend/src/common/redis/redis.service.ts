@@ -76,6 +76,42 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
+  async sadd(key: string, member: string): Promise<number | null> {
+    if (!this.client) {
+      return null;
+    }
+    try {
+      return await this.client.sadd(key, member);
+    } catch (error) {
+      this.logger.warn(`Falha no Redis sadd(${key}): ${(error as Error).message}`);
+      return null;
+    }
+  }
+
+  async srem(key: string, member: string): Promise<number | null> {
+    if (!this.client) {
+      return null;
+    }
+    try {
+      return await this.client.srem(key, member);
+    } catch (error) {
+      this.logger.warn(`Falha no Redis srem(${key}): ${(error as Error).message}`);
+      return null;
+    }
+  }
+
+  async scard(key: string): Promise<number | null> {
+    if (!this.client) {
+      return null;
+    }
+    try {
+      return await this.client.scard(key);
+    } catch (error) {
+      this.logger.warn(`Falha no Redis scard(${key}): ${(error as Error).message}`);
+      return null;
+    }
+  }
+
   async publish(channel: string, message: string): Promise<void> {
     if (!this.client) {
       return;
