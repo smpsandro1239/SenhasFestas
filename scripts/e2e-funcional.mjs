@@ -33,7 +33,23 @@ const igual = (a, b) => Math.abs(a - b) < EPS;
 
 const pausa = (ms) => new Promise((resolver) => setTimeout(resolver, ms));
 
-async function chamar(path, { token, method = 'GET', body } = {}) {
+const cookieRefreshDe = (headers) => {
+  const sc = headers?.get?.('set-cookie') || '';
+  const m = /sf_refresh=([^;]+)/.exec(sc);
+  return m ? decodeURIComponent(m[1]) : null;
+};
+
+const cookieSemDomain = (headers) => {
+  const sc = headers?.get?.('set-cookie') || '';
+  for (const parte of sc.split(',')) {
+    if (/sf_(token|refresh)=/.test(parte) && /\bDomain=/i.test(parte)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+async function chamar(path, { token, method = 'GET', body, cookie } = {}) {
   const tentar = async () => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 25000);
@@ -43,6 +59,7 @@ async function chamar(path, { token, method = 'GET', body } = {}) {
         headers: {
           ...(body ? { 'Content-Type': 'application/json' } : {}),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(cookie ? { Cookie: cookie } : {}),
         },
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
@@ -54,9 +71,9 @@ async function chamar(path, { token, method = 'GET', body } = {}) {
       } catch {
         data = texto;
       }
-      return { status: res.status, data };
+      return { status: res.status, data, headers: res.headers };
     } catch (erro) {
-      return { status: 0, data: { erro: erro.message } };
+      return { status: 0, data: { erro: erro.message }, headers: null };
     } finally {
       clearTimeout(timer);
     }
@@ -94,8 +111,9 @@ const check = (role, criterio, ok, detalhe = '') => CHECKS.push({ role, criterio
     method: 'POST',
     body: { email: CONTAS.cashier.email, password: CONTAS.cashier.password },
   });
-  const refreshCashier = loginCashierDetalhe.data?.refreshToken;
-  check('auth', 'login-gera-refreshToken', Boolean(refreshCashier), refreshCashier ? 'ok' : 'sem refreshToken');
+  const refreshCashier = cookieRefreshDe(loginCashierDetalhe.headers);
+  check('auth', 'login-gera-refreshCookie', Boolean(refreshCashier), refreshCashier ? 'ok' : 'sem sf_refresh no Set-Cookie');
+  check('auth', 'login-cookie-host-only-sem-domain', cookieSemDomain(loginCashierDetalhe.headers), 'ok', 'Domain presente no Set-Cookie');
   if (!token.superadmin || !token.cashier || !token.client) {
     console.log('✗ Login base falhou — abortar');
     process.exit(1);
@@ -428,12 +446,13 @@ const check = (role, criterio, ok, detalhe = '') => CHECKS.push({ role, criterio
   // membros, delivery por kitchen, cancel staff, gates não cobertos)
   // ==================================================================
 
-  // ---- Auth: refresh e logout ----
-  let refreshCashierAtual = refreshCashier;
-  const refreshR = await chamar('/auth/refresh', { method: 'POST', body: { refreshToken: refreshCashierAtual } });
+  // ---- Auth: refresh e logout (via cookie httpOnly) ----
+  let refreshCookie = `sf_refresh=${refreshCashier}`;
+  const refreshR = await chamar('/auth/refresh', { method: 'POST', cookie: refreshCookie });
   check('auth', 'refresh-token', refreshR.status === 200 && Boolean(refreshR.data?.token), `status=${refreshR.status}`);
-  if (refreshR.data?.refreshToken) refreshCashierAtual = refreshR.data.refreshToken;
-  const logoutR = await chamar('/auth/logout', { method: 'POST', body: { refreshToken: refreshCashierAtual } });
+  const novoRefresh = cookieRefreshDe(refreshR.headers);
+  if (novoRefresh) refreshCookie = `sf_refresh=${novoRefresh}`;
+  const logoutR = await chamar('/auth/logout', { method: 'POST', cookie: refreshCookie });
   check('auth', 'logout', logoutR.status === 200, `status=${logoutR.status}`);
 
   // ---- Auth: registo self-service (client gera accessCode) ----
