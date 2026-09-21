@@ -5,6 +5,7 @@ import { BalanceEntity, UserEntity, BalanceMovementEntity, EventEntity, EventUse
 import { LoadBalanceDto, DeductBalanceDto } from './dto';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { toPublicUser } from '../../common/serializers';
+import { centavos, soma, subtrai } from '../../common/money';
 
 @Injectable()
 export class BalanceService {
@@ -62,11 +63,12 @@ export class BalanceService {
     balance: { id: string; currentBalance: number };
     movement: BalanceMovementEntity;
     reversedMovementId: string;
+    eventId?: string;
   }> {
     const resultado = await this.dataSource.transaction(async (manager) => {
       const movement = await manager.findOne(BalanceMovementEntity, {
         where: { id: movementId },
-        relations: { balance: { user: true } as any },
+        relations: { balance: { user: true, event: true } as any },
       });
       if (!movement) {
         throw new NotFoundException('Movimento não encontrado');
@@ -77,6 +79,20 @@ export class BalanceService {
       }
       if (movement.type !== MovementType.LOAD) {
         throw new ForbiddenException('Apenas carregamentos podem ser estornados');
+      }
+
+      // Autorização scoped pelo evento REAL do movimento (não pelo eventId da query)
+      if (actor && actor.role !== 'superadmin') {
+        const eventoMovimento = (movement.balance as any)?.event?.id as string | undefined;
+        if (!eventoMovimento) {
+          throw new ForbiddenException('Movimento sem evento associado');
+        }
+        const membro = await manager.findOne(EventUserEntity, {
+          where: { user: { id: actor.id }, event: { id: eventoMovimento } },
+        });
+        if (!membro) {
+          throw new ForbiddenException('Não pertence a este evento');
+        }
       }
 
       const locked = await manager.findOne(BalanceMovementEntity, {
@@ -97,8 +113,8 @@ export class BalanceService {
       if (!balance) {
         throw new NotFoundException('Saldo não encontrado');
       }
-      const montante = Number(locked.amount);
-      if (Number(balance.currentBalance) < montante) {
+      const montante = centavos(Number(locked.amount));
+      if (centavos(Number(balance.currentBalance)) < montante) {
         throw new ForbiddenException('Saldo insuficiente para estornar (já utilizado)');
       }
 
@@ -106,7 +122,7 @@ export class BalanceService {
       locked.reversedAt = new Date();
       await manager.save(BalanceMovementEntity, locked);
 
-      balance.currentBalance = Number(balance.currentBalance) - montante;
+      balance.currentBalance = subtrai(Number(balance.currentBalance), montante);
       const savedBalance = await manager.save(BalanceEntity, balance);
 
       const reversal = manager.create(BalanceMovementEntity, {
@@ -123,10 +139,11 @@ export class BalanceService {
         balance: { id: savedBalance.id, currentBalance: Number(savedBalance.currentBalance) },
         movement: savedReversal,
         reversedMovementId: locked.id,
+        eventId: (movement.balance as any)?.event?.id as string | undefined,
       };
     });
 
-    this.orderGateway.emitOrderUpdate(resultado.balance.id, 'balance_updated', undefined);
+    this.orderGateway.emitOrderUpdate(resultado.balance.id, 'balance_updated', resultado.eventId);
     return resultado;
   }
 
@@ -167,13 +184,13 @@ export class BalanceService {
           await manager.save(BalanceEntity, balance);
         }
 
-        balance.currentBalance = Number(balance.currentBalance) + dto.amount;
+        balance.currentBalance = soma(Number(balance.currentBalance), centavos(dto.amount));
         const saved = await manager.save(BalanceEntity, balance);
 
         const movement = manager.create(BalanceMovementEntity, {
           balance: saved,
           type: MovementType.LOAD,
-          amount: dto.amount,
+          amount: centavos(dto.amount),
           description: dto.paymentMethod || 'Carregamento',
           createdById: actor?.id,
         });
@@ -206,15 +223,15 @@ export class BalanceService {
         throw new NotFoundException('Saldo não encontrado para este cliente/evento');
       }
 
-      const montante = Number(dto.amount);
+      const montante = centavos(Number(dto.amount));
       if (montante <= 0) {
         throw new ForbiddenException('Valor de desconto inválido');
       }
-      if (Number(balance.currentBalance) < montante) {
+      if (centavos(Number(balance.currentBalance)) < montante) {
         throw new ForbiddenException('Saldo insuficiente para descontar');
       }
 
-      balance.currentBalance = Number(balance.currentBalance) - montante;
+      balance.currentBalance = subtrai(Number(balance.currentBalance), montante);
       const savedBalance = await manager.save(BalanceEntity, balance);
 
       const movement = manager.create(BalanceMovementEntity, {
