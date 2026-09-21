@@ -7,6 +7,7 @@ import { QRCodeService } from '../../services/qr-code.service';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { NotificationService } from '../../services/notification.service';
 import { MovementType } from '../../entities';
+import { centavos, soma, subtrai } from '../../common/money';
 
 @Injectable()
 export class OrderService {
@@ -63,10 +64,18 @@ export class OrderService {
         if (!product) {
           throw new NotFoundException(`Produto não encontrado: ${item.productId}`);
         }
-        total += item.quantity * Number(product.price);
+        total = centavos(total + item.quantity * centavos(Number(product.price)));
       }
 
-      const balanceUsed = Math.min(dto.balanceUsed || 0, total);
+      const balanceUsed = centavos(Math.min(dto.balanceUsed || 0, total));
+      if (dto.paymentMethod === 'balance') {
+        if (!dto.balanceId) {
+          throw new ForbiddenException('Pagamento com saldo requer balanceId');
+        }
+        if (balanceUsed < total) {
+          throw new ForbiddenException('Saldo insuficiente para cobrir o pedido');
+        }
+      }
       const order = manager.create(OrderEntity, {
         source: dto.source,
         event: event,
@@ -82,13 +91,13 @@ export class OrderService {
 
       for (const item of dto.items) {
         const product = productById.get(item.productId);
-        const unitPrice = Number(product.price);
+        const unitPrice = centavos(Number(product.price));
         const orderItem = manager.create(OrderItemEntity, {
           order: createdOrder,
           product,
           quantity: item.quantity,
           unitPrice,
-          subtotal: item.quantity * unitPrice,
+          subtotal: centavos(item.quantity * unitPrice),
           notes: item.notes,
         });
         await manager.save(OrderItemEntity, orderItem);
@@ -144,14 +153,14 @@ export class OrderService {
     if (!balance) {
       throw new NotFoundException('Saldo não encontrado');
     }
-    if (Number(balance.currentBalance) < amount) {
+    if (centavos(Number(balance.currentBalance)) < centavos(amount)) {
       throw new ForbiddenException('Saldo insuficiente');
     }
 
     const updated = await manager.update(
       BalanceEntity,
       { id: balanceId, currentBalance: balance.currentBalance },
-      { currentBalance: Number(balance.currentBalance) - amount },
+      { currentBalance: subtrai(Number(balance.currentBalance), centavos(amount)) },
     );
     if (!updated.affected) {
       throw new ForbiddenException('Saldo alterado, tente novamente');
@@ -306,13 +315,13 @@ export class OrderService {
           lock: { mode: 'pessimistic_write' },
         });
         if (balance) {
-          balance.currentBalance = Number(balance.currentBalance) + Number(currentOrder.balanceUsed);
+          balance.currentBalance = soma(Number(balance.currentBalance), centavos(Number(currentOrder.balanceUsed)));
           await manager.save(BalanceEntity, balance);
 
           const refund = manager.create(BalanceMovementEntity, {
             balance,
             type: MovementType.REFUND,
-            amount: Number(currentOrder.balanceUsed),
+            amount: centavos(Number(currentOrder.balanceUsed)),
             orderId: updatedOrder.id,
             description: 'Reembolso por cancelamento',
           });
