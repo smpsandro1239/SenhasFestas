@@ -56,7 +56,7 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USERNAME: ${POSTGRES_USER:-postgres}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env raiz}
       DB_NAME: ${POSTGRES_DB:-senhasfestas}
       DB_SSL: ${DB_SSL:-false}
       REDIS_URL: redis://redis:6379

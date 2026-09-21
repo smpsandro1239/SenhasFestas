@@ -4,7 +4,7 @@ import { ProductSeederService } from './seeds/product.seeder';
 import { criarAplicacao } from './app.setup';
 
 async function bootstrap() {
-  const app = await criarAplicacao();
+  const app = await criarAplicacao({ swagger: process.env.NODE_ENV !== 'production' });
   const configService = app.get(ConfigService);
 
   if (configService.get<string>('NODE_ENV') === 'development') {
