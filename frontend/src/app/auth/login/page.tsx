@@ -12,16 +12,6 @@ import { Alert } from '@/components/ui/alert';
 import { UserIcon, LockIcon } from '@/components/ui/icons';
 import { homeForRole } from '@/lib/roles';
 
-const TEST_ACCOUNTS = [
-  { role: 'superadmin', email: 'admin@senhasfestas.com', password: 'admin123' },
-  { role: 'organizer', email: 'organizer@senhasfestas.com', password: 'organizer123' },
-  { role: 'cashier', email: 'cashier@senhasfestas.com', password: 'cashier123' },
-  { role: 'bar', email: 'bar@senhasfestas.com', password: 'bar123' },
-  { role: 'kitchen', email: 'kitchen@senhasfestas.com', password: 'kitchen123' },
-  { role: 'treasurer', email: 'treasurer@senhasfestas.com', password: 'treasurer123' },
-  { role: 'client', email: 'client@senhasfestas.com', password: 'client123' },
-];
-
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -90,33 +80,6 @@ export default function LoginPage() {
               Registe-se
             </Link>
           </p>
-        </div>
-
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-            Contas de teste (para cada role)
-          </p>
-          <ul className="space-y-1.5">
-            {TEST_ACCOUNTS.map((account) => (
-              <li key={account.email}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail(account.email);
-                    setPassword(account.password);
-                  }}
-                  className="group flex w-full items-center justify-between rounded-lg px-2 py-1 text-left text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-                >
-                  <span>
-                    <span className="font-medium text-zinc-300">{account.role}</span>{' '}
-                    <span className="text-zinc-400">· {account.email}</span>
-                  </span>
-                  <span className="font-mono text-zinc-400 group-hover:text-zinc-400">{account.password}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 text-[11px] text-zinc-400">Clique numa conta para preencher email e palavra-passe.</p>
         </div>
       </div>
     </AuthLayout>
