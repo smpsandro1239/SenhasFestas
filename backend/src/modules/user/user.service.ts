@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, ILike, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -78,6 +78,27 @@ export class UserService {
       const ids = scope.length > 0 ? await this.idsDeMembros(scope) : [];
       if (!ids.includes(id)) {
         throw new NotFoundException('Utilizador não encontrado');
+      }
+    }
+    return user;
+  }
+
+  async findByAccessCode(code: string, utilizador?: any): Promise<Partial<UserEntity>> {
+    if (!/^\d{6}$/.test(code)) {
+      throw new BadRequestException('Código de acesso inválido');
+    }
+    const user = await this.userRepository.findOne({
+      where: { accessCode: code },
+      select: CAMPOS_PUBLICOS as any,
+    });
+    if (!user) {
+      throw new NotFoundException('Nenhum cliente encontrado com esse código.');
+    }
+    const scope = await this.membershipService.eventIdsFor(utilizador);
+    if (scope !== null) {
+      const ids = scope.length > 0 ? await this.idsDeMembros(scope) : [];
+      if (!ids.includes(user.id)) {
+        throw new NotFoundException('Nenhum cliente encontrado com esse código.');
       }
     }
     return user;

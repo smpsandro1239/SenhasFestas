@@ -23,6 +23,12 @@ export class UserController {
     return this.userService.findAll(req.user, q);
   }
 
+  @Get('by-access-code/:code')
+  @Roles(...STAFF_ROLES)
+  async findByAccessCode(@Param('code') code: string, @Request() req: any) {
+    return this.userService.findByAccessCode(code, req.user);
+  }
+
   @Get(':id')
   @Roles(...STAFF_ROLES)
   async findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
