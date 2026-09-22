@@ -144,7 +144,7 @@ async function request<T>(
       signal: controller.signal,
     });
   } catch {
-    throw new ApiError('NÃ£o foi possÃ­vel contactar o servidor. Tente novamente.', 0);
+    throw new ApiError('Não foi possível contactar o servidor. Tente novamente.', 0);
   } finally {
     clearTimeout(timer);
   }
@@ -155,11 +155,11 @@ async function request<T>(
       return request<T>(endpoint, options, false);
     }
     destroySession();
-    throw new ApiError('SessÃ£o expirada. Inicie sessÃ£o novamente.', 401);
+    throw new ApiError('Sessão expirada. Inicie sessão novamente.', 401);
   }
 
   if (!response.ok) {
-    const message = (await readErrorBody(response)) || `Erro na requisiÃ§Ã£o (${response.status})`;
+    const message = (await readErrorBody(response)) || `Erro na requisição (${response.status})`;
     throw new ApiError(message, response.status);
   }
 
@@ -208,7 +208,7 @@ export async function logout(): Promise<void> {
       credentials: 'include',
     });
   } catch {
-    // sessÃ£o local Ã© sempre limpa no fim
+    // sessão local é sempre limpa no fim
   }
   destroySession(false);
 }
@@ -339,6 +339,10 @@ export async function updateEvent(id: string, data: any): Promise<any> {
 export async function getUsers(q?: string): Promise<any> {
   const query = q ? `?q=${encodeURIComponent(q)}` : '';
   return apiRequest(`/users${query}`);
+}
+
+export async function getUserByAccessCode(code: string): Promise<any> {
+  return apiRequest(`/users/by-access-code/${encodeURIComponent(code)}`);
 }
 
 export async function getUserById(userId: string): Promise<any> {

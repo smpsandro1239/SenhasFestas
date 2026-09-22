@@ -14,7 +14,7 @@ import { CashIcon, QrIcon } from '@/components/ui/icons';
 import { QrScanner } from '@/components/ui/qr-scanner';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
-import { getOpenCash, openCash, closeCash, getCashByEvent, getUsers, getUserById, loadBalance, deductBalance, getBalance, reverseLoad } from '@/lib/api';
+import { getOpenCash, openCash, closeCash, getCashByEvent, getUsers, getUserById, getUserByAccessCode, loadBalance, deductBalance, getBalance, reverseLoad } from '@/lib/api';
 
 function formatDateTime(value: string | Date): string {
   const date = typeof value === 'string' ? new Date(value) : value;
@@ -223,13 +223,8 @@ function CaixaPage() {
     setError('');
     setSuccess('');
     try {
-      const resultado = await getUsers(c);
-      const candidatos = Array.isArray(resultado)
-        ? resultado.filter((u: any) => u.role === 'client')
-        : [];
-      const cliente =
-        candidatos.find((u: any) => String(u.accessCode ?? '').trim() === c) ?? candidatos[0];
-      if (!cliente) {
+      const cliente = await getUserByAccessCode(c);
+      if (!cliente || cliente.role !== 'client') {
         setError('Nenhum cliente encontrado com esse código.');
         return;
       }
@@ -238,7 +233,11 @@ function CaixaPage() {
       setSuccess(`Cliente ${cliente.name} identificado pelo código.`);
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
-      setError(err?.message ?? 'Erro ao procurar o código');
+      setError(
+        err?.status === 404
+          ? 'Nenhum cliente encontrado com esse código.'
+          : (err?.message ?? 'Erro ao procurar o código'),
+      );
     } finally {
       setLoading(false);
     }
