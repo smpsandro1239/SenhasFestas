@@ -24,7 +24,8 @@
     "docker:infra:down": "docker compose stop postgres redis",
     "lint": "cd backend && npm run lint && cd ../frontend && npm run lint",
     "test": "cd backend && npm test",
-    "test:e2e": "cd backend && npm run test:e2e"
+    "test:e2e": "cd backend && npm run test:e2e",
+    "test:e2e:browser": "cd frontend && npm run test:e2e:browser"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

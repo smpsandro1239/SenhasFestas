@@ -13,6 +13,10 @@ dist/
 
 # Test
 coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
 
 # Misc
 .DS_Store

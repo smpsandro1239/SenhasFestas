@@ -80,7 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setUser(null);
     setToken(null);
-    apiLogout();
+    void apiLogout().finally(() => {
+      window.location.assign('/auth/login');
+    });
   };
 
   return (
