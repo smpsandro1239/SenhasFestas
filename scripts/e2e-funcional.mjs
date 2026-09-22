@@ -5,6 +5,14 @@
  * bug "FOR UPDATE nullable outer join" (compra com saldo -> 500).
  *
  * Uso:
+ *   Exporta as credenciais das 7 contas antes de correr (zero segredos em código):
+ *     E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD
+ *     E2E_ORGANIZER_EMAIL / E2E_ORGANIZER_PASSWORD
+ *     E2E_CASHIER_EMAIL / E2E_CASHIER_PASSWORD
+ *     E2E_BAR_EMAIL / E2E_BAR_PASSWORD
+ *     E2E_KITCHEN_EMAIL / E2E_KITCHEN_PASSWORD
+ *     E2E_TREASURER_EMAIL / E2E_TREASURER_PASSWORD
+ *     E2E_CLIENT_EMAIL / E2E_CLIENT_PASSWORD
  *   node scripts/e2e-funcional.mjs
  *   BASE_URL=http://localhost:3000/api node scripts/e2e-funcional.mjs
  */
@@ -18,14 +26,25 @@ const EV_CLASS = join(RAIZ, 'docs', 'auditoria');
 
 const BASE = (process.env.BASE_URL || 'https://senhasfestas-api.vercel.app/api').replace(/\/+$/, '');
 
+const exigirEnv = (nome) => {
+  const valor = process.env[nome];
+  if (!valor) {
+    throw new Error(
+      `Falta ${nome} no env. Este script não tem credenciais em código — ` +
+        `exporta as E2E_*_EMAIL/E2E_*_PASSWORD antes de correr (ver topo do script).`,
+    );
+  }
+  return valor;
+};
+
 const CONTAS = {
-  superadmin: { email: 'admin@senhasfestas.com', password: 'admin123' },
-  organizer: { email: 'organizer@senhasfestas.com', password: 'organizer123' },
-  cashier: { email: 'cashier@senhasfestas.com', password: 'cashier123' },
-  bar: { email: 'bar@senhasfestas.com', password: 'bar123' },
-  kitchen: { email: 'kitchen@senhasfestas.com', password: 'kitchen123' },
-  treasurer: { email: 'treasurer@senhasfestas.com', password: 'treasurer123' },
-  client: { email: 'client@senhasfestas.com', password: 'client123' },
+  superadmin: { email: exigirEnv('E2E_ADMIN_EMAIL'), password: exigirEnv('E2E_ADMIN_PASSWORD') },
+  organizer: { email: exigirEnv('E2E_ORGANIZER_EMAIL'), password: exigirEnv('E2E_ORGANIZER_PASSWORD') },
+  cashier: { email: exigirEnv('E2E_CASHIER_EMAIL'), password: exigirEnv('E2E_CASHIER_PASSWORD') },
+  bar: { email: exigirEnv('E2E_BAR_EMAIL'), password: exigirEnv('E2E_BAR_PASSWORD') },
+  kitchen: { email: exigirEnv('E2E_KITCHEN_EMAIL'), password: exigirEnv('E2E_KITCHEN_PASSWORD') },
+  treasurer: { email: exigirEnv('E2E_TREASURER_EMAIL'), password: exigirEnv('E2E_TREASURER_PASSWORD') },
+  client: { email: exigirEnv('E2E_CLIENT_EMAIL'), password: exigirEnv('E2E_CLIENT_PASSWORD') },
 };
 
 const EPS = 0.001;
@@ -206,9 +225,14 @@ const check = (role, criterio, ok, detalhe = '') => CHECKS.push({ role, criterio
   const descMov = (bal1.data?.movements ?? []).find((m) => m.type === 'consume');
   check('client', 'movimento-desconto-registado', Boolean(descMov), descMov ? `amount=${descMov.amount}` : 'sem movimento consume');
 
-  const lookupCodigo = await chamar(`/users?q=${accessCode}`, { token: token.cashier });
-  const clienteEncontrado = Array.isArray(lookupCodigo.data) && lookupCodigo.data.some((u) => u.id === clientId && String(u.accessCode ?? '') === accessCode);
-  check('cashier', 'encontrar-cliente-por-codigo', clienteEncontrado, `status=${lookupCodigo.status}`);
+  const lookupCodigo = await chamar(`/users/by-access-code/${accessCode}`, { token: token.cashier });
+  const clienteEncontrado =
+    lookupCodigo.status === 200 &&
+    lookupCodigo.data?.id === clientId &&
+    String(lookupCodigo.data?.accessCode ?? '') === accessCode;
+  check('cashier', 'encontrar-cliente-por-codigo(endpoint-exato)', clienteEncontrado, `status=${lookupCodigo.status}`);
+  const lookupInexistente = await chamar('/users/by-access-code/000000', { token: token.cashier });
+  check('cashier', 'codigo-inexistente-devolve-404', lookupInexistente.status === 404, `status=${lookupInexistente.status}`);
 
   const publico = await chamar(`/public/pedidos-recebidos?eventId=${eventoId}`); // sem token
   const semLeak = !JSON.stringify(publico.data ?? {}).includes('accessCode');

@@ -3,6 +3,14 @@
  * Testa as 7 roles contra a API em produção/local e escreve evidências em docs/auditoria/.
  *
  * Uso:
+ *   Exporta as credenciais das 7 contas antes de correr (zero segredos em código):
+ *     E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD
+ *     E2E_ORGANIZER_EMAIL / E2E_ORGANIZER_PASSWORD
+ *     E2E_CASHIER_EMAIL / E2E_CASHIER_PASSWORD
+ *     E2E_BAR_EMAIL / E2E_BAR_PASSWORD
+ *     E2E_KITCHEN_EMAIL / E2E_KITCHEN_PASSWORD
+ *     E2E_TREASURER_EMAIL / E2E_TREASURER_PASSWORD
+ *     E2E_CLIENT_EMAIL / E2E_CLIENT_PASSWORD
  *   node scripts/e2e-roles.mjs
  *   BASE_URL=https://localhost:3000/api NODE_TLS_REJECT_UNAUTHORIZED=0 node scripts/e2e-roles.mjs
  */
@@ -16,14 +24,25 @@ const EV_CLASS = join(RAIZ, 'docs', 'auditoria');
 
 const BASE = (process.env.BASE_URL || 'https://senhasfestas-api.vercel.app/api').replace(/\/+$/, '');
 
+const exigirEnv = (nome) => {
+  const valor = process.env[nome];
+  if (!valor) {
+    throw new Error(
+      `Falta ${nome} no env. Este script não tem credenciais em código — ` +
+        `exporta as E2E_*_EMAIL/E2E_*_PASSWORD antes de correr (ver topo do script).`,
+    );
+  }
+  return valor;
+};
+
 const CONTAS = [
-  { role: 'superadmin', email: 'admin@senhasfestas.com', password: 'admin123' },
-  { role: 'organizer', email: 'organizer@senhasfestas.com', password: 'organizer123' },
-  { role: 'cashier', email: 'cashier@senhasfestas.com', password: 'cashier123' },
-  { role: 'bar', email: 'bar@senhasfestas.com', password: 'bar123' },
-  { role: 'kitchen', email: 'kitchen@senhasfestas.com', password: 'kitchen123' },
-  { role: 'treasurer', email: 'treasurer@senhasfestas.com', password: 'treasurer123' },
-  { role: 'client', email: 'client@senhasfestas.com', password: 'client123' },
+  { role: 'superadmin', email: exigirEnv('E2E_ADMIN_EMAIL'), password: exigirEnv('E2E_ADMIN_PASSWORD') },
+  { role: 'organizer', email: exigirEnv('E2E_ORGANIZER_EMAIL'), password: exigirEnv('E2E_ORGANIZER_PASSWORD') },
+  { role: 'cashier', email: exigirEnv('E2E_CASHIER_EMAIL'), password: exigirEnv('E2E_CASHIER_PASSWORD') },
+  { role: 'bar', email: exigirEnv('E2E_BAR_EMAIL'), password: exigirEnv('E2E_BAR_PASSWORD') },
+  { role: 'kitchen', email: exigirEnv('E2E_KITCHEN_EMAIL'), password: exigirEnv('E2E_KITCHEN_PASSWORD') },
+  { role: 'treasurer', email: exigirEnv('E2E_TREASURER_EMAIL'), password: exigirEnv('E2E_TREASURER_PASSWORD') },
+  { role: 'client', email: exigirEnv('E2E_CLIENT_EMAIL'), password: exigirEnv('E2E_CLIENT_PASSWORD') },
 ];
 
 async function chamar(path, { token, method = 'GET', body } = {}) {
