@@ -14,7 +14,10 @@
  * bcrypt na DB e reporta apenas o email + estado. Só altera a coluna password.
  */
 import { randomBytes } from 'node:crypto';
-import { hash as bcryptHash } from 'bcryptjs';
+import { createRequire } from 'node:module';
+
+// pg e bcryptjs vivem em backend/node_modules — resolver a partir de lá, não da raiz.
+const require = createRequire(new URL('../backend/package.json', import.meta.url));
 
 const EMAILS_PROD = [
   'admin@senhasfestas.com',
@@ -65,11 +68,11 @@ try {
 
   for (const linha of proximo.rows) {
     const nova = randomBytes(24).toString('base64');
-    const hash = await bcryptHash(nova, 10);
+    const hash = require('bcryptjs').hash(nova, 10);
     await cliente.query(`UPDATE "users" SET password = $1 WHERE email = $2`, [hash, linha.email]);
     console.log(`  ~ ${linha.email}: password ROTACIONADA (nova não impressa)`);
   }
-  console.log('\nConcluído. Roda agora a rotação da password do Neon no dashboard e o reset do `node scripts/e2e-*.mjs` (as E2E_* passam a refletir as novas).');
+  console.log('\nConcluído. Roda agora a rotação da password do Neon no dashboard e atualiza as E2E_* do teu env com as novas passwords (não as imprimo aqui).');
 } finally {
   await cliente.end().catch(() => {});
 }

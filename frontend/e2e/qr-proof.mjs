@@ -10,6 +10,12 @@
  * qualquer falha de getUserMedia só pode vir da Permissions-Policy.
  * 1) Controlo em https://example.com  -> deve ABRIR (prova que o método funciona).
  * 2) Alvo em E2E_BASE_URL (origem com o header) -> se falhar NotAllowedError, está bloqueada.
+ *
+ * Exit codes (diagnóstico/guarda, alvo saudável = 0):
+ *   0 = câmara ABRE na origem (esperado com camera=(self))
+ *   1 = câmara BLOQUEADA pela policy (regressão -> alarme)
+ *   2 = controlo falhou (método de prova inválido)
+ *   3 = erro inesperado no alvo
  */
 import { chromium } from '@playwright/test';
 
@@ -61,12 +67,12 @@ try {
     process.exit(2);
   }
   if (bloqueado) {
-    console.log('RESULTADO: câmara BLOQUEADA pela Permissions-Policy na origem.');
-    process.exit(0);
+    console.error('RESULTADO: câmara BLOQUEADA pela Permissions-Policy na origem.');
+    process.exit(1);
   }
   if (alvo.ok === true) {
     console.log('RESULTADO: câmara ABRE na origem — o scanner funciona apesar do header.');
-    process.exit(1);
+    process.exit(0);
   }
   console.error(`RESULTADO: erro inesperado (${alvo.name}) — rever com cuidado.`);
   process.exit(3);
