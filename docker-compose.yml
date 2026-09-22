@@ -67,6 +67,7 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-1}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      SEED_PASSWORD: ${SEED_PASSWORD:-}
     ports:
       - "127.0.0.1:3000:3000"
     logging: *default-logging

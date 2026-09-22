@@ -65,9 +65,11 @@ npm run migration:run
 
 ### Seed (desenvolvimento)
 
-Com `NODE_ENV=development`, o backend insere utilizadores de teste:
-`admin@senhasfestas.com / admin123` (superadmin) e `organizer@senhasfestas.com / organizer123`,
-etc. **Não usar em produção.**
+Com `NODE_ENV=development`, o backend insere utilizadores de teste
+(`admin@`, `organizer@`, `cashier@`, `bar@`, `kitchen@`, `treasurer@`, `client@` — sempre com
+domínio `senhasfestas.com`). As passwords **não vivem no repositório**: vêm de `SEED_PASSWORD`
+(env) e são derivadas por role — define `SEED_PASSWORD` no `.env` raiz para desenvolvimento.
+O seeder **recusa-se a correr em produção** e sem `SEED_PASSWORD`.
 
 ## 3. Duas possibilidades de execução
 
