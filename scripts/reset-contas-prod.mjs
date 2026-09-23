@@ -41,11 +41,16 @@ if (APLICAR && !/postgres(ql)?:\/\//.test(DATABASE_URL)) {
   process.exit(1);
 }
 
-const { default: pg } = await import('pg');
-const cliente = new pg.Client({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
+const { Client } = require('pg');
+const cliente = new Client({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
 try {
-  await cliente.connect();
+  try {
+    await cliente.connect();
+  } catch (erro) {
+    console.error('Não consegui ligar à base (revê DATABASE_URL, rede e SSL):', erro.message);
+    process.exit(1);
+  }
   const proximo = await cliente.query(
     `SELECT email, role, "isActive" FROM "users" WHERE email = ANY($1) ORDER BY email`,
     [EMAILS_PROD],
@@ -68,7 +73,7 @@ try {
 
   for (const linha of proximo.rows) {
     const nova = randomBytes(24).toString('base64');
-    const hash = require('bcryptjs').hash(nova, 10);
+    const hash = await require('bcryptjs').hash(nova, 10);
     await cliente.query(`UPDATE "users" SET password = $1 WHERE email = $2`, [hash, linha.email]);
     console.log(`  ~ ${linha.email}: password ROTACIONADA (nova não impressa)`);
   }
