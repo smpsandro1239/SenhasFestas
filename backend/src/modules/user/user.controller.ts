@@ -37,8 +37,8 @@ export class UserController {
 
   @Post()
   @Roles(...MANAGEMENT_ROLES)
-  async create(@Body() dto: CreateUserDto) {
-    return this.userService.create(dto);
+  async create(@Request() req: any, @Body() dto: CreateUserDto) {
+    return this.userService.create(dto, req.user);
   }
 
   @Patch(':id')

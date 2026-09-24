@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, ILike, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -104,7 +104,12 @@ export class UserService {
     return user;
   }
 
-  async create(dto: CreateUserDto): Promise<Partial<UserEntity>> {
+  async create(dto: CreateUserDto, actor?: UserEntity): Promise<Partial<UserEntity>> {
+    // Autorização de campo: criar superadmin é exclusivo de um superadmin (defesa em
+    // profundidade — o DTO já rejeita o valor; esta cláusula protege futuros alargamentos).
+    if (dto.role === 'superadmin' && actor?.role !== 'superadmin') {
+      throw new ForbiddenException('Apenas um superadmin pode criar outro superadmin');
+    }
     const existing = await this.userRepository.findOne({ where: { email: dto.email } });
     if (existing) {
       throw new ConflictException('Email já em uso');

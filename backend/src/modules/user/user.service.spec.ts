@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { UserService } from './user.service';
 
 const mockUserRepository = {
@@ -36,6 +36,53 @@ describe('UserService', () => {
       mockEventUserRepository as any,
       mockMembershipService as any,
     );
+  });
+
+  describe('create', () => {
+    it('rejeita criação de superadmin por ator não-superadmin', async () => {
+      await expect(
+        service.create(
+          {
+            email: 'x@example.com',
+            password: 'pass1234',
+            name: 'X',
+            role: 'superadmin',
+          },
+          { id: 'organizer', role: 'organizer' } as any,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('permite criação de superadmin por um superadmin', async () => {
+      mockUserRepository.findOne.mockResolvedValue(null);
+      mockUserRepository.create.mockReturnValue({ id: 'u2' });
+      mockUserRepository.save.mockResolvedValue({ id: 'u2', role: 'superadmin' });
+
+      await expect(
+        service.create(
+          {
+            email: 'x@example.com',
+            password: 'pass1234',
+            name: 'X',
+            role: 'superadmin',
+          },
+          { id: 'boss', role: 'superadmin' } as any,
+        ),
+      ).resolves.toBeDefined();
+    });
+
+    it('permite criação de roles staff por ator não-superadmin (guarda de rota é MANAGEMENT)', async () => {
+      mockUserRepository.findOne.mockResolvedValue(null);
+      mockUserRepository.create.mockReturnValue({ id: 'u3' });
+      mockUserRepository.save.mockResolvedValue({ id: 'u3', role: 'organizer' });
+
+      await expect(
+        service.create(
+          { email: 'y@example.com', password: 'pass1234', name: 'Y', role: 'organizer' },
+          { id: 'organizer', role: 'organizer' } as any,
+        ),
+      ).resolves.toBeDefined();
+    });
   });
 
   describe('findByAccessCode', () => {

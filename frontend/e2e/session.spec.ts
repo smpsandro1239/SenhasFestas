@@ -5,7 +5,11 @@ import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 // falha com mensagem clara se faltarem. Não precisa da chave de assinatura —
 // a renovação é exercitada por cookie (sem corpo, sem forjar tokens).
 
-const BASE = process.env.E2E_BASE_URL || 'https://senhas-festas-ten.vercel.app';
+const BASE = process.env.E2E_BASE_URL
+  ? process.env.E2E_BASE_URL
+  : (() => {
+      throw new Error('Falta E2E_BASE_URL. A suite não corre contra produção por omissão.');
+    })();
 
 function exigirEnv(nome: string): string {
   const valor = process.env[nome];

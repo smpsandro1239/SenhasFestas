@@ -11,7 +11,7 @@ export class CreateUserDto {
   @IsString()
   name: string;
 
-  @IsIn(['superadmin', 'organizer', 'cashier', 'bar', 'kitchen', 'treasurer'])
+  @IsIn(['organizer', 'cashier', 'bar', 'kitchen', 'treasurer'])
   role: string;
 
   @IsOptional()
