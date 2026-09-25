@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { OrderEntity, OrderItemEntity, BalanceMovementEntity, BalanceEntity } from '../../entities';
 import { MembershipService } from '../../common/membership.service';
-import { OrdensQueryDto, SaldoQueryDto, TopProductsQueryDto } from './dto';
+import { OrdensQueryDto, SaldoQueryDto, TopProductsQueryDto, TotalQueryDto } from './dto';
 
 const LIMITE_EXPORTACAO = 5000;
 
@@ -157,6 +157,33 @@ export class ReportsService {
     }
 
     return query.getRawMany();
+  }
+
+  async obterTotalVendas(filtros: TotalQueryDto, utilizador: any) {
+    const eventIds = await this.membershipService.eventIdsFor(utilizador);
+
+    const query = this.orderRepository
+      .createQueryBuilder('orden')
+      .select('COALESCE(SUM(orden.total), 0)', 'total')
+      .addSelect('COUNT(orden.id)', 'pedidos')
+      .where('orden.status != :cancelado', { cancelado: 'cancelled' });
+
+    const scope = this.membershipService.eventColumnFor(eventIds, filtros?.eventId);
+    if (scope) {
+      query.andWhere('orden.' + scope.column, scope.params);
+    }
+    if (filtros?.from) {
+      query.andWhere('orden.createdAt >= :desde', { desde: filtros.from });
+    }
+    if (filtros?.to) {
+      query.andWhere('orden.createdAt <= :ate', { ate: filtros.to });
+    }
+
+    const linha = await query.getRawOne();
+    return {
+      total: Number(linha?.total ?? 0),
+      pedidos: Number(linha?.pedidos ?? 0),
+    };
   }
 
   async obterEstatisticas(utilizador?: any) {

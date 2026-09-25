@@ -1,4 +1,4 @@
-import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, IsUUID, IsDateString, Max, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class OrdensQueryDto {
@@ -39,4 +39,18 @@ export class TopProductsQueryDto {
   @IsUUID()
   @IsOptional()
   eventId?: string;
+}
+
+export class TotalQueryDto {
+  @IsUUID()
+  @IsOptional()
+  eventId?: string;
+
+  @IsDateString()
+  @IsOptional()
+  from?: string;
+
+  @IsDateString()
+  @IsOptional()
+  to?: string;
 }
