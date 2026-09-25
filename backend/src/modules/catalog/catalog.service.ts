@@ -38,6 +38,7 @@ export class CatalogService {
   }
 
   async findSuggestions(
+    user: UserEntity,
     eventId: string | undefined,
     productId: string,
     limit = 4,
@@ -50,6 +51,9 @@ export class CatalogService {
       throw new NotFoundException('Produto não encontrado');
     }
     const escopoEvento = eventId ?? target.event?.id;
+    if (escopoEvento) {
+      await this.membershipService.assertMember(user, escopoEvento);
+    }
 
     // 1. Data-driven: co-occurrence from real orders (non-cancelled) of the same event.
     // Products that appear in the same order as the target product, ranked by frequency.

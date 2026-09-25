@@ -41,8 +41,11 @@ const mockMembershipService = {
 describe('CatalogService', () => {
   let service: CatalogService;
 
+  const MEMBRO = { id: 'membro', role: 'organizer' } as any;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMembershipService.assertMember.mockResolvedValue(undefined);
     service = new CatalogService(
       mockProductRepository as any,
       mockCategoryRepository as any,
@@ -147,7 +150,7 @@ describe('CatalogService', () => {
         { id: 'p3' },
       ]);
 
-      const result: any = await service.findSuggestions('e1', 'p1', 4);
+      const result: any = await service.findSuggestions(MEMBRO, 'e1', 'p1', 4);
 
       expect(result.source).toBe('cooccurrence');
       expect(result.items).toEqual([{ id: 'p2' }, { id: 'p3' }]);
@@ -169,7 +172,7 @@ describe('CatalogService', () => {
         { id: 'p1' },
       ]);
 
-      const result: any = await service.findSuggestions('e1', 'p1', 4);
+      const result: any = await service.findSuggestions(MEMBRO, 'e1', 'p1', 4);
 
       expect(result.source).toBe('category');
       expect(result.items).toEqual([{ id: 'p2', name: 'Bifana XL' }]);
@@ -190,7 +193,7 @@ describe('CatalogService', () => {
         { id: 'p1' },
       ]);
 
-      const result: any = await service.findSuggestions(undefined, 'p1', 4);
+      const result: any = await service.findSuggestions(MEMBRO, undefined, 'p1', 4);
 
       expect(result.source).toBe('popular');
       expect(result.items).toEqual([{ id: 'p2', stock: 50 }]);
@@ -205,7 +208,7 @@ describe('CatalogService', () => {
     it('throws NotFoundException when target product is missing', async () => {
       mockProductRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.findSuggestions('e1', 'p1', 4)).rejects.toThrow(
+      await expect(service.findSuggestions(MEMBRO, 'e1', 'p1', 4)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -257,7 +260,7 @@ describe('CatalogService', () => {
         { id: 'mesmaCategoria', category: { id: 'catA' }, event: { id: 'eventoY' } },
       ]);
 
-      await service.findSuggestions(undefined, 'produtoX', 4);
+      await service.findSuggestions(MEMBRO, undefined, 'produtoX', 4);
 
       expect(mockProductRepository.find).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -281,7 +284,7 @@ describe('CatalogService', () => {
         { id: 'outroProduto', name: 'P', price: '1', stock: 1 },
       ]);
 
-      const resultado = await service.findSuggestions(undefined, 'produtoX', 4);
+      const resultado = await service.findSuggestions(MEMBRO, undefined, 'produtoX', 4);
 
       expect(resultado.source).toBe('popular');
       expect(mockProductRepository.find).toHaveBeenLastCalledWith(
@@ -289,6 +292,38 @@ describe('CatalogService', () => {
           where: expect.objectContaining({ event: { id: 'eventoX' } }),
         }),
       );
+    });
+
+    it('rejeita sugestões quando o ator não pertence ao evento indicado no query', async () => {
+      mockProductRepository.findOne.mockResolvedValue({
+        id: 'produtoY',
+        category: null,
+        event: { id: 'eventoY' },
+      });
+      mockMembershipService.assertMember.mockRejectedValue(
+        new ForbiddenException('Não pertence a este evento'),
+      );
+
+      await expect(
+        service.findSuggestions(MEMBRO, 'eventoY', 'produtoY', 4),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockMembershipService.assertMember).toHaveBeenCalledWith(MEMBRO, 'eventoY');
+    });
+
+    it('rejeita sugestões quando o ator não pertence ao evento do produto alvo', async () => {
+      mockProductRepository.findOne.mockResolvedValue({
+        id: 'produtoY',
+        category: null,
+        event: { id: 'eventoY' },
+      });
+      mockMembershipService.assertMember.mockRejectedValue(
+        new ForbiddenException('Não pertence a este evento'),
+      );
+
+      await expect(
+        service.findSuggestions(MEMBRO, undefined, 'produtoY', 4),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockMembershipService.assertMember).toHaveBeenCalledWith(MEMBRO, 'eventoY');
     });
   });
 });

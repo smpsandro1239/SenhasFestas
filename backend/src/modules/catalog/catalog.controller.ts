@@ -54,10 +54,7 @@ export class CatalogController {
     @Query() query: { eventId?: string; limit?: number },
     @Request() req: any,
   ) {
-    if (req.user.role !== 'superadmin' && query.eventId) {
-      await this.membershipService.assertMember(req.user, query.eventId);
-    }
-    return this.catalogService.findSuggestions(query.eventId, id, query.limit);
+    return this.catalogService.findSuggestions(req.user, query.eventId, id, query.limit);
   }
 
   @Post()
