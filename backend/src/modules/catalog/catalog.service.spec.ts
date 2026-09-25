@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { In } from 'typeorm';
 import { CatalogService } from './catalog.service';
 
@@ -9,6 +9,7 @@ const mockProductRepository = {
   findAndCount: vi.fn(),
   create: vi.fn(),
   save: vi.fn(),
+  softDelete: vi.fn(),
 };
 
 const mockCategoryRepository = {
@@ -33,6 +34,10 @@ const mockOrderItemRepository = {
   findOne: vi.fn(),
 };
 
+const mockMembershipService = {
+  assertMember: vi.fn(),
+};
+
 describe('CatalogService', () => {
   let service: CatalogService;
 
@@ -44,6 +49,7 @@ describe('CatalogService', () => {
       mockEventRepository as any,
       mockOrderRepository as any,
       mockOrderItemRepository as any,
+      mockMembershipService as any,
     );
   });
 
@@ -168,7 +174,7 @@ describe('CatalogService', () => {
       expect(result.source).toBe('category');
       expect(result.items).toEqual([{ id: 'p2', name: 'Bifana XL' }]);
       expect(mockProductRepository.find).toHaveBeenCalledWith({
-        where: { category: { id: 'c1' }, isActive: true },
+        where: { category: { id: 'c1' }, isActive: true, event: { id: 'e1' } },
         relations: { category: true },
         take: 5,
         order: { createdAt: 'DESC' },
@@ -201,6 +207,87 @@ describe('CatalogService', () => {
 
       await expect(service.findSuggestions('e1', 'p1', 4)).rejects.toThrow(
         NotFoundException,
+      );
+    });
+  });
+
+  describe('isolamento entre eventos', () => {
+    const ORGANIZADOR_X = { id: 'organizadorX', role: 'organizer' } as any;
+
+    it('rejeita criar produto num evento fora do scope do ator', async () => {
+      mockMembershipService.assertMember.mockRejectedValue(
+        new ForbiddenException('Não pertence a este evento'),
+      );
+      await expect(
+        service.create(ORGANIZADOR_X, { eventId: 'eventoY' } as any),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockMembershipService.assertMember).toHaveBeenCalledWith(ORGANIZADOR_X, 'eventoY');
+    });
+
+    it('rejeita atualizar produto de um evento fora do scope do ator', async () => {
+      mockProductRepository.findOne.mockResolvedValue({ id: 'produtoY', event: { id: 'eventoY' } });
+      mockMembershipService.assertMember.mockRejectedValue(
+        new ForbiddenException('Não pertence a este evento'),
+      );
+      await expect(
+        service.update('produtoY', ORGANIZADOR_X, { price: 1 } as any),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockMembershipService.assertMember).toHaveBeenCalledWith(ORGANIZADOR_X, 'eventoY');
+    });
+
+    it('rejeita eliminar produto de um evento fora do scope do ator', async () => {
+      mockProductRepository.findOne.mockResolvedValue({ id: 'produtoY', event: { id: 'eventoY' } });
+      mockMembershipService.assertMember.mockRejectedValue(
+        new ForbiddenException('Não pertence a este evento'),
+      );
+      await expect(service.softRemove('produtoY', ORGANIZADOR_X)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(mockMembershipService.assertMember).toHaveBeenCalledWith(ORGANIZADOR_X, 'eventoY');
+    });
+
+    it('sugestões sem eventId ficam limitadas ao evento do produto alvo (fallback de categoria)', async () => {
+      mockProductRepository.findOne.mockResolvedValue({
+        id: 'produtoX',
+        category: { id: 'catA' },
+        event: { id: 'eventoX' },
+      });
+      mockOrderRepository.find.mockResolvedValue([]);
+      mockProductRepository.find.mockResolvedValueOnce([
+        { id: 'mesmaCategoria', category: { id: 'catA' }, event: { id: 'eventoY' } },
+      ]);
+
+      await service.findSuggestions(undefined, 'produtoX', 4);
+
+      expect(mockProductRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            category: { id: 'catA' },
+            event: { id: 'eventoX' },
+          }),
+        }),
+      );
+    });
+
+    it('sugestões sem eventId ficam limitadas ao evento do produto alvo (fallback popular)', async () => {
+      mockProductRepository.findOne.mockResolvedValue({
+        id: 'produtoX',
+        category: { id: 'catA' },
+        event: { id: 'eventoX' },
+      });
+      mockOrderRepository.find.mockResolvedValue([]);
+      mockProductRepository.find.mockResolvedValueOnce([]);
+      mockProductRepository.find.mockResolvedValueOnce([
+        { id: 'outroProduto', name: 'P', price: '1', stock: 1 },
+      ]);
+
+      const resultado = await service.findSuggestions(undefined, 'produtoX', 4);
+
+      expect(resultado.source).toBe('popular');
+      expect(mockProductRepository.find).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ event: { id: 'eventoX' } }),
+        }),
       );
     });
   });

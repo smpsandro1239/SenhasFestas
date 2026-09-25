@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { ProductEntity, CategoryEntity, UserEntity, EventEntity, OrderEntity, OrderItemEntity } from '../../entities';
 import { In } from 'typeorm';
 import { CreateProductDto, UpdateProductDto } from './dto';
+import { MembershipService } from '../../common/membership.service';
 
 @Injectable()
 export class CatalogService {
@@ -18,6 +19,7 @@ export class CatalogService {
     private readonly orderRepository: Repository<OrderEntity>,
     @InjectRepository(OrderItemEntity)
     private readonly orderItemRepository: Repository<OrderItemEntity>,
+    private readonly membershipService: MembershipService,
   ) {}
 
   async findAll(eventId?: string, page = 1, limit = 20): Promise<{ items: ProductEntity[]; total: number; page: number; limit: number }> {
@@ -47,12 +49,13 @@ export class CatalogService {
     if (!target) {
       throw new NotFoundException('Produto não encontrado');
     }
+    const escopoEvento = eventId ?? target.event?.id;
 
     // 1. Data-driven: co-occurrence from real orders (non-cancelled) of the same event.
     // Products that appear in the same order as the target product, ranked by frequency.
     const whereOrder: Record<string, unknown> = { status: In(['received', 'preparing', 'ready', 'delivered']) };
-    if (eventId) {
-      whereOrder.event = { id: eventId };
+    if (escopoEvento) {
+      whereOrder.event = { id: escopoEvento };
     }
     const orders = await this.orderRepository.find({
       where: whereOrder,
@@ -84,7 +87,11 @@ export class CatalogService {
     // 2. Fallback: same-category products (exclude self), most recent first.
     if (target.category?.id) {
       const sameCategory = await this.productRepository.find({
-        where: { category: { id: target.category.id }, isActive: true },
+        where: {
+          category: { id: target.category.id },
+          isActive: true,
+          ...(escopoEvento ? { event: { id: escopoEvento } } : {}),
+        },
         relations: { category: true },
         take: limit + 1,
         order: { createdAt: 'DESC' },
@@ -97,8 +104,8 @@ export class CatalogService {
 
     // 3. Fallback: most popular products of the event.
     const wherePopular: Record<string, unknown> = { isActive: true };
-    if (eventId) {
-      wherePopular.event = { id: eventId };
+    if (escopoEvento) {
+      wherePopular.event = { id: escopoEvento };
     }
     const popular = await this.productRepository.find({
       where: wherePopular,
@@ -132,6 +139,7 @@ export class CatalogService {
   async create(user: UserEntity, dto: CreateProductDto): Promise<ProductEntity> {
     let event: EventEntity | undefined;
     if (dto.eventId) {
+      await this.membershipService.assertMember(user, dto.eventId);
       event = await this.eventRepository.findOne({ where: { id: dto.eventId } });
       if (!event) {
         throw new NotFoundException('Evento não encontrado');
@@ -157,12 +165,18 @@ export class CatalogService {
     dto: UpdateProductDto,
   ): Promise<ProductEntity> {
     const product = await this.findOne(id, user);
+    if (product.event?.id) {
+      await this.membershipService.assertMember(user, product.event.id);
+    }
     Object.assign(product, dto);
     return this.productRepository.save(product);
   }
 
   async softRemove(id: string, user: UserEntity): Promise<{ deleted: boolean; softDelete: boolean }> {
     const product = await this.findOne(id, user);
+    if (product.event?.id) {
+      await this.membershipService.assertMember(user, product.event.id);
+    }
     await this.productRepository.softDelete(product.id);
     return { deleted: true, softDelete: true };
   }
