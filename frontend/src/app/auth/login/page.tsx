@@ -76,7 +76,7 @@ export default function LoginPage() {
         <div className="pt-2 text-center">
           <p className="text-zinc-400">
             Ainda não tem conta?{' '}
-            <Link href="/auth/register" className="text-brand hover:text-brand-light font-medium transition-colors">
+            <Link href="/auth/register" className="text-brand-light hover:text-zinc-200 font-medium transition-colors">
               Registe-se
             </Link>
           </p>

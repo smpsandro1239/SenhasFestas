@@ -116,7 +116,7 @@ export default function RegisterPage() {
         <div className="pt-2 text-center">
           <p className="text-zinc-400">
             Já tem conta?{' '}
-            <Link href="/auth/login" className="text-brand hover:text-brand-light font-medium transition-colors">
+            <Link href="/auth/login" className="text-brand-light hover:text-zinc-200 font-medium transition-colors">
               Iniciar sessão
             </Link>
           </p>

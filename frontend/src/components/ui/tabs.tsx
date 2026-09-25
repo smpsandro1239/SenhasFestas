@@ -44,7 +44,7 @@ export function Tabs({
               'px-4 py-2.5 text-sm font-medium transition-colors duration-200',
               'flex items-center gap-2 relative',
               activeTab === item.id
-                ? 'text-brand'
+                ? 'text-brand-light'
                 : 'text-zinc-400 hover:text-zinc-200',
             )}
           >
