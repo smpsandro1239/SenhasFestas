@@ -179,7 +179,7 @@ function PublicoPage() {
                   {/* Cards list */}
                   <div className="flex-1 min-h-0 overflow-y-auto p-[1.5vw] space-y-[1.5vh]">
                     {columnOrders.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-zinc-700">
+                      <div className="h-full flex flex-col items-center justify-center text-zinc-400">
                         <span className="text-[clamp(3rem,8vw,6rem)] leading-none mb-4">💤</span>
                         <p className="text-[clamp(1.25rem,2.5vw,2rem)]">Sem pedidos</p>
                       </div>
