@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 export const metadata = {
   title: 'Estás offline — SenhasFestas',
 };
@@ -14,12 +16,12 @@ export default function OfflinePage() {
         continuam seguros no servidor — assim que a rede voltar, tudo é
         sincronizado automaticamente.
       </p>
-      <a
+      <Link
         href="/"
         className="mt-2 rounded-full bg-zinc-100 px-6 py-3 font-medium text-zinc-900 transition hover:bg-zinc-200"
       >
         Tentar novamente
-      </a>
+      </Link>
     </main>
   );
 }
