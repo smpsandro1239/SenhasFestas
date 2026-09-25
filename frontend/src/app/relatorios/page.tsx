@@ -42,7 +42,10 @@ function RelatoriosPage() {
     totalVendido: string;
   }[]>([]);
   const [stats, setStats] = useState<Estatisticas | null>(null);
-  const [orderTotal, setOrderTotal] = useState(0);
+  const [totalFetch, setTotalFetch] = useState<{ data: TotalVendas | null; falhou: boolean }>({
+    data: null,
+    falhou: false,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -57,13 +60,15 @@ function RelatoriosPage() {
     setLoading(true);
     setError('');
     try {
-      const [statsData, productsData, totalData] = await Promise.all([
+      const [statsData, productsData, totalFetchData] = await Promise.all([
         getReports('estatisticas').catch(() => null),
         getReports(
           'top-products',
           event ? { eventId: event.id } : undefined,
         ).catch(() => null),
-        getReports('total', event ? { eventId: event.id } : undefined).catch(() => null),
+        getReports('total', event ? { eventId: event.id } : undefined)
+          .then((d) => ({ data: d as TotalVendas | null, falhou: false }))
+          .catch(() => ({ data: null, falhou: true })),
       ]);
       setStats(statsData ?? null);
       setTopProducts(
@@ -71,8 +76,7 @@ function RelatoriosPage() {
           ? productsData
           : productsData?.items ?? [],
       );
-      const totalVendas = (totalData as TotalVendas | null) ?? { total: 0, pedidos: 0 };
-      setOrderTotal(Number(totalVendas.total || 0));
+      setTotalFetch(totalFetchData);
     } catch {
       setError('Erro ao carregar relatórios');
     } finally {
@@ -85,6 +89,9 @@ function RelatoriosPage() {
   }, [load]);
 
   const formatEuro = (value: number) => `€${value.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const valorTotal = totalFetch.falhou || !totalFetch.data
+    ? '—'
+    : formatEuro(Number(totalFetch.data.total || 0));
   const maxSold = Math.max(1, ...topProducts.map((p) => Number(p.totalVendido || 0)));
 
   return (
@@ -107,7 +114,7 @@ function RelatoriosPage() {
             <h2 className="text-lg font-semibold text-zinc-100 mb-4">Vendas</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
-                { label: 'Faturação (evento atual)', value: formatEuro(orderTotal), color: 'brand' as const },
+                { label: 'Faturação (evento atual)', value: valorTotal, color: 'brand' as const },
                 { label: 'Pedidos recebidos', value: String(stats?.recebidos ?? 0), color: 'blue' as const },
                 { label: 'Pedidos entregues hoje', value: String(stats?.entregues ?? 0), color: 'green' as const },
               ].map((card, idx) => (
@@ -155,7 +162,7 @@ function RelatoriosPage() {
             <h2 className="text-lg font-semibold text-zinc-100 mb-4">Saldo (movimentos)</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
-                { label: 'Consumido (evento atual)', value: formatEuro(orderTotal), color: 'orange' as const },
+                { label: 'Consumido (evento atual)', value: valorTotal, color: 'orange' as const },
                 { label: 'Pedidos em preparação', value: String(stats?.emPreparacao ?? 0), color: 'brand' as const },
                 { label: 'Pedidos prontos', value: String(stats?.prontos ?? 0), color: 'green' as const },
               ].map((card, idx) => (
