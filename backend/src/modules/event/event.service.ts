@@ -122,8 +122,18 @@ export class EventService {
     }));
   }
 
+  private assertPodeAtribuirRole(user: UserEntity, role: string): void {
+    if (role === 'superadmin') {
+      throw new ForbiddenException('Não é possível atribuir a função superadmin no evento');
+    }
+    if (user.role !== 'superadmin' && role === 'organizer') {
+      throw new ForbiddenException('Apenas o superadmin pode atribuir a função organizer');
+    }
+  }
+
   async addMember(eventId: string, user: UserEntity, dto: AddMemberDto): Promise<EventUserEntity> {
     await this.findOne(eventId, user);
+    this.assertPodeAtribuirRole(user, dto.role);
     const userId = dto.userId;
     const existing = await this.eventUserRepository.findOne({
       where: { event: { id: eventId }, user: { id: userId } },

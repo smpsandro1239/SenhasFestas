@@ -67,7 +67,7 @@ export class AddMemberDto {
   @IsString()
   userId: string;
 
-  @IsIn(['superadmin', 'organizer', 'cashier', 'bar', 'kitchen', 'treasurer', 'client'])
+  @IsIn(['organizer', 'cashier', 'bar', 'kitchen', 'treasurer', 'client'])
   role: string;
 }
 
