@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Tabs } from '@/components/ui/tabs';
 import { Alert } from '@/components/ui/alert';
 import { ChartIcon } from '@/components/ui/icons';
-import { getReports, getOrders } from '@/lib/api';
+import { getReports } from '@/lib/api';
 import { useCurrentEvent } from '@/lib/use-current-event';
 
 interface Estatisticas {
@@ -17,6 +17,11 @@ interface Estatisticas {
   prontos: number;
   entregues: number;
   total: number;
+}
+
+interface TotalVendas {
+  total: number;
+  pedidos: number;
 }
 
 export default function RelatoriosPageWrapper() {
@@ -52,13 +57,13 @@ function RelatoriosPage() {
     setLoading(true);
     setError('');
     try {
-      const [statsData, productsData, ordersData] = await Promise.all([
+      const [statsData, productsData, totalData] = await Promise.all([
         getReports('estatisticas').catch(() => null),
         getReports(
           'top-products',
           event ? { eventId: event.id } : undefined,
         ).catch(() => null),
-        getOrders().catch(() => null),
+        getReports('total', event ? { eventId: event.id } : undefined).catch(() => null),
       ]);
       setStats(statsData ?? null);
       setTopProducts(
@@ -66,8 +71,8 @@ function RelatoriosPage() {
           ? productsData
           : productsData?.items ?? [],
       );
-      const orders = Array.isArray(ordersData) ? ordersData : ordersData?.items ?? [];
-      setOrderTotal(orders.reduce((sum: number, o: { total?: number }) => sum + Number(o.total || 0), 0));
+      const totalVendas = (totalData as TotalVendas | null) ?? { total: 0, pedidos: 0 };
+      setOrderTotal(Number(totalVendas.total || 0));
     } catch {
       setError('Erro ao carregar relatórios');
     } finally {
@@ -102,7 +107,7 @@ function RelatoriosPage() {
             <h2 className="text-lg font-semibold text-zinc-100 mb-4">Vendas</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
-                { label: 'Faturação (lista atual)', value: formatEuro(orderTotal), color: 'brand' as const },
+                { label: 'Faturação (evento atual)', value: formatEuro(orderTotal), color: 'brand' as const },
                 { label: 'Pedidos recebidos', value: String(stats?.recebidos ?? 0), color: 'blue' as const },
                 { label: 'Pedidos entregues hoje', value: String(stats?.entregues ?? 0), color: 'green' as const },
               ].map((card, idx) => (
@@ -150,7 +155,7 @@ function RelatoriosPage() {
             <h2 className="text-lg font-semibold text-zinc-100 mb-4">Saldo (movimentos)</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
-                { label: 'Consumido (lista atual)', value: formatEuro(orderTotal), color: 'orange' as const },
+                { label: 'Consumido (evento atual)', value: formatEuro(orderTotal), color: 'orange' as const },
                 { label: 'Pedidos em preparação', value: String(stats?.emPreparacao ?? 0), color: 'brand' as const },
                 { label: 'Pedidos prontos', value: String(stats?.prontos ?? 0), color: 'green' as const },
               ].map((card, idx) => (
