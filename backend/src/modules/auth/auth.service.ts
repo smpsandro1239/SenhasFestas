@@ -23,6 +23,9 @@ export interface AuthResult {
 
 const REFRESH_TTL_DAYS = 30;
 
+// Comparação dummy para o login nunca distinguir "email existe" pelo tempo de resposta.
+const DUMMY_HASH = bcrypt.hashSync('senhasfestas-dummy-placeholder', 10);
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -70,16 +73,10 @@ export class AuthService {
 
   async login(email: string, password: string): Promise<AuthResult> {
     const user = await this.userRepository.findOne({ where: { email } });
-    if (!user) {
-      throw new UnauthorizedException('Credenciais inválidas');
-    }
+    const hash = user ? user.password : DUMMY_HASH;
+    const isPasswordValid = await bcrypt.compare(password, hash);
 
-    if (!user.isActive) {
-      throw new UnauthorizedException('Utilizador inativo');
-    }
-
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
+    if (!user || !user.isActive || !isPasswordValid) {
       throw new UnauthorizedException('Credenciais inválidas');
     }
 

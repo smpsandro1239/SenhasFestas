@@ -68,7 +68,7 @@ describe('AuthService', () => {
       ).rejects.toThrow(UnauthorizedException);
     });
 
-    it('throws UnauthorizedException when user is inactive', async () => {
+    it('throws UnauthorizedException when user is inactive (mensagem genérica, sem enumerar estado)', async () => {
       mockRepository.findOne.mockResolvedValue({
         id: 'u2',
         email: 'inactive@test.com',
@@ -79,7 +79,7 @@ describe('AuthService', () => {
 
       await expect(
         service.login('inactive@test.com', 'secret123'),
-      ).rejects.toThrow('Utilizador inativo');
+      ).rejects.toThrow('Credenciais inválidas');
     });
   });
 

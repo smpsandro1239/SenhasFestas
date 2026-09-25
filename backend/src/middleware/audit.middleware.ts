@@ -53,11 +53,12 @@ export class RateLimitMiddleware implements NestMiddleware {
           });
           return;
         }
+        next();
+        return;
       } catch (error) {
-        this.onRedisFalhou(error);
+        // fail-closed: Redis indisponível não abre o limite — cai na contagem local
+        Logger.warn(`Falha no rate limit via Redis (contagem local): ${(error as Error).message}`);
       }
-      next();
-      return;
     }
 
     const now = Date.now();
@@ -85,10 +86,6 @@ export class RateLimitMiddleware implements NestMiddleware {
 
     next();
   }
-
-  private onRedisFalhou(error: unknown): void {
-    Logger.warn(`Falha no rate limit via Redis: ${(error as Error).message}`);
-  }
 }
 
 @Injectable()
@@ -105,12 +102,26 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
     return `${ip}:${email}`;
   }
 
+  private async registarFalhaRedis(chave: string): Promise<void> {
+    try {
+      const key = `${RL_LOGIN_PREFIX}${chave}`;
+      const count = (await this.redisService.incr(key)) ?? 0;
+      if (count === 1) {
+        await this.redisService.expire(key, Math.ceil(this.windowMs / 1000));
+      }
+    } catch (error) {
+      Logger.warn(`Falha ao registar tentativa de login no Redis: ${(error as Error).message}`);
+    }
+  }
+
   async use(req: Request, res: Response, next: NextFunction) {
     const chave = this.chaveDoPedido(req);
 
     if (this.redisService.isEnabled) {
+      let redisOk = false;
       try {
         const atual = await this.redisService.get(`${RL_LOGIN_PREFIX}${chave}`);
+        redisOk = true;
         if (atual !== null && parseInt(atual, 10) >= this.maxAttempts) {
           res.status(HttpStatus.TOO_MANY_REQUESTS).json({
             statusCode: HttpStatus.TOO_MANY_REQUESTS,
@@ -119,26 +130,19 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
           return;
         }
       } catch (error) {
-        Logger.warn(`Falha no rate limit de login via Redis: ${(error as Error).message}`);
+        // fail-closed: Redis indisponível não abre o limite — cai na contagem local
+        Logger.warn(`Falha no rate limit de login via Redis (contagem local): ${(error as Error).message}`);
       }
-      res.on('finish', () => {
-        if (res.statusCode !== HttpStatus.UNAUTHORIZED) {
-          return;
-        }
-        const key = `${RL_LOGIN_PREFIX}${chave}`;
-        void (async () => {
-          try {
-            const count = (await this.redisService.incr(key)) ?? 0;
-            if (count === 1) {
-              await this.redisService.expire(key, Math.ceil(this.windowMs / 1000));
-            }
-          } catch (error) {
-            Logger.warn(`Falha ao registar tentativa de login no Redis: ${(error as Error).message}`);
+      if (redisOk) {
+        res.on('finish', () => {
+          if (res.statusCode !== HttpStatus.UNAUTHORIZED) {
+            return;
           }
-        })();
-      });
-      next();
-      return;
+          void this.registarFalhaRedis(chave);
+        });
+        next();
+        return;
+      }
     }
 
     const now = Date.now();

@@ -12,6 +12,7 @@ export interface CriarAplicacaoOpcoes {
 export async function criarAplicacao(opcoes: CriarAplicacaoOpcoes = {}): Promise<INestApplication> {
   const swagger = opcoes.swagger ?? true;
   const app = await NestFactory.create(AppModule);
+  app.getHttpAdapter().getInstance().disable('x-powered-by');
   const configService = app.get(ConfigService);
 
   const rawTrustProxy = configService.get<string>('TRUST_PROXY');
