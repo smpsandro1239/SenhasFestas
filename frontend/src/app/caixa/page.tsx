@@ -175,7 +175,7 @@ function CaixaPage() {
     setUserBalance(Number(b?.balance ?? 0));
     setMovementList(
       Array.isArray(b?.movements)
-        ? b.movements.filter((x) => x.type === 'load' || x.type === 'consume')
+        ? b.movements.filter((x: any) => x.type === 'load' || x.type === 'consume')
         : [],
     );
   };

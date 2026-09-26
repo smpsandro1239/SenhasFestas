@@ -37,7 +37,7 @@ const getNavItems = (role?: string) => {
     { href: '/publico', label: 'Ecrã Público', icon: TvIcon, staffOnly: true },
     { href: '/admin', label: 'Admin', icon: SettingsIcon, superadminOnly: true },
   ].filter((item) => {
-    if (item.roles && !item.roles.includes(role)) return false;
+    if (item.roles && !item.roles.includes(role ?? '')) return false;
     if (item.staffOnly && !isStaff) return false;
     if (item.superadminOnly && !isSuperadmin) return false;
     return true;
