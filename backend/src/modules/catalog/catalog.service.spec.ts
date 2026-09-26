@@ -121,12 +121,50 @@ describe('CatalogService', () => {
       expect(result).toMatchObject({ id: 'p1', name: 'Bifana', price: 4 });
     });
 
+    it('sets the category relation when categoryId is provided', async () => {
+      const existing = { id: 'p1', name: 'Bifana', category: null };
+      mockProductRepository.findOne.mockResolvedValue(existing);
+      mockProductRepository.save.mockImplementation(async (data: any) => data);
+
+      const result = await service.update('p1', {} as any, { categoryId: 'c1' } as any);
+
+      expect(result.category).toEqual({ id: 'c1' });
+      expect(result).not.toHaveProperty('categoryId');
+      expect(mockProductRepository.save).toHaveBeenCalled();
+    });
+
+    it('clears the category when categoryId is null', async () => {
+      const existing = { id: 'p1', name: 'Bifana', category: { id: 'c1' } };
+      mockProductRepository.findOne.mockResolvedValue(existing);
+      mockProductRepository.save.mockImplementation(async (data: any) => data);
+
+      const result = await service.update('p1', {} as any, { categoryId: null } as any);
+
+      expect(result.category).toBeNull();
+    });
+
     it('throws NotFoundException when product to update is missing', async () => {
       mockProductRepository.findOne.mockResolvedValue(null);
 
       await expect(
         service.update('p1', {} as any, { price: 4 } as any),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('findCategories', () => {
+    it('returns active categories ordered by sortOrder then name', async () => {
+      const categories = [
+        { id: 'c1', name: 'Bebidas', sortOrder: 1, isActive: true },
+        { id: 'c2', name: 'Extras', sortOrder: 4, isActive: true },
+      ];
+      mockCategoryRepository.find.mockResolvedValue(categories);
+
+      await expect(service.findCategories()).resolves.toEqual(categories);
+      expect(mockCategoryRepository.find).toHaveBeenCalledWith({
+        where: { isActive: true },
+        order: { sortOrder: 'ASC', name: 'ASC' },
+      });
     });
   });
 

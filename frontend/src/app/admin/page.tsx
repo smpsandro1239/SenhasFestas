@@ -193,7 +193,7 @@ export default function AdminPage() {
   const changeProductCategory = async (product: any, categoryId: string) => {
     setError('');
     try {
-      await updateProduct(product.id, { categoryId: categoryId || undefined });
+      await updateProduct(product.id, { categoryId: categoryId || null });
       setProducts((prev) =>
         prev.map((p) =>
           p.id === product.id

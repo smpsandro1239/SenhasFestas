@@ -59,5 +59,5 @@ export class UpdateProductDto {
 
   @IsUUID()
   @IsOptional()
-  categoryId?: string;
+  categoryId?: string | null;
 }

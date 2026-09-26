@@ -175,7 +175,7 @@ export class CatalogService {
     const { categoryId, ...rest } = dto;
     Object.assign(product, rest);
     if (categoryId !== undefined) {
-      product.category = { id: categoryId } as CategoryEntity;
+      product.category = categoryId === null ? null : ({ id: categoryId } as CategoryEntity);
     }
     return this.productRepository.save(product);
   }
