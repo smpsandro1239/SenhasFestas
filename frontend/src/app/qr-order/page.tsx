@@ -11,6 +11,7 @@ import { MinusIcon, PlusIcon, QrIcon, ArrowLeftIcon, CheckIcon } from '@/compone
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
 import { getProducts, getBalance, createOrder, getProductSuggestions } from '@/lib/api';
+import type { Product, ProductGroup, CartItem } from '@/lib/types';
 
 export default function QROrderPageWrapper() {
   return (
@@ -26,16 +27,16 @@ function QROrderPage() {
   const eventId = searchParams.get('event') ?? event?.id ?? '';
   const tableNumber = searchParams.get('mesa') ?? searchParams.get('table') ?? 'A05';
   const { user } = useAuth();
-  const [products, setProducts] = useState<any[]>([]);
-  const [cart, setCart] = useState<any[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [balance, setBalance] = useState<{ id?: string; balance?: number } | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
-  const [lastOrder, setLastOrder] = useState<any[]>([]);
+  const [lastOrder, setLastOrder] = useState<CartItem[]>([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<Product[]>([]);
   const [lastCartId, setLastCartId] = useState<string | null>(null);
   const router = useRouter();
 
@@ -57,7 +58,7 @@ function QROrderPage() {
   }, [fetchProducts, eventId, eventLoading]);
 
   const groupedProducts = useMemo(() => {
-    const groups = new Map<string, { category: any; items: any[] }>();
+    const groups = new Map<string, ProductGroup>();
     for (const product of products) {
       const key = product.category?.id ?? '__none__';
       if (!groups.has(key)) {
@@ -104,7 +105,7 @@ function QROrderPage() {
       .catch(() => setBalance(null));
   }, [user, eventId]);
 
-  const addToCart = (product: any) => {
+  const addToCart = (product: Product) => {
     setCart((prev) => {
       const existingItem = prev.find((item) => item.id === product.id);
       if (existingItem) {
@@ -240,7 +241,7 @@ function QROrderPage() {
                   <div className="flex-1 h-px bg-border" />
                 </div>
                 <div className="grid grid-cols-1 gap-3">
-                  {group.items.map((product: any) => {
+                  {group.items.map((product: Product) => {
                     const cartItem = cart.find((item) => item.id === product.id);
                     const qty = cartItem?.quantity || 0;
                     return (
@@ -312,10 +313,10 @@ function QROrderPage() {
           </h3>
           <ul className="space-y-2">
             {suggestions
-              .filter((s: any) => !cart.some((c: any) => c.id === s.id))
-              .map((s: any) => (
+              .filter((s: Product) => !cart.some((c: CartItem) => c.id === s.id))
+              .map((s: Product) => (
                 <li key={s.id} className="flex items-center gap-3">
-                  <span className="text-lg text-gray-200">€{((s.price ?? 0) / 100).toFixed(2)}</span>
+                  <span className="text-lg text-gray-200">€{Number(s.price ?? 0).toFixed(2)}</span>
                   <button
                     type="button"
                     onClick={() => addToCart(s)}
@@ -383,7 +384,7 @@ function QROrderPage() {
             </div>
 
             <div className="max-h-56 overflow-y-auto space-y-2 mb-5">
-              {(lastOrder.length ? lastOrder : cart).map((item: any) => (
+              {(lastOrder.length ? lastOrder : cart).map((item: CartItem) => (
                 <div key={item.id} className="flex justify-between text-sm text-zinc-300">
                   <span>
                     <span className="text-zinc-400">{item.quantity}x</span> {item.name}
