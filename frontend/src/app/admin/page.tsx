@@ -404,7 +404,7 @@ export default function AdminPage() {
                       className={`flex items-center justify-between bg-surface/50 animate-fade-in stagger-${idx + 1}`}
                     >
                       <span className="flex items-center gap-3 text-zinc-200">
-                        <span className="h-8 w-8 rounded-full bg-gradient-to-br from-brand/30 to-brand/10 border border-brand/30 flex items-center justify-center text-xs font-bold text-brand">
+                        <span className="h-8 w-8 rounded-full bg-gradient-to-br from-brand/30 to-brand/10 border border-brand/30 flex items-center justify-center text-xs font-bold text-brand-light">
                           {(user.name || user.email || '?').charAt(0).toUpperCase()}
                         </span>
                         <span>
@@ -491,7 +491,7 @@ export default function AdminPage() {
                         members.map((m) => (
                           <Card key={m.id} padding="sm" className="flex items-center justify-between bg-surface/50">
                             <span className="flex items-center gap-3 text-zinc-200">
-                              <span className="h-8 w-8 rounded-full bg-gradient-to-br from-brand/30 to-brand/10 border border-brand/30 flex items-center justify-center text-xs font-bold text-brand">
+                              <span className="h-8 w-8 rounded-full bg-gradient-to-br from-brand/30 to-brand/10 border border-brand/30 flex items-center justify-center text-xs font-bold text-brand-light">
                                 {(m.name || m.email || '?').charAt(0).toUpperCase()}
                               </span>
                               <span>

@@ -53,7 +53,7 @@ export default function PerfilPage() {
         <Card className="max-w-2xl overflow-hidden">
           <div className="border-b border-border bg-gradient-to-r from-brand/5 via-transparent to-transparent p-6">
             <div className="flex items-center gap-4">
-              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-brand/30 to-brand/10 border border-brand/30 flex items-center justify-center text-2xl font-bold text-brand glow-amber">
+              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-brand/30 to-brand/10 border border-brand/30 flex items-center justify-center text-2xl font-bold text-brand-light glow-amber">
                 {(user.name || 'U').charAt(0).toUpperCase()}
               </div>
               <div>
