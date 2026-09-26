@@ -11,7 +11,8 @@ import { MinusIcon, PlusIcon, QrIcon, ArrowLeftIcon, CheckIcon } from '@/compone
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
 import { getProducts, getBalance, createOrder, getProductSuggestions } from '@/lib/api';
-import type { Product, ProductGroup, CartItem } from '@/lib/types';
+import type { Product, CartItem } from '@/lib/types';
+import { groupProducts } from '@/lib/group-products';
 
 export default function QROrderPageWrapper() {
   return (
@@ -57,21 +58,7 @@ function QROrderPage() {
     fetchProducts();
   }, [fetchProducts, eventId, eventLoading]);
 
-  const groupedProducts = useMemo(() => {
-    const groups = new Map<string, ProductGroup>();
-    for (const product of products) {
-      const key = product.category?.id ?? '__none__';
-      if (!groups.has(key)) {
-        groups.set(key, { category: product.category ?? null, items: [] });
-      }
-      groups.get(key)!.items.push(product);
-    }
-    return [...groups.values()].sort((a, b) => {
-      const orderA = a.category?.sortOrder ?? Number.MAX_SAFE_INTEGER;
-      const orderB = b.category?.sortOrder ?? Number.MAX_SAFE_INTEGER;
-      return orderA - orderB;
-    });
-  }, [products]);
+  const groupedProducts = useMemo(() => groupProducts(products), [products]);
 
   useEffect(() => {
     if (!lastCartId || !eventId) return;
