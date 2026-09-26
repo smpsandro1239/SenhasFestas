@@ -9,7 +9,12 @@ import { ThemeProvider } from './theme-provider';
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains' });
 
+const siteUrl = new URL(
+  process.env.NEXT_PUBLIC_SITE_URL || 'https://senhas-festas-ten.vercel.app',
+);
+
 export const metadata: Metadata = {
+  metadataBase: siteUrl,
   title: 'SenhasFestas - Gestão de Pedidos para Festas',
   description: 'Sistema de gestão de senhas, pedidos e consumo para festas de aldeia',
   manifest: '/manifest.webmanifest',
@@ -24,6 +29,21 @@ export const metadata: Metadata = {
       { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
     ],
     apple: '/icon-192.png',
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'pt_PT',
+    url: '/',
+    siteName: 'SenhasFestas',
+    title: 'SenhasFestas - Gestão de Pedidos para Festas',
+    description: 'Sistema de gestão de senhas, pedidos e consumo para festas de aldeia',
+    images: [{ url: '/icon-512.png', width: 512, height: 512, alt: 'SenhasFestas' }],
+  },
+  twitter: {
+    card: 'summary',
+    title: 'SenhasFestas - Gestão de Pedidos para Festas',
+    description: 'Sistema de gestão de senhas, pedidos e consumo para festas de aldeia',
+    images: ['/icon-512.png'],
   },
 };
 
