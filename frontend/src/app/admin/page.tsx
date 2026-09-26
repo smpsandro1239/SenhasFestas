@@ -312,7 +312,7 @@ export default function AdminPage() {
               ) : (
                 <div className="space-y-3">
                   {events.map((event) => (
-                    <Card key={event.id} hover className="bg-surface/50 border-border-hover">
+                    <Card key={event.id} hover className="bg-surface border-border-hover">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex items-start gap-3">
                           <div className="p-2.5 rounded-xl brand-chip">
@@ -401,7 +401,7 @@ export default function AdminPage() {
                       key={user.id}
                       hover
                       padding="sm"
-                      className={`flex items-center justify-between bg-surface/50 animate-fade-in stagger-${idx + 1}`}
+                      className={`flex items-center justify-between bg-surface animate-fade-in stagger-${idx + 1}`}
                     >
                       <span className="flex items-center gap-3 text-zinc-200">
                         <span className="h-8 w-8 rounded-full bg-gradient-to-br from-brand/30 to-brand/10 border border-brand/30 flex items-center justify-center text-xs font-bold text-brand-light">
@@ -489,7 +489,7 @@ export default function AdminPage() {
                         <div className="text-sm text-zinc-400">Nenhum membro associado a este evento.</div>
                       ) : (
                         members.map((m) => (
-                          <Card key={m.id} padding="sm" className="flex items-center justify-between bg-surface/50">
+                          <Card key={m.id} padding="sm" className="flex items-center justify-between bg-surface">
                             <span className="flex items-center gap-3 text-zinc-200">
                               <span className="h-8 w-8 rounded-full bg-gradient-to-br from-brand/30 to-brand/10 border border-brand/30 flex items-center justify-center text-xs font-bold text-brand-light">
                                 {(m.name || m.email || '?').charAt(0).toUpperCase()}
@@ -529,7 +529,7 @@ export default function AdminPage() {
               ) : (
                 <div className="space-y-3">
                   {products.map((product) => (
-                    <Card key={product.id} hover className="bg-surface/50 border-border-hover">
+                    <Card key={product.id} hover className="bg-surface border-border-hover">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
                           <div className="font-semibold text-zinc-100">{product.name}</div>
@@ -705,7 +705,7 @@ export default function AdminPage() {
                       />
                     </div>
                     <div className="space-y-3">
-                      <label className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface/50 p-3">
+                      <label className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3">
                         <span className="text-sm text-zinc-300">Exigir saldo para pedidos</span>
                         <input
                           type="checkbox"
@@ -716,7 +716,7 @@ export default function AdminPage() {
                           className="h-4 w-4 accent-brand"
                         />
                       </label>
-                      <label className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface/50 p-3">
+                      <label className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3">
                         <span className="text-sm text-zinc-300">Permitir modo offline</span>
                         <input
                           type="checkbox"
@@ -773,7 +773,7 @@ export default function AdminPage() {
                   {auditLogs.map((log) => (
                     <div
                       key={log.id}
-                      className="rounded-xl border border-border bg-surface/50 px-4 py-3 text-sm"
+                      className="rounded-xl border border-border bg-surface px-4 py-3 text-sm"
                     >
                       <div className="flex items-center justify-between gap-3">
                         <span className="flex items-center gap-2">

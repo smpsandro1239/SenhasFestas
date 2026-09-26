@@ -482,7 +482,7 @@ function CaixaPage() {
                         key={u.id}
                         type="button"
                         onClick={() => selecionarUtilizador(u)}
-                        className="w-full flex items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-surface transition-colors border-b border-border/50 last:border-b-0"
+                        className="w-full flex items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-surface transition-colors border-b border-border last:border-b-0"
                       >
                         <span className="text-zinc-100">{u.name}</span>
                         <span className="text-zinc-400 text-xs">{u.email}</span>
@@ -575,13 +575,13 @@ function CaixaPage() {
               {error && <div className="mt-4"><Alert variant="error" message={error} /></div>}
 
               {selectedUser && movementList.length > 0 && (
-                <div className="pt-4 mt-4 border-t border-border/50">
+                <div className="pt-4 mt-4 border-t border-border">
                   <h3 className="text-sm font-semibold text-zinc-300 mb-2">Movimentos recentes</h3>
                   <div className="space-y-2">
                     {movementList.map((m) => (
                       <div
                         key={m.id}
-                        className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-surface/50 border border-border text-sm"
+                        className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-surface border border-border text-sm"
                       >
                         <span className="flex items-center gap-3">
                           <span
@@ -621,7 +621,7 @@ function CaixaPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-surface/70 border-b border-border">
+                  <tr className="bg-surface-hover border-b border-border">
                     {['Hora', 'Tipo', 'Valor', 'Operador', 'Observação'].map((h) => (
                       <th key={h} className="px-4 py-3 text-left font-medium text-zinc-400">{h}</th>
                     ))}
@@ -629,7 +629,7 @@ function CaixaPage() {
                 </thead>
                 <tbody>
                   {movements.map((m, idx) => (
-                    <tr key={idx} className="border-b border-border/50 last:border-0 hover:bg-surface/50 transition-colors">
+                    <tr key={idx} className="border-b border-border last:border-0 hover:bg-surface-hover transition-colors">
                       <td className="px-4 py-3 text-zinc-400">{m.hora}</td>
                       <td className="px-4 py-3 font-medium">
                         <span className={m.tipo === 'Entrada' ? 'text-emerald-400' : 'text-red-400'}>{m.tipo}</span>

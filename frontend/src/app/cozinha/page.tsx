@@ -245,7 +245,7 @@ function CozinhaPageInner() {
                       {order.items?.map((item: any, itemIdx: number) => (
                         <div
                           key={itemIdx}
-                          className="flex items-center justify-between gap-4 p-3 rounded-xl bg-surface/70"
+                          className="flex items-center justify-between gap-4 p-3 rounded-xl bg-surface-hover"
                         >
                           <span className="flex items-center gap-3">
                             <span className="font-bold text-lg text-brand-light">{item.quantity}x</span>
