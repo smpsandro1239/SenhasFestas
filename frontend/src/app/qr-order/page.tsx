@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/cn';
@@ -55,6 +55,22 @@ function QROrderPage() {
     if (!eventId || eventLoading) return;
     fetchProducts();
   }, [fetchProducts, eventId, eventLoading]);
+
+  const groupedProducts = useMemo(() => {
+    const groups = new Map<string, { category: any; items: any[] }>();
+    for (const product of products) {
+      const key = product.category?.id ?? '__none__';
+      if (!groups.has(key)) {
+        groups.set(key, { category: product.category ?? null, items: [] });
+      }
+      groups.get(key)!.items.push(product);
+    }
+    return [...groups.values()].sort((a, b) => {
+      const orderA = a.category?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.category?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+      return orderA - orderB;
+    });
+  }, [products]);
 
   useEffect(() => {
     if (!lastCartId || !eventId) return;
@@ -214,61 +230,73 @@ function QROrderPage() {
         ) : products.length === 0 ? (
           <Alert variant="info" message="Nenhum produto disponível de momento." />
         ) : (
-          <div className="grid grid-cols-1 gap-3">
-            {products.map((product: any) => {
-              const cartItem = cart.find((item) => item.id === product.id);
-              const qty = cartItem?.quantity || 0;
-              return (
-                <div
-                  key={product.id}
-                  className={cn(
-                    'rounded-2xl p-4 flex items-center gap-4 transition-all duration-200 border',
-                    qty > 0
-                      ? 'bg-brand/5 border-brand/30'
-                      : 'bg-surface border-border',
-                  )}
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="font-semibold text-zinc-100">{product.name}</h3>
-                      <span className="text-sm font-bold text-brand-light">
-                        €{Number(product.price).toFixed(2)}
-                      </span>
-                    </div>
-                    {product.description && (
-                      <p className="text-sm text-zinc-400 mt-0.5 line-clamp-2">
-                        {product.description}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2.5 shrink-0">
-                    {qty > 0 && (
-                      <button
-                        onClick={() => removeFromCart(product.id)}
-                        className="h-8 w-8 rounded-lg bg-surface border border-border text-zinc-300 hover:bg-surface-hover flex items-center justify-center transition-colors"
-                      >
-                        <MinusIcon className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                    <span className={cn('text-sm font-semibold w-5 text-center', qty > 0 ? 'text-zinc-100' : 'text-transparent')}>
-                      {qty}
-                    </span>
-                    <button
-                      onClick={() => addToCart(product)}
-                      className={cn(
-                        'h-8 w-8 rounded-lg flex items-center justify-center transition-all',
-                        qty > 0
-                          ? 'bg-brand text-black hover:bg-brand-hover'
-                          : 'bg-surface border border-border text-zinc-300 hover:bg-surface-hover',
-                      )}
-                    >
-                      <PlusIcon className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+          <div className="space-y-6">
+            {groupedProducts.map((group) => (
+              <section key={group.category?.id ?? 'sem-categoria'} aria-label={group.category?.name ?? 'Outros'}>
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-300">
+                    {group.category?.name ?? 'Outros'}
+                  </h3>
+                  <div className="flex-1 h-px bg-border" />
                 </div>
-              );
-            })}
+                <div className="grid grid-cols-1 gap-3">
+                  {group.items.map((product: any) => {
+                    const cartItem = cart.find((item) => item.id === product.id);
+                    const qty = cartItem?.quantity || 0;
+                    return (
+                      <div
+                        key={product.id}
+                        className={cn(
+                          'rounded-2xl p-4 flex items-center gap-4 transition-all duration-200 border',
+                          qty > 0
+                            ? 'bg-brand/5 border-brand/30'
+                            : 'bg-surface border-border',
+                        )}
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <h4 className="font-semibold text-zinc-100">{product.name}</h4>
+                            <span className="text-sm font-bold text-brand-light">
+                              €{Number(product.price).toFixed(2)}
+                            </span>
+                          </div>
+                          {product.description && (
+                            <p className="text-sm text-zinc-400 mt-0.5 line-clamp-2">
+                              {product.description}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          {qty > 0 && (
+                            <button
+                              onClick={() => removeFromCart(product.id)}
+                              className="h-8 w-8 rounded-lg bg-surface border border-border text-zinc-300 hover:bg-surface-hover flex items-center justify-center transition-colors"
+                            >
+                              <MinusIcon className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          <span className={cn('text-sm font-semibold w-5 text-center', qty > 0 ? 'text-zinc-100' : 'text-transparent')}>
+                            {qty}
+                          </span>
+                          <button
+                            onClick={() => addToCart(product)}
+                            className={cn(
+                              'h-8 w-8 rounded-lg flex items-center justify-center transition-all',
+                              qty > 0
+                                ? 'bg-brand text-black hover:bg-brand-hover'
+                                : 'bg-surface border border-border text-zinc-300 hover:bg-surface-hover',
+                            )}
+                          >
+                            <PlusIcon className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
           </div>
         )}
       </main>
