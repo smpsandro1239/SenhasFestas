@@ -185,7 +185,7 @@ function QROrderPage() {
               </div>
             </div>
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-border">
-              <span className="text-brand text-base leading-none">€</span>
+              <span className="text-brand-light text-base leading-none">€</span>
               <div className="flex-1">
                 <div className="text-[10px] text-zinc-400">Saldo</div>
                 <div className="text-sm font-semibold text-emerald-400">
@@ -231,7 +231,7 @@ function QROrderPage() {
                   <div className="flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="font-semibold text-zinc-100">{product.name}</h3>
-                      <span className="text-sm font-bold text-brand">
+                      <span className="text-sm font-bold text-brand-light">
                         €{Number(product.price).toFixed(2)}
                       </span>
                     </div>

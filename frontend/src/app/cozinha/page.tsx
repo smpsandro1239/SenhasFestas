@@ -248,7 +248,7 @@ function CozinhaPageInner() {
                           className="flex items-center justify-between gap-4 p-3 rounded-xl bg-surface/70"
                         >
                           <span className="flex items-center gap-3">
-                            <span className="font-bold text-lg text-brand">{item.quantity}x</span>
+                            <span className="font-bold text-lg text-brand-light">{item.quantity}x</span>
                             <span className="text-zinc-200 text-base">
                               {item.name || item.product?.name}
                             </span>
@@ -265,7 +265,7 @@ function CozinhaPageInner() {
                     {/* Footer actions */}
                     <div className="px-6 py-5 mt-4 border-t border-border flex items-center justify-between gap-4">
                       <span className="text-lg font-bold text-zinc-50">
-                        Total: <span className="text-brand">€{Number(order.total ?? 0).toFixed(2)}</span>
+                        Total: <span className="text-brand-light">€{Number(order.total ?? 0).toFixed(2)}</span>
                       </span>
 
                       <div className="flex gap-3">

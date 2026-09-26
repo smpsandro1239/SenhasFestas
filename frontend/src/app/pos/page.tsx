@@ -168,7 +168,7 @@ function POSPage() {
                   <div className="flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="font-semibold text-zinc-100">{product.name}</h3>
-                      <span className="text-sm font-bold text-brand">€{Number(product.price).toFixed(2)}</span>
+                      <span className="text-sm font-bold text-brand-light">€{Number(product.price).toFixed(2)}</span>
                     </div>
                     {product.description && (
                       <p className="mt-0.5 text-sm text-zinc-400 line-clamp-2">{product.description}</p>

@@ -174,7 +174,7 @@ export default function HomePage() {
                     </div>
                     {!isStaff && (
                       <div className="text-center">
-                        <span className="text-xs text-brand font-medium">Começar</span>
+                        <span className="text-xs text-brand-light font-medium">Começar</span>
                       </div>
                     )}
                   </div>

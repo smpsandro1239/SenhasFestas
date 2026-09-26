@@ -140,7 +140,7 @@ function RelatoriosPage() {
                         <span className="text-zinc-400 font-medium mr-2">{idx + 1}.</span>
                         {item.name}
                       </span>
-                      <span className="text-brand font-medium text-sm">
+                      <span className="text-brand-light font-medium text-sm">
                         {Number(item.totalVendido || 0)} un.
                       </span>
                     </div>
