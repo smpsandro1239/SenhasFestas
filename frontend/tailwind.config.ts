@@ -8,6 +8,13 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Tokens surface/border carry alpha embedded (rgba(255,255,255,0.03)/(0.08)).
+        // NEVER apply an opacity modifier to them (e.g. bg-surface/50): Tailwind
+        // REPLACES the alpha instead of scaling it, so /50 compiles to 50% white
+        // (washed-out beige cards). Use the named levels only:
+        //   bg-surface (3%), bg-surface-hover (6%), bg-surface-active (9%)
+        //   border-border (8%), border-border-hover (14%)
+        // bg-surface-solid/N is safe (solid base scales correctly).
         brand: {
           DEFAULT: '#2563eb',
           hover: '#1d4ed8',

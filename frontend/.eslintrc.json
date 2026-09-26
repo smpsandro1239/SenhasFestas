@@ -1,3 +1,24 @@
 {
-  "extends": ["next", "next/core-web-vitals"]
+  "extends": ["next", "next/core-web-vitals"],
+  "rules": {
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "Literal[value=/bg-surface(?!-solid)(-hover|-active)?\\/[0-9]+/]",
+        "message": "Footgun do Tailwind: surface tem alpha embutido; bg-surface/N substitui o alpha em vez de o escalar (bg-surface/50 = 50% branco). Usa bg-surface, bg-surface-hover ou bg-surface-active (sem /N)."
+      },
+      {
+        "selector": "Literal[value=/border-border(-hover)?\\/[0-9]+/]",
+        "message": "Footgun do Tailwind: border tem alpha embutido; border-border/N substitui o alpha (border-border/50 = 50% branco). Usa border-border ou border-border-hover (sem /N)."
+      },
+      {
+        "selector": "TemplateElement[value.raw=/bg-surface(?!-solid)(-hover|-active)?\\/[0-9]+/]",
+        "message": "Footgun do Tailwind: bg-surface/N em template literal substitui o alpha embutido do token. Usa bg-surface, bg-surface-hover ou bg-surface-active."
+      },
+      {
+        "selector": "TemplateElement[value.raw=/border-border(-hover)?\\/[0-9]+/]",
+        "message": "Footgun do Tailwind: border-border/N em template literal substitui o alpha embutido do token. Usa border-border ou border-border-hover."
+      }
+    ]
+  }
 }
