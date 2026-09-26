@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert } from '@/components/ui/alert';
 import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon } from '@/components/ui/icons';
-import { getEvents, createEvent, getUsers, getProducts, createProduct, updateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings } from '@/lib/api';
+import { getEvents, createEvent, getUsers, getProducts, getCategories, createProduct, updateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings } from '@/lib/api';
 import { downloadTextFile } from '@/lib/download';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
@@ -33,6 +33,7 @@ export default function AdminPage() {
   const [memberRole, setMemberRole] = useState('client');
   const [memberTarget, setMemberTarget] = useState('');
   const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
@@ -47,6 +48,7 @@ export default function AdminPage() {
     price: '',
     availability: 'available',
     stock: '',
+    categoryId: '',
   });
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);
@@ -135,8 +137,9 @@ export default function AdminPage() {
     setLoading(true);
     setError('');
     try {
-      const data = await getProducts();
+      const [data, cats] = await Promise.all([getProducts(), getCategories()]);
       setProducts(Array.isArray(data) ? data : data?.items ?? []);
+      setCategories(Array.isArray(cats) ? cats : []);
     } catch (err: any) {
       setError(err?.message ?? 'Erro ao carregar produtos');
     } finally {
@@ -160,8 +163,9 @@ export default function AdminPage() {
         price,
         availability: productForm.availability,
         stock: productForm.stock ? parseFloat(productForm.stock) : undefined,
+        categoryId: productForm.categoryId || undefined,
       });
-      setProductForm({ name: '', description: '', price: '', availability: 'available', stock: '' });
+      setProductForm({ name: '', description: '', price: '', availability: 'available', stock: '', categoryId: '' });
       await loadProducts();
     } catch (err: any) {
       setError(err?.message ?? 'Erro ao criar produto');
@@ -183,6 +187,22 @@ export default function AdminPage() {
       setError(err?.message ?? 'Erro ao atualizar produto');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const changeProductCategory = async (product: any, categoryId: string) => {
+    setError('');
+    try {
+      await updateProduct(product.id, { categoryId: categoryId || undefined });
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === product.id
+            ? { ...p, category: categoryId ? categories.find((c) => c.id === categoryId) : null }
+            : p,
+        ),
+      );
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao atualizar categoria');
     }
   };
 
@@ -554,6 +574,19 @@ export default function AdminPage() {
                                   : 'Indisponível'}
                             </Badge>
                           </div>
+                          <div className="mt-2">
+                            <select
+                              value={product.category?.id ?? ''}
+                              onChange={(e) => changeProductCategory(product, e.target.value)}
+                              aria-label={`Categoria de ${product.name}`}
+                              className="text-xs bg-surface-solid border border-border rounded-lg px-2 py-1 text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                            >
+                              <option value="">Sem categoria</option>
+                              {categories.map((c) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
                         <Button
                           variant={product.availability === 'available' ? 'danger' : 'success'}
@@ -607,6 +640,19 @@ export default function AdminPage() {
                     onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
                     placeholder="100"
                   />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-medium text-zinc-400">Categoria</label>
+                  <select
+                    value={productForm.categoryId}
+                    onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
+                    className="w-full bg-surface-solid border border-border rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                  >
+                    <option value="">Sem categoria</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="block text-sm font-medium text-zinc-400">Disponibilidade</label>

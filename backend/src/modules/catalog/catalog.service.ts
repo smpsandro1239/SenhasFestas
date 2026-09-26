@@ -172,8 +172,19 @@ export class CatalogService {
     if (product.event?.id) {
       await this.membershipService.assertMember(user, product.event.id);
     }
-    Object.assign(product, dto);
+    const { categoryId, ...rest } = dto;
+    Object.assign(product, rest);
+    if (categoryId !== undefined) {
+      product.category = { id: categoryId } as CategoryEntity;
+    }
     return this.productRepository.save(product);
+  }
+
+  async findCategories(): Promise<CategoryEntity[]> {
+    return this.categoryRepository.find({
+      where: { isActive: true },
+      order: { sortOrder: 'ASC', name: 'ASC' },
+    });
   }
 
   async softRemove(id: string, user: UserEntity): Promise<{ deleted: boolean; softDelete: boolean }> {

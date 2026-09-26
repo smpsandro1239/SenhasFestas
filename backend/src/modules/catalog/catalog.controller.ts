@@ -39,6 +39,12 @@ export class CatalogController {
     return this.catalogService.findAll(query.eventId, query.page, query.limit);
   }
 
+  @Get('categories')
+  @Roles(...MANAGEMENT_ROLES)
+  async findCategories() {
+    return this.catalogService.findCategories();
+  }
+
   @Get(':id')
   async findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     const product = await this.catalogService.findOne(id, req.user);

@@ -56,4 +56,8 @@ export class UpdateProductDto {
   @IsNumber()
   @IsOptional()
   stock?: number;
+
+  @IsUUID()
+  @IsOptional()
+  categoryId?: string;
 }

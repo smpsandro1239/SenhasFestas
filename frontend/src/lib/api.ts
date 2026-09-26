@@ -282,6 +282,10 @@ export async function getProducts(eventId?: string): Promise<any> {
   return apiRequest(`/products${query}`);
 }
 
+export async function getCategories(): Promise<any> {
+  return apiRequest('/products/categories');
+}
+
 export async function getProductSuggestions(productId: string, eventId?: string): Promise<any> {
   const query = eventId ? `?eventId=${encodeURIComponent(eventId)}` : '';
   return apiRequest(`/products/${productId}/suggestions${query}`);
