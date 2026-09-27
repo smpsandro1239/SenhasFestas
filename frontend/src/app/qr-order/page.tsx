@@ -7,7 +7,7 @@ import { cn } from '@/lib/cn';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
-import { MinusIcon, PlusIcon, QrIcon, ArrowLeftIcon, CheckIcon, CloseIcon } from '@/components/ui/icons';
+import { MinusIcon, PlusIcon, QrIcon, ArrowLeftIcon, CheckIcon } from '@/components/ui/icons';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
 import { getProducts, getBalance, createOrder, getProductSuggestions } from '@/lib/api';
@@ -29,7 +29,7 @@ function QROrderPage() {
   const eventId = searchParams.get('event') ?? event?.id ?? '';
   const initialTableNumber = searchParams.get('mesa') ?? searchParams.get('table') ?? '';
   const [tableNumber, setTableNumber] = useState(initialTableNumber);
-  const [showTableModal, setShowTableModal] = useState(false);
+  const [showTableModal, setShowTableModal] = useState(!initialTableNumber);
   const [tableDraft, setTableDraft] = useState('');
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
@@ -379,13 +379,6 @@ function QROrderPage() {
                   Muda a mesa ou pede sem mesa para levantar no bar.
                 </p>
               </div>
-              <button
-                onClick={() => setShowTableModal(false)}
-                aria-label="Fechar diálogo"
-                className="p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-surface"
-              >
-                <CloseIcon className="h-4 w-4" />
-              </button>
             </div>
 
             <Input
