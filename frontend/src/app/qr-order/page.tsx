@@ -13,6 +13,7 @@ import { useCurrentEvent } from '@/lib/use-current-event';
 import { getProducts, getBalance, createOrder, getProductSuggestions } from '@/lib/api';
 import type { Product, CartItem } from '@/lib/types';
 import { groupProducts } from '@/lib/group-products';
+import { getOrderTotal } from '@/lib/order-total';
 
 export default function QROrderPageWrapper() {
   return (
@@ -114,8 +115,7 @@ function QROrderPage() {
     });
   };
 
-  const getCartTotal = () =>
-    cart.reduce((sum, item) => sum + (Number(item.price) || 0) * item.quantity, 0);
+  const getCartTotal = () => getOrderTotal(cart);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const usableBalance = Math.min(balance?.balance ?? 0, getCartTotal());
 
@@ -384,11 +384,7 @@ function QROrderPage() {
             <div className="flex justify-between items-center pt-4 border-t border-border">
               <span className="text-zinc-400 font-medium">Total</span>
               <span className="text-2xl font-bold text-brand">
-                €
-                {(lastOrder.length
-                  ? lastOrder.reduce((sum, i) => sum + (Number(i.price) || 0) * i.quantity, 0)
-                  : getCartTotal()
-                ).toFixed(2)}
+                €{getOrderTotal(lastOrder.length ? lastOrder : cart).toFixed(2)}
               </span>
             </div>
 
