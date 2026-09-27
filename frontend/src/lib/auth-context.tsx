@@ -48,7 +48,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session as User);
         setToken(getAccessToken());
       } else {
-        destroySession(false);
+        const path = window.location.pathname;
+        const isPublicPath =
+          path.startsWith('/publico') || path.startsWith('/auth') || path.startsWith('/api');
+        destroySession(!isPublicPath);
       }
     })();
 

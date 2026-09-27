@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { UnauthorizedException } from '@nestjs/common';
+import { IsNull } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
 
@@ -7,6 +8,7 @@ const mockRepository = {
   findOne: vi.fn(),
   create: vi.fn(),
   save: vi.fn(),
+  update: vi.fn(),
 };
 
 const mockJwtService = {
@@ -113,6 +115,101 @@ describe('AuthService', () => {
       await expect(
         service.register('taken@test.com', 'secret123', 'Taken', 'client'),
       ).rejects.toThrow('Email já em uso');
+    });
+  });
+
+  describe('refresh', () => {
+    const activeUser = {
+      id: 'u1',
+      email: 'client@test.com',
+      name: 'Client',
+      role: 'client',
+      isActive: true,
+    };
+
+    const validToken = {
+      id: 'rt1',
+      userId: 'u1',
+      tokenHash: 'hash',
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: undefined,
+      isUsed: false,
+    };
+
+    it('rotates a valid token and returns a new pair', async () => {
+      mockRepository.update.mockResolvedValue({ affected: 1 });
+      mockRepository.create.mockImplementation((data: any) => data);
+      mockRepository.save.mockImplementation(async (data: any) => ({ id: 'rt2', ...data }));
+      mockRepository.findOne.mockResolvedValueOnce(validToken).mockResolvedValueOnce(activeUser);
+
+      const result = await service.refresh('raw-token');
+
+      expect(mockRepository.update).toHaveBeenCalledWith(
+        { id: 'rt1', revokedAt: IsNull(), isUsed: false },
+        { revokedAt: expect.any(Date), isUsed: true },
+      );
+      expect(result.token).toBe('signed-token');
+      expect(result.user.role).toBe('client');
+      expect(result.user).not.toHaveProperty('password');
+    });
+
+    it('returns Username when presented an already-used token with no successor', async () => {
+      const usedToken = {
+        id: 'rt1',
+        userId: 'u1',
+        tokenHash: 'hash',
+        expiresAt: new Date(Date.now() + 60_000),
+        revokedAt: new Date(),
+        isUsed: true,
+      };
+      mockRepository.findOne.mockResolvedValue(usedToken);
+      let calls = 0;
+      mockRepository.findOne.mockImplementation(() => {
+        calls += 1;
+        if (calls === 1) return usedToken;
+        return null;
+      });
+
+      await expect(service.refresh('raw-token')).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('follows the rotation chain when the presented token was already replaced', async () => {
+      const usedToken = {
+        id: 'rt1',
+        userId: 'u1',
+        tokenHash: 'old-hash',
+        expiresAt: new Date(Date.now() + 60_000),
+        revokedAt: new Date(),
+        isUsed: true,
+      };
+      const successor = {
+        id: 'rt2',
+        userId: 'u1',
+        tokenHash: 'new-hash',
+        expiresAt: new Date(Date.now() + 60_000),
+        revokedAt: undefined,
+        isUsed: false,
+        replacedByTokenId: 'rt1',
+      };
+      mockRepository.update.mockResolvedValue({ affected: 1 });
+      mockRepository.create.mockImplementation((data: any) => data);
+      mockRepository.save.mockImplementation(async (data: any) => ({ id: 'rt3', ...data }));
+      let calls = 0;
+      mockRepository.findOne.mockImplementation(() => {
+        calls += 1;
+        if (calls === 1) return usedToken;
+        if (calls === 2) return successor;
+        return activeUser;
+      });
+
+      const result = await service.refresh('raw-token');
+
+      expect(mockRepository.update).toHaveBeenCalledWith(
+        { id: 'rt2', revokedAt: IsNull(), isUsed: false },
+        { revokedAt: expect.any(Date), isUsed: true },
+      );
+      expect(result.token).toBe('signed-token');
+      expect(result.user.role).toBe('client');
     });
   });
 

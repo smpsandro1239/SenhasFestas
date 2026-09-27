@@ -90,6 +90,25 @@ export class AuthService {
     };
   }
 
+  private async seguirCadeiaRotacao(stored: RefreshTokenEntity): Promise<RefreshTokenEntity> {
+    let atual = stored;
+    const visitados = new Set<string>();
+    while (atual.revokedAt || atual.isUsed) {
+      if (visitados.has(atual.id)) {
+        break;
+      }
+      visitados.add(atual.id);
+      const sucessor = await this.refreshTokenRepository.findOne({
+        where: { replacedByTokenId: atual.id },
+      });
+      if (!sucessor) {
+        break;
+      }
+      atual = sucessor;
+    }
+    return atual;
+  }
+
   async refresh(refreshToken: string): Promise<AuthResult> {
     if (!refreshToken || typeof refreshToken !== 'string') {
       throw new UnauthorizedException('Refresh token inválido');
@@ -101,14 +120,19 @@ export class AuthService {
     if (!stored) {
       throw new UnauthorizedException('Refresh token inválido');
     }
-    if (stored.revokedAt || stored.isUsed || stored.expiresAt <= new Date()) {
+
+    // Tolerar rotação em andamento: se o token do cookie já foi substituído
+    // (corrida entre abas/intervalo/401 simultâneos), avança para o sucessor
+    // ativo em vez de devolver 401 para sempre e deixar a sessão presa.
+    const ativo = await this.seguirCadeiaRotacao(stored);
+    if (ativo.expiresAt <= new Date()) {
       throw new UnauthorizedException('Refresh token expirado ou já utilizado');
     }
 
-    const user = await this.assertUserActive(stored.userId);
+    const user = await this.assertUserActive(ativo.userId);
 
     const revoked = await this.refreshTokenRepository.update(
-      { id: stored.id, revokedAt: IsNull(), isUsed: false },
+      { id: ativo.id, revokedAt: IsNull(), isUsed: false },
       { revokedAt: new Date(), isUsed: true },
     );
     if (!revoked.affected) {
@@ -119,7 +143,7 @@ export class AuthService {
     const newHash = this.hashToken(raw);
     await this.refreshTokenRepository.update(
       { userId: user.id, tokenHash: newHash },
-      { replacedByTokenId: stored.id },
+      { replacedByTokenId: ativo.id },
     );
 
     const token = this.signAccessToken(user);
