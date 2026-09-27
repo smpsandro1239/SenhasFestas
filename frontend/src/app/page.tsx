@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { fetchWithAuth } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { useCurrentEvent } from '@/lib/use-current-event';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { StatCard } from '@/components/ui/stat-card';
@@ -79,7 +80,16 @@ const clientShortcuts = [
 const STAFF_ROLES = ['superadmin', 'organizer', 'cashier', 'bar', 'kitchen', 'treasurer'];
 
 export default function HomePage() {
+  return (
+    <Suspense fallback={null}>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function HomeContent() {
   const { user } = useAuth();
+  const { event: currentEvent } = useCurrentEvent();
   const isStaff = !!user && STAFF_ROLES.includes(user.role);
   const [estatisticas, setEstatisticas] = useState<Estatisticas>({
     recebidos: 0,
@@ -165,8 +175,12 @@ export default function HomePage() {
         <div className="grid md:grid-cols-3 gap-4">
           {(isStaff ? shortcuts : clientShortcuts).map((item, idx) => {
             const Icon = item.icon;
+            const href =
+              item.href === '/publico' && currentEvent?.id
+                ? `/publico?event=${currentEvent.id}`
+                : item.href;
             return (
-              <Link key={item.href} href={item.href} className={`animate-fade-in stagger-${idx + 1}`}>
+              <Link key={item.href} href={href} className={`animate-fade-in stagger-${idx + 1}`}>
                 <Card hover className="h-full">
                   <div className="flex items-start justify-between">
                     <div className={`p-3 rounded-xl border ${item.color}`}>
@@ -202,4 +216,4 @@ export default function HomePage() {
       </AppShell>
     </>
   );
-}
+}

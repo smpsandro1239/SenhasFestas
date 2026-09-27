@@ -72,7 +72,11 @@ function PublicoPage() {
     fetch(`/api/public/evento?eventId=${encodeURIComponent(eventId)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((e) => {
-        if (!e?.name) return;
+        if (!e?.name) {
+          setEventSubtitle(null);
+          setError('Evento não encontrado. Verifique o ?event= no URL.');
+          return;
+        }
         const start = e.startDate
           ? new Date(e.startDate).toLocaleDateString('pt-PT', {
               day: 'numeric',
@@ -87,7 +91,12 @@ function PublicoPage() {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const suffix = eventId ? `?eventId=${encodeURIComponent(eventId)}` : '';
+      if (!eventId) {
+        setOrders({ received: [], preparing: [], ready: [] });
+        setError('Nenhum evento selecionado. Abra a TV com ?event=ID-do-evento.');
+        return;
+      }
+      const suffix = `?eventId=${encodeURIComponent(eventId)}`;
       const [received, preparing, ready] = await Promise.all([
         fetch(`/api/public/pedidos-recebidos${suffix}`)
           .then((r) => (r.ok ? r.json() : []))
@@ -107,10 +116,11 @@ function PublicoPage() {
   }, [eventId]);
 
   useEffect(() => {
+    if (!eventId) return;
     fetchOrders();
     const interval = setInterval(fetchOrders, TICK);
     return () => clearInterval(interval);
-  }, [fetchOrders]);
+  }, [fetchOrders, eventId]);
 
   const getTimeAgo = (date: string) => {
     const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -146,6 +156,20 @@ function PublicoPage() {
           </div>
         )}
 
+        {!eventId ? (
+          <div className="flex-1 min-h-0 flex items-center justify-center px-[5vw] pb-[2vh]">
+            <div className="text-center">
+              <div className="text-[clamp(3rem,8vw,6rem)] leading-none mb-4">📺</div>
+              <p className="text-[clamp(1.5rem,3.5vw,3rem)] font-bold text-zinc-100">
+                Nenhum evento selecionado
+              </p>
+              <p className="mt-3 text-[clamp(1rem,2vw,1.5rem)] text-zinc-400">
+                Abra esta página com <span className="font-mono text-zinc-200">?event=ID-do-evento</span> no endereço
+              </p>
+            </div>
+          </div>
+        ) : (
+        <>
         {/* Columns */}
         <div className="flex-1 min-h-0 px-[5vw] pb-[2vh]">
           <div className="h-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[2vw]">
@@ -234,6 +258,8 @@ function PublicoPage() {
             })}
           </div>
         </div>
+        </>
+        )}
 
         {/* Footer */}
         <footer className="shrink-0 border-t border-border px-[5vw] py-[2vh] flex items-center justify-between text-[clamp(0.9rem,1.75vw,1.4rem)] text-zinc-400">
@@ -246,4 +272,4 @@ function PublicoPage() {
       </main>
     </>
   );
-}
+}

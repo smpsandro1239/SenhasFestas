@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuth } from '@/lib/auth-context';
+import { useCurrentEvent } from '@/lib/use-current-event';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
@@ -57,7 +58,12 @@ const roleLabel: Record<string, string> = {
 export function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
-  const items = getNavItems(user?.role);
+  const { event: currentEvent } = useCurrentEvent();
+  const items = getNavItems(user?.role).map((item) =>
+    item.href === '/publico' && currentEvent?.id
+      ? { ...item, href: `/publico?event=${currentEvent.id}` }
+      : item,
+  );
 
   return (
     <aside
@@ -83,7 +89,7 @@ export function Sidebar({ className }: SidebarProps) {
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {items.map((item) => {
-          const active = pathname === item.href;
+          const active = pathname === item.href.split('?')[0];
           const Icon = item.icon;
           return (
             <Link
@@ -126,4 +132,4 @@ export function Sidebar({ className }: SidebarProps) {
       </div>
     </aside>
   );
-}
+}

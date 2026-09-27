@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { Sidebar } from './sidebar';
 import { MobileNav } from './mobile-nav';
 import { cn } from '@/lib/cn';
@@ -13,7 +14,9 @@ interface AppShellProps {
 export function AppShell({ children, className, fullWidth = false }: AppShellProps) {
   return (
     <div className="page-bg min-h-dvh">
-      <Sidebar />
+      <Suspense fallback={null}>
+        <Sidebar />
+      </Suspense>
       <main
         className={cn(
           'lg:pl-60 min-h-dvh flex flex-col',
