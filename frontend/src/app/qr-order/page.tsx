@@ -383,7 +383,13 @@ function QROrderPage() {
 
             <div className="flex justify-between items-center pt-4 border-t border-border">
               <span className="text-zinc-400 font-medium">Total</span>
-              <span className="text-2xl font-bold text-brand">€{getCartTotal().toFixed(2) || (orderPlaced ? '—' : '0.00')}</span>
+              <span className="text-2xl font-bold text-brand">
+                €
+                {(lastOrder.length
+                  ? lastOrder.reduce((sum, i) => sum + (Number(i.price) || 0) * i.quantity, 0)
+                  : getCartTotal()
+                ).toFixed(2)}
+              </span>
             </div>
 
             <Button
