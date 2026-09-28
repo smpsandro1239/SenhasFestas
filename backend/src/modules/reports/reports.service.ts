@@ -33,10 +33,6 @@ export class ReportsService {
 
     if (filtros.status) {
       query.andWhere('orden.status = :status', { status: filtros.status });
-    } else {
-      query.andWhere('orden.status IN (:...status)', {
-        status: ['received', 'preparing'],
-      });
     }
 
     if (filtros.station) {
@@ -158,6 +154,12 @@ export class ReportsService {
     if (scope) {
       query.andWhere('orden.' + scope.column, scope.params);
     }
+    if (filtros?.from) {
+      query.andWhere('orden.createdAt >= :desde', { desde: filtros.from });
+    }
+    if (filtros?.to) {
+      query.andWhere('orden.createdAt <= :ate', { ate: filtros.to });
+    }
 
     const rows = await query.getRawMany();
     return rows.map((row) => ({
@@ -274,19 +276,26 @@ export class ReportsService {
     };
   }
 
-  async obterEstatisticas(utilizador?: any) {
+  async obterEstatisticas(filtros: TotalQueryDto, utilizador?: any) {
     const eventIds = await this.membershipService.eventIdsFor(utilizador);
+    const scope = this.membershipService.eventColumnFor(eventIds, filtros?.eventId);
 
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-
-    const contagem = (status: string, extra?: { sql: string; params: Record<string, unknown> }) => {
+    const contagem = (
+      status: string,
+      extra?: { sql: string; params: Record<string, unknown> },
+      colunaData: 'createdAt' | 'updatedAt' = 'createdAt',
+    ) => {
       const q = this.orderRepository
         .createQueryBuilder('orden')
         .where('orden.status = :status', { status });
-      const scope = this.membershipService.eventColumnFor(eventIds);
       if (scope) {
         q.andWhere('orden.' + scope.column, scope.params);
+      }
+      if (filtros?.from) {
+        q.andWhere(`orden.${colunaData} >= :desde`, { desde: filtros.from });
+      }
+      if (filtros?.to) {
+        q.andWhere(`orden.${colunaData} <= :ate`, { ate: filtros.to });
       }
       if (extra) {
         q.andWhere(extra.sql, extra.params);
@@ -298,7 +307,12 @@ export class ReportsService {
       contagem('received'),
       contagem('preparing'),
       contagem('ready'),
-      contagem('delivered', { sql: 'orden.updatedAt >= :hoje', params: { hoje } }),
+      filtros?.from || filtros?.to
+        ? contagem('delivered', undefined, 'updatedAt')
+        : contagem('delivered', {
+            sql: 'orden.updatedAt >= :hoje',
+            params: { hoje: new Date(new Date().setHours(0, 0, 0, 0)).toISOString() },
+          }),
     ]);
 
     return {

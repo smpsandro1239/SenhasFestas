@@ -278,11 +278,20 @@ export async function getReports(type: string, params?: any): Promise<any> {
 }
 
 export async function exportOrdensCsv(params?: any): Promise<void> {
+  await ensureFreshToken();
   const query = params ? new URLSearchParams(params).toString() : '';
   const resp = await fetch(`${API_BASE}/reports/export.csv${query ? `?${query}` : ''}`, {
     method: 'GET',
     credentials: 'include',
   });
+  if (resp.status === 401) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      return exportOrdensCsv(params);
+    }
+    destroySession();
+    throw new ApiError('Sessão expirada. Inicie sessão novamente.', 401);
+  }
   if (!resp.ok) {
     const msg = (await readErrorBody(resp)) || `Erro na exportação (${resp.status})`;
     throw new ApiError(msg, resp.status);

@@ -148,6 +148,7 @@ function RelatoriosPage() {
   const [ordemLimit] = useState(10);
   const [ordemStatus, setOrdemStatus] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingOrdens, setLoadingOrdens] = useState(false);
   const [error, setError] = useState('');
 
   const tabs = [
@@ -168,12 +169,12 @@ function RelatoriosPage() {
       const base = { eventId: event.id, ...(from ? { from } : {}), ...(to ? { to } : {}) };
       const [statsData, totalData, seriesData, metodosData, movimentosData, productsData] =
         await Promise.all([
-          getReports('estatisticas').catch(() => null),
+          getReports('estatisticas', base).catch(() => null),
           getReports('total', base).catch(() => null),
           getReports('series', base).catch(() => []),
           getReports('metodos', base).catch(() => []),
           getReports('movimentos', base).catch(() => []),
-          getReports('top-products', { eventId: event.id }).catch(() => []),
+          getReports('top-products', base).catch(() => []),
         ]);
       setStats(statsData ?? null);
       setTotalVendas(totalData ?? null);
@@ -194,6 +195,7 @@ function RelatoriosPage() {
 
   const loadOrdens = useCallback(async () => {
     if (!event) return;
+    setLoadingOrdens(true);
     try {
       const data = await getReports('ordens', {
         eventId: event.id,
@@ -207,6 +209,8 @@ function RelatoriosPage() {
       setOrdemTotal(Array.isArray(data) ? 0 : data?.total ?? 0);
     } catch {
       setOrdens([]);
+    } finally {
+      setLoadingOrdens(false);
     }
   }, [event, ordemPage, ordemLimit, ordemStatus, from, to]);
 
@@ -217,8 +221,6 @@ function RelatoriosPage() {
 
   const mudarPeriodo = (p: Periodo) => {
     setPeriodo(p);
-    if (activeTab === 'vendas') return;
-    setActiveTab('visao');
   };
 
   const exportar = async () => {
@@ -315,11 +317,11 @@ function RelatoriosPage() {
                 icon={<WalletIcon className="h-5 w-5" />}
               />
               <StatCard
-                label="Entregues hoje"
+                label="Entregues"
                 value={loading ? '…' : String(stats?.entregues ?? 0)}
                 color="orange"
                 icon={<CashIcon className="h-5 w-5" />}
-                sub="Atualizado ao vivo"
+                sub={periodo === 'hoje' ? 'Hoje' : 'No período selecionado'}
               />
             </div>
 
@@ -416,7 +418,7 @@ function RelatoriosPage() {
                 <span>Página {ordemPage} de {ordemPaginas}</span>
               </div>
 
-              {ordens.length === 0 ? (
+              {ordens.length === 0 && !loadingOrdens ? (
                 <EmptyState title="Sem pedidos" description="Nenhum pedido corresponde aos filtros." />
               ) : (
                 <div className="overflow-x-auto">
@@ -433,37 +435,45 @@ function RelatoriosPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {ordens.map((o) => (
-                        <tr key={o.id} className="border-b border-border last:border-0">
-                          <td className="py-2.5 pr-3 text-zinc-400 whitespace-nowrap">
-                            {new Date(o.createdAt).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' })}{' '}
-                            <span className="text-zinc-500">
-                              {new Date(o.createdAt).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </td>
-                          <td className="py-2.5 pr-3 font-mono text-xs text-zinc-400">
-                            {o.id.slice(0, 8)}
-                          </td>
-                          <td className="py-2.5 pr-3 text-zinc-300">
-                            {o.source === 'qr' ? `Mesa ${o.tableNumber ?? '—'}` : 'POS'}
-                            {o.station ? ` · ${o.station}` : ''}
-                          </td>
-                          <td className="py-2.5 pr-3 text-zinc-400 max-w-[180px] truncate">
-                            {o.items?.map((i) => `${i.quantity}x ${i.product?.name ?? ''}`).join(', ') || '—'}
-                          </td>
-                          <td className="py-2.5 pr-3 text-zinc-400">
-                            {METODO_LABEL[o.paymentMethod] ?? o.paymentMethod}
-                          </td>
-                          <td className="py-2.5 pr-3 font-medium text-zinc-200">
-                            {formatEuro(o.total)}
-                          </td>
-                          <td className="py-2.5">
-                            <Badge variant={STATUS_VARIANT[o.status] ?? 'neutral'} size="sm" dot>
-                              {STATUS_LABEL[o.status] ?? o.status}
-                            </Badge>
+                      {loadingOrdens ? (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-sm text-zinc-400">
+                            A carregar pedidos…
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        ordens.map((o) => (
+                          <tr key={o.id} className="border-b border-border last:border-0">
+                            <td className="py-2.5 pr-3 text-zinc-400 whitespace-nowrap">
+                              {new Date(o.createdAt).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' })}{' '}
+                              <span className="text-zinc-500">
+                                {new Date(o.createdAt).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </td>
+                            <td className="py-2.5 pr-3 font-mono text-xs text-zinc-400">
+                              {o.id.slice(0, 8)}
+                            </td>
+                            <td className="py-2.5 pr-3 text-zinc-300">
+                              {o.source === 'qr' ? `Mesa ${o.tableNumber ?? '—'}` : 'POS'}
+                              {o.station ? ` · ${o.station}` : ''}
+                            </td>
+                            <td className="py-2.5 pr-3 text-zinc-400 max-w-[180px] truncate">
+                              {o.items?.map((i) => `${i.quantity}x ${i.product?.name ?? ''}`).join(', ') || '—'}
+                            </td>
+                            <td className="py-2.5 pr-3 text-zinc-400">
+                              {METODO_LABEL[o.paymentMethod] ?? o.paymentMethod}
+                            </td>
+                            <td className="py-2.5 pr-3 font-medium text-zinc-200">
+                              {formatEuro(o.total)}
+                            </td>
+                            <td className="py-2.5">
+                              <Badge variant={STATUS_VARIANT[o.status] ?? 'neutral'} size="sm" dot>
+                                {STATUS_LABEL[o.status] ?? o.status}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -590,33 +600,41 @@ function RelatoriosPage() {
         {activeTab === 'estatisticas' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard label="Recebidos" value={String(stats?.recebidos ?? 0)} color="blue" icon={<ClipboardIcon className="h-5 w-5" />} />
-              <StatCard label="Em Preparação" value={String(stats?.emPreparacao ?? 0)} color="brand" />
-              <StatCard label="Prontos" value={String(stats?.prontos ?? 0)} color="orange" />
-              <StatCard label="Entregues hoje" value={String(stats?.entregues ?? 0)} color="green" />
+              <StatCard label="Recebidos" value={String(stats?.recebidos ?? 0)} color="blue" icon={<ClipboardIcon className="h-5 w-5" />} sub="No período" />
+              <StatCard label="Em Preparação" value={String(stats?.emPreparacao ?? 0)} color="brand" sub="No período" />
+              <StatCard label="Prontos" value={String(stats?.prontos ?? 0)} color="orange" sub="No período" />
+              <StatCard label="Entregues" value={String(stats?.entregues ?? 0)} color="green" sub={periodo === 'hoje' ? 'Hoje' : 'No período'} />
             </div>
 
             <Card className="max-w-2xl">
-              <h3 className="text-base font-semibold text-zinc-100 mb-4">Fluxo de pedidos (hoje)</h3>
-              <div className="flex items-end gap-2 h-40">
-                {[
-                  { label: 'Recebidos', value: stats?.recebidos ?? 0, color: 'from-blue-500/40 to-blue-400' },
-                  { label: 'Preparação', value: stats?.emPreparacao ?? 0, color: 'from-amber-500/40 to-amber-300' },
-                  { label: 'Prontos', value: stats?.prontos ?? 0, color: 'from-orange-500/40 to-orange-400' },
-                  { label: 'Entregues', value: stats?.entregues ?? 0, color: 'from-emerald-500/40 to-emerald-400' },
-                ].map((b) => (
-                  <div key={b.label} className="flex-1 flex flex-col items-center gap-1">
-                    <span className="text-sm font-semibold text-zinc-200">{b.value}</span>
-                    <div
-                      className={cn('w-full rounded-t-md bg-gradient-to-t transition-all duration-500', b.color)}
-                      style={{ height: `${Math.max(4, (b.value / Math.max(1, stats?.recebidos ?? 1)) * 100)}%` }}
-                    />
-                    <span className="text-[10px] text-zinc-500 text-center">{b.label}</span>
+              <h3 className="text-base font-semibold text-zinc-100 mb-4">
+                Fluxo de pedidos {periodo === 'hoje' ? '(hoje)' : '(período)'}
+              </h3>
+              {(() => {
+                const valores = [stats?.recebidos ?? 0, stats?.emPreparacao ?? 0, stats?.prontos ?? 0, stats?.entregues ?? 0];
+                const maxValor = Math.max(1, ...valores);
+                return (
+                  <div className="flex items-end gap-2 h-40">
+                    {[
+                      { label: 'Recebidos', value: stats?.recebidos ?? 0, color: 'from-blue-500/40 to-blue-400' },
+                      { label: 'Preparação', value: stats?.emPreparacao ?? 0, color: 'from-amber-500/40 to-amber-300' },
+                      { label: 'Prontos', value: stats?.prontos ?? 0, color: 'from-orange-500/40 to-orange-400' },
+                      { label: 'Entregues', value: stats?.entregues ?? 0, color: 'from-emerald-500/40 to-emerald-400' },
+                    ].map((b) => (
+                      <div key={b.label} className="flex-1 flex flex-col items-center gap-1">
+                        <span className="text-sm font-semibold text-zinc-200">{b.value}</span>
+                        <div
+                          className={cn('w-full rounded-t-md bg-gradient-to-t transition-all duration-500', b.color)}
+                          style={{ height: `${Math.max(4, (b.value / maxValor) * 100)}%` }}
+                        />
+                        <span className="text-[10px] text-zinc-500 text-center">{b.label}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                );
+              })()}
               <p className="mt-3 text-xs text-zinc-500">
-                Acompanha em tempo real o estado dos pedidos no evento atual.
+                Distribuição dos pedidos por estado no {periodo === 'hoje' ? 'dia de hoje' : 'período selecionado'}.
               </p>
             </Card>
           </div>

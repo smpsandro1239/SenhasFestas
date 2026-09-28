@@ -39,6 +39,14 @@ export class TopProductsQueryDto {
   @IsUUID()
   @IsOptional()
   eventId?: string;
+
+  @IsDateString()
+  @IsOptional()
+  from?: string;
+
+  @IsDateString()
+  @IsOptional()
+  to?: string;
 }
 
 export class TotalQueryDto {

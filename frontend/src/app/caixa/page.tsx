@@ -50,6 +50,7 @@ function CaixaPage() {
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [loadAmount, setLoadAmount] = useState('');
   const [userBalance, setUserBalance] = useState<number | null>(null);
+  const [cancelMap, setCancelMap] = useState<Record<string, number>>({});
   const [scannerOpen, setScannerOpen] = useState(false);
   const [movementMode, setMovementMode] = useState<'load' | 'deduct'>('load');
   const [codigoInput, setCodigoInput] = useState('');
@@ -173,11 +174,16 @@ function CaixaPage() {
 
   const atualizarDoBal = (b: any) => {
     setUserBalance(Number(b?.balance ?? 0));
-    setMovementList(
-      Array.isArray(b?.movements)
-        ? b.movements.filter((x: any) => x.type === 'load' || x.type === 'consume')
-        : [],
-    );
+    const todos = Array.isArray(b?.movements) ? b.movements : [];
+    setMovementList(todos.filter((x: any) => x.type === 'load' || x.type === 'consume'));
+    // soma de estornos por movimento original, para mostrar o valor real estornado
+    const porMovimento: Record<string, number> = {};
+    for (const x of todos) {
+      if (x.type === 'cancel' && x.reversedOfId) {
+        porMovimento[x.reversedOfId] = (porMovimento[x.reversedOfId] ?? 0) + Math.abs(Number(x.amount ?? 0));
+      }
+    }
+    setCancelMap(porMovimento);
   };
 
   const selecionarUtilizador = async (u: any) => {
@@ -583,46 +589,58 @@ function CaixaPage() {
                 <div className="pt-4 mt-4 border-t border-border">
                   <h3 className="text-sm font-semibold text-zinc-300 mb-2">Movimentos recentes</h3>
                   <div className="space-y-2">
-                    {movementList.map((m) => (
-                      <div
-                        key={m.id}
-                        className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-surface border border-border text-sm"
-                      >
-                        <span className="flex items-center gap-3">
-                          <span
-                            className={`font-mono font-semibold ${
-                              m.type === 'load' ? 'text-emerald-400' : 'text-red-400'
-                            }`}
-                          >
-                            {m.type === 'load' ? '+' : '−'}€{formatEuro(Math.abs(Number(m.amount ?? 0)))}
-                          </span>
-                          <span className="text-zinc-400 text-xs">
-                            {m.date ? formatDateTime(typeof m.date === 'string' ? m.date : new Date(m.date)) : ''}
-                          </span>
-                          {m.type === 'load' && m.reversed && <Badge variant="warning" size="sm">Estornado</Badge>}
-                          {m.type === 'consume' && <Badge variant="neutral" size="sm">Desconto</Badge>}
-                        </span>
-                        {m.type === 'load' && !m.reversed && (() => {
-                          const saldoAtual = userBalance ?? 0;
-                          const montante = Math.abs(Number(m.amount ?? 0));
-                          const estornavel = Math.min(saldoAtual, montante);
-                          if (estornavel <= 0.005) {
-                            return <Badge variant="neutral" size="sm">Já utilizado</Badge>;
-                          }
-                          const parcial = estornavel < montante - 0.005;
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => estornarMovimento(m)}
-                              disabled={loading}
-                              className="text-xs font-medium text-amber-400 hover:text-amber-300 disabled:opacity-50"
+                    {movementList.map((m) => {
+                      const montante = Math.abs(Number(m.amount ?? 0));
+                      const estornado = cancelMap[m.id] ?? 0;
+                      const estornoTotal = estornado >= montante - 0.005;
+                      return (
+                        <div
+                          key={m.id}
+                          className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-surface border border-border text-sm"
+                        >
+                          <span className="flex items-center gap-3">
+                            <span
+                              className={`font-mono font-semibold ${
+                                m.type === 'load' ? 'text-emerald-400' : 'text-red-400'
+                              }`}
                             >
-                              {parcial ? `Estornar €${estornavel.toFixed(2)}` : 'Estornar'}
-                            </button>
-                          );
-                        })()}
-                      </div>
-                    ))}
+                              {m.type === 'load' ? '+' : '−'}€{formatEuro(montante)}
+                            </span>
+                            <span className="text-zinc-400 text-xs">
+                              {m.createdAt
+                                ? formatDateTime(typeof m.createdAt === 'string' ? m.createdAt : new Date(m.createdAt))
+                                : ''}
+                            </span>
+                            {m.type === 'load' && m.reversed && (
+                              <Badge variant="warning" size="sm">
+                                {estornoTotal
+                                  ? `Estornado €${formatEuro(montante)}`
+                                  : `Estornado €${formatEuro(estornado)} de €${formatEuro(montante)}`}
+                              </Badge>
+                            )}
+                            {m.type === 'consume' && <Badge variant="neutral" size="sm">Desconto</Badge>}
+                          </span>
+                          {m.type === 'load' && !m.reversed && (() => {
+                            const saldoAtual = userBalance ?? 0;
+                            const estornavel = Math.min(saldoAtual, montante);
+                            if (estornavel <= 0.005) {
+                              return <Badge variant="neutral" size="sm">Já utilizado</Badge>;
+                            }
+                            const parcial = estornavel < montante - 0.005;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => estornarMovimento(m)}
+                                disabled={loading}
+                                className="text-xs font-medium text-amber-400 hover:text-amber-300 disabled:opacity-50"
+                              >
+                                {parcial ? `Estornar €${estornavel.toFixed(2)}` : 'Estornar'}
+                              </button>
+                            );
+                          })()}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

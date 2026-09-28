@@ -65,7 +65,7 @@ export class ReportsController {
 
   @Get('estatisticas')
   @Roles(...STAFF_ROLES)
-  async estatisticas(@Request() req: any) {
-    return this.reportsService.obterEstatisticas(req.user);
+  async estatisticas(@Query() filters: TotalQueryDto, @Request() req: any) {
+    return this.reportsService.obterEstatisticas(filters, req.user);
   }
 }

@@ -36,14 +36,14 @@ export class MembershipService {
   }
 
   eventColumnFor(scope: string[] | null, eventId?: string): { column: string; params: Record<string, unknown> } | null {
-    if (scope === null) {
-      return null;
-    }
     if (eventId) {
-      if (!scope.includes(eventId)) {
+      if (scope !== null && !scope.includes(eventId)) {
         throw new ForbiddenException('Não pertence a este evento');
       }
       return { column: 'eventId = :scopeEventId', params: { scopeEventId: eventId } };
+    }
+    if (scope === null) {
+      return null;
     }
     if (scope.length > 0) {
       return { column: 'eventId IN (:...scopeEventIds)', params: { scopeEventIds: scope } };
