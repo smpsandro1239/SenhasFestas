@@ -404,10 +404,12 @@ export async function getOrdersMine(): Promise<any> {
   return apiRequest('/orders/mine');
 }
 
-export async function reverseLoad(userId: string, movementId: string, eventId?: string): Promise<any> {
+export async function reverseLoad(userId: string, movementId: string, eventId?: string, amount?: number): Promise<any> {
   const query = eventId ? `?eventId=${encodeURIComponent(eventId)}` : '';
+  const body = amount !== undefined ? JSON.stringify({ amount }) : undefined;
   return apiRequest(`/balances/${userId}/reverse/${movementId}${query}`, {
     method: 'POST',
+    body,
   });
 }
 

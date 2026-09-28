@@ -27,3 +27,10 @@ export class DeductBalanceDto {
   @IsOptional()
   description?: string;
 }
+
+export class ReverseLoadDto {
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  @IsOptional()
+  amount?: number;
+}

@@ -2,7 +2,7 @@
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { BalanceEntity, UserEntity, BalanceMovementEntity, EventEntity, EventUserEntity, MovementType } from '../../entities';
-import { LoadBalanceDto, DeductBalanceDto } from './dto';
+import { LoadBalanceDto, DeductBalanceDto, ReverseLoadDto } from './dto';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { toPublicUser } from '../../common/serializers';
 import { centavos, soma, subtrai } from '../../common/money';
@@ -59,6 +59,7 @@ export class BalanceService {
     userId: string,
     movementId: string,
     actor?: any,
+    dto?: ReverseLoadDto,
   ): Promise<{
     balance: { id: string; currentBalance: number };
     movement: BalanceMovementEntity;
@@ -113,8 +114,17 @@ export class BalanceService {
       if (!balance) {
         throw new NotFoundException('Saldo não encontrado');
       }
-      const montante = centavos(Number(locked.amount));
-      if (centavos(Number(balance.currentBalance)) < montante) {
+
+      // Estorno pode ser parcial: o valor estornado nunca excede o disponível
+      // (saldo atual) nem o montante original do carregamento.
+      const montanteOriginal = centavos(Number(locked.amount));
+      const saldoAtual = centavos(Number(balance.currentBalance));
+      const estorno = dto?.amount !== undefined ? centavos(Number(dto.amount)) : montanteOriginal;
+      const disponivel = Math.min(saldoAtual, montanteOriginal);
+      if (estorno <= 0) {
+        throw new ForbiddenException('Valor a estornar inválido');
+      }
+      if (estorno > disponivel + 0.005) {
         throw new ForbiddenException('Saldo insuficiente para estornar (já utilizado)');
       }
 
@@ -122,14 +132,14 @@ export class BalanceService {
       locked.reversedAt = new Date();
       await manager.save(BalanceMovementEntity, locked);
 
-      balance.currentBalance = subtrai(Number(balance.currentBalance), montante);
+      balance.currentBalance = subtrai(Number(balance.currentBalance), estorno);
       const savedBalance = await manager.save(BalanceEntity, balance);
 
       const reversal = manager.create(BalanceMovementEntity, {
         balance: { id: balance.id } as any,
         type: MovementType.CANCEL,
-        amount: montante,
-        description: 'Estorno de carregamento',
+        amount: estorno,
+        description: estorno >= montanteOriginal - 0.005 ? 'Estorno de carregamento' : 'Estorno parcial de carregamento',
         reversedOfId: locked.id,
         createdById: actor?.id,
       });

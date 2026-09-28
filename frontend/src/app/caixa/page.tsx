@@ -598,16 +598,25 @@ function CaixaPage() {
                           {m.type === 'load' && m.reversed && <Badge variant="warning" size="sm">Estornado</Badge>}
                           {m.type === 'consume' && <Badge variant="neutral" size="sm">Desconto</Badge>}
                         </span>
-                        {m.type === 'load' && !m.reversed && (
-                          <button
-                            type="button"
-                            onClick={() => estornarMovimento(m)}
-                            disabled={loading}
-                            className="text-xs font-medium text-amber-400 hover:text-amber-300 disabled:opacity-50"
-                          >
-                            Estornar
-                          </button>
-                        )}
+                        {m.type === 'load' && !m.reversed && (() => {
+                          const saldoAtual = userBalance ?? 0;
+                          const montante = Math.abs(Number(m.amount ?? 0));
+                          const estornavel = Math.min(saldoAtual, montante);
+                          if (estornavel <= 0.005) {
+                            return <Badge variant="neutral" size="sm">Já utilizado</Badge>;
+                          }
+                          const parcial = estornavel < montante - 0.005;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => estornarMovimento(m)}
+                              disabled={loading}
+                              className="text-xs font-medium text-amber-400 hover:text-amber-300 disabled:opacity-50"
+                            >
+                              {parcial ? `Estornar €${estornavel.toFixed(2)}` : 'Estornar'}
+                            </button>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>
