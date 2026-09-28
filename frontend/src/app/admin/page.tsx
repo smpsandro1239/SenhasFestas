@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { Card } from '@/components/ui/card';
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert } from '@/components/ui/alert';
-import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon } from '@/components/ui/icons';
+import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon } from '@/components/ui/icons';
 import { getEvents, createEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings } from '@/lib/api';
 import { downloadTextFile } from '@/lib/download';
 
@@ -53,6 +53,13 @@ export default function AdminPage() {
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditLimit, setAuditLimit] = useState(20);
+  const [auditEntity, setAuditEntity] = useState('');
+  const [auditAction, setAuditAction] = useState('');
+  const [auditFrom, setAuditFrom] = useState('');
+  const [auditTo, setAuditTo] = useState('');
+  const [auditDetail, setAuditDetail] = useState<any>(null);
   const [settingsEventId, setSettingsEventId] = useState('');
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [settingsLoading, setSettingsLoading] = useState(false);
@@ -216,11 +223,18 @@ export default function AdminPage() {
     }
   };
 
-  const loadAudit = async () => {
+  const loadAudit = useCallback(async () => {
     setAuditLoading(true);
     setError('');
     try {
-      const data = await getAudit({ page: 1, limit: 50 });
+      const data = await getAudit({
+        page: auditPage,
+        limit: auditLimit,
+        entity: auditEntity || undefined,
+        action: auditAction || undefined,
+        from: auditFrom ? `${auditFrom}T00:00:00` : undefined,
+        to: auditTo ? `${auditTo}T23:59:59` : undefined,
+      });
       setAuditLogs(Array.isArray(data) ? data : data?.items ?? []);
       setAuditTotal(data?.total ?? 0);
     } catch (err: any) {
@@ -228,12 +242,17 @@ export default function AdminPage() {
     } finally {
       setAuditLoading(false);
     }
-  };
+  }, [auditPage, auditLimit, auditEntity, auditAction, auditFrom, auditTo]);
 
   const handleExportAudit = async () => {
     setError('');
     try {
-      const csv = await exportAuditCsv();
+      const csv = await exportAuditCsv({
+        entity: auditEntity || undefined,
+        action: auditAction || undefined,
+        from: auditFrom ? `${auditFrom}T00:00:00` : undefined,
+        to: auditTo ? `${auditTo}T23:59:59` : undefined,
+      });
       downloadTextFile('auditoria.csv', csv);
     } catch (err: any) {
       setError(err?.message ?? 'Erro ao exportar auditoria');
@@ -290,7 +309,8 @@ export default function AdminPage() {
     if (activeTab === 'produtos') loadProducts();
     if (activeTab === 'auditoria') loadAudit();
     if (activeTab === 'configuracao') loadEvents();
-  }, [activeTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, loadAudit]);
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -822,7 +842,10 @@ export default function AdminPage() {
                   <p className="text-zinc-400 text-sm">
                     Registo imutável de todas as ações (login, carregamentos, cancelamentos, fecho de caixa...).
                     {auditTotal > 0 && (
-                      <span className="text-zinc-400"> • {auditTotal} registos (últimos 50)</span>
+                      <span className="text-zinc-400">
+                        {' '}
+                        • {auditTotal} registos • página {auditPage} de {Math.max(1, Math.ceil(auditTotal / auditLimit))}
+                      </span>
                     )}
                   </p>
                 </div>
@@ -836,6 +859,75 @@ export default function AdminPage() {
                 </div>
               </div>
 
+              <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <select
+                  value={auditEntity}
+                  onChange={(e) => {
+                    setAuditEntity(e.target.value);
+                    setAuditPage(1);
+                  }}
+                  aria-label="Filtrar por entidade"
+                  className="bg-surface-solid border border-border rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                >
+                  <option value="">Todas as entidades</option>
+                  <option value="auth">auth</option>
+                  <option value="user">user</option>
+                  <option value="event">event</option>
+                  <option value="order">order</option>
+                  <option value="product">product</option>
+                  <option value="category">category</option>
+                  <option value="balance">balance</option>
+                  <option value="cash-closure">cash-closure</option>
+                  <option value="reports">reports</option>
+                </select>
+                <select
+                  value={auditAction}
+                  onChange={(e) => {
+                    setAuditAction(e.target.value);
+                    setAuditPage(1);
+                  }}
+                  aria-label="Filtrar por ação"
+                  className="bg-surface-solid border border-border rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                >
+                  <option value="">Todas as ações</option>
+                  <option value="CREATE">CREATE</option>
+                  <option value="UPDATE">UPDATE</option>
+                  <option value="DELETE">DELETE</option>
+                  <option value="LOGIN">LOGIN</option>
+                  <option value="LOGIN_FAILED">LOGIN_FAILED</option>
+                  <option value="LOGOUT">LOGOUT</option>
+                  <option value="LOAD">LOAD</option>
+                  <option value="CANCEL">CANCEL</option>
+                  <option value="REVERSAL">REVERSAL</option>
+                  <option value="OPEN">OPEN</option>
+                  <option value="CLOSE">CLOSE</option>
+                  <option value="STATUS">STATUS</option>
+                  <option value="SETTINGS">SETTINGS</option>
+                  <option value="MEMBER">MEMBER</option>
+                  <option value="EXPORT">EXPORT</option>
+                </select>
+                <input
+                  type="date"
+                  value={auditFrom}
+                  onChange={(e) => {
+                    setAuditFrom(e.target.value);
+                    setAuditPage(1);
+                  }}
+                  aria-label="Data inicial"
+                  className="bg-surface-solid border border-border rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                />
+                <input
+                  type="date"
+                  value={auditTo}
+                  onChange={(e) => {
+                    setAuditTo(e.target.value);
+                    setAuditPage(1);
+                  }}
+                  aria-label="Data final"
+                  className="bg-surface-solid border border-border rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                />
+              </div>
+
               {auditLoading && auditLogs.length === 0 ? (
                 <div className="text-sm text-zinc-400 py-4">A carregar auditoria...</div>
               ) : auditLogs.length === 0 ? (
@@ -843,9 +935,11 @@ export default function AdminPage() {
               ) : (
                 <div className="space-y-2">
                   {auditLogs.map((log) => (
-                    <div
+                    <button
                       key={log.id}
-                      className="rounded-xl border border-border bg-surface px-4 py-3 text-sm"
+                      type="button"
+                      onClick={() => setAuditDetail(log)}
+                      className="w-full text-left rounded-xl border border-border bg-surface px-4 py-3 text-sm hover:bg-surface-hover transition-colors"
                     >
                       <div className="flex items-center justify-between gap-3">
                         <span className="flex items-center gap-2">
@@ -870,12 +964,152 @@ export default function AdminPage() {
                         </span>
                         {log.ip && <span>· {log.ip}</span>}
                         <span className="text-zinc-400">· {log.details?.method ?? ''}</span>
+                        <span className="ml-auto text-brand-light">Ver detalhes →</span>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
+
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-zinc-400">Mostrar</label>
+                  <select
+                    value={auditLimit}
+                    onChange={(e) => {
+                      setAuditLimit(Number(e.target.value));
+                      setAuditPage(1);
+                    }}
+                    aria-label="Registos por página"
+                    className="bg-surface-solid border border-border rounded-lg px-2 py-1.5 text-xs text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                  >
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={auditLoading || auditPage <= 1}
+                    onClick={() => setAuditPage(auditPage - 1)}
+                  >
+                    Anterior
+                  </Button>
+                  <span className="text-xs text-zinc-400">
+                    {auditPage} / {Math.max(1, Math.ceil(auditTotal / auditLimit))}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={auditLoading || auditPage >= Math.max(1, Math.ceil(auditTotal / auditLimit))}
+                    onClick={() => setAuditPage(auditPage + 1)}
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
             </Card>
+          </div>
+        )}
+
+        {auditDetail && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="audit-detail-title"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+          >
+            <div className="w-full sm:max-w-md bg-surface-solid border border-border rounded-t-3xl sm:rounded-3xl p-6 animate-slide-up max-h-[90vh] overflow-y-auto">
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h2 id="audit-detail-title" className="text-2xl font-bold text-zinc-50">
+                    Detalhes do registo
+                  </h2>
+                  <p className="text-zinc-400 text-sm mt-1">
+                    {auditDetail.createdAt ? new Date(auditDetail.createdAt).toLocaleString('pt-PT') : '—'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setAuditDetail(null)}
+                  aria-label="Fechar diálogo"
+                  className="p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-surface"
+                >
+                  <CloseIcon className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Badge variant="brand">{auditDetail.action}</Badge>
+                  <span className="text-sm text-zinc-300">{auditDetail.entity ?? auditDetail.resource ?? '—'}</span>
+                  {auditDetail.entityId && (
+                    <span className="font-mono text-xs text-zinc-400">{auditDetail.entityId}</span>
+                  )}
+                </div>
+
+                <dl className="space-y-2 text-sm">
+                  <div className="flex justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2">
+                    <dt className="text-zinc-400 shrink-0">Ator</dt>
+                    <dd className="text-zinc-200 text-right">
+                      {auditDetail.actorRole ??
+                        (auditDetail.actorId ? '—' : 'sistema')}
+                      {auditDetail.actorId && <span className="font-mono text-xs text-zinc-400"> · {auditDetail.actorId}</span>}
+                    </dd>
+                  </div>
+                  {auditDetail.eventId && (
+                    <div className="flex justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2">
+                      <dt className="text-zinc-400 shrink-0">Evento</dt>
+                      <dd className="font-mono text-xs text-zinc-300 text-right">{auditDetail.eventId}</dd>
+                    </div>
+                  )}
+                  {auditDetail.details?.method && (
+                    <div className="flex justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2">
+                      <dt className="text-zinc-400 shrink-0">Método</dt>
+                      <dd className="text-zinc-200">{auditDetail.details.method}</dd>
+                    </div>
+                  )}
+                  {auditDetail.ip && (
+                    <div className="flex justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2">
+                      <dt className="text-zinc-400 shrink-0">IP</dt>
+                      <dd className="text-zinc-200">{auditDetail.ip}</dd>
+                    </div>
+                  )}
+                  {auditDetail.userAgent && (
+                    <div className="flex justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2">
+                      <dt className="text-zinc-400 shrink-0">User-Agent</dt>
+                      <dd className="text-zinc-300 text-xs text-right break-all">{auditDetail.userAgent}</dd>
+                    </div>
+                  )}
+                </dl>
+
+                {auditDetail.before && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-300 mb-1">Antes</h3>
+                    <pre className="text-xs text-zinc-300 bg-surface border border-border rounded-xl p-3 overflow-x-auto whitespace-pre-wrap">
+                      {JSON.stringify(auditDetail.before, null, 2)}
+                    </pre>
+                  </div>
+                )}
+                {auditDetail.after && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-300 mb-1">Depois</h3>
+                    <pre className="text-xs text-zinc-300 bg-surface border border-border rounded-xl p-3 overflow-x-auto whitespace-pre-wrap">
+                      {JSON.stringify(auditDetail.after, null, 2)}
+                    </pre>
+                  </div>
+                )}
+                {auditDetail.details && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-300 mb-1">Detalhes</h3>
+                    <pre className="text-xs text-zinc-300 bg-surface border border-border rounded-xl p-3 overflow-x-auto whitespace-pre-wrap">
+                      {JSON.stringify(auditDetail.details, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

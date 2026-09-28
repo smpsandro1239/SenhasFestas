@@ -125,6 +125,18 @@ export class AuditService {
       }
       query.andWhere('log.eventId = :filtroEventId', { filtroEventId: filtros.eventId });
     }
+    if (filtros.from) {
+      const from = new Date(filtros.from);
+      if (!isNaN(from.getTime())) {
+        query.andWhere('log.createdAt >= :from', { from });
+      }
+    }
+    if (filtros.to) {
+      const to = new Date(filtros.to);
+      if (!isNaN(to.getTime())) {
+        query.andWhere('log.createdAt <= :to', { to });
+      }
+    }
     return query;
   }
 

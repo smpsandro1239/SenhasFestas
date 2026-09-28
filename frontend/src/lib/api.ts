@@ -426,6 +426,8 @@ export interface AuditQueryParams {
   action?: string;
   actorId?: string;
   eventId?: string;
+  from?: string;
+  to?: string;
 }
 
 function auditQueryString(params?: AuditQueryParams): string {

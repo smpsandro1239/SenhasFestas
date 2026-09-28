@@ -17,4 +17,12 @@ export class AuditQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   eventId?: string;
+
+  @IsOptional()
+  @IsString()
+  from?: string;
+
+  @IsOptional()
+  @IsString()
+  to?: string;
 }
