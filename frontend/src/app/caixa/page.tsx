@@ -249,12 +249,16 @@ function CaixaPage() {
     setLoading(true);
     setError('');
     setSuccess('');
+    const saldoAtual = userBalance ?? 0;
+    const montante = Math.abs(Number(movimento.amount ?? 0));
+    const estorno = Math.min(saldoAtual, montante);
     try {
-      await reverseLoad(selectedUser.id, movimento.id, event.id);
+      const valor = estorno >= montante - 0.005 ? undefined : estorno;
+      await reverseLoad(selectedUser.id, movimento.id, event.id, valor);
       const b = await getBalance(selectedUser.id, event.id);
       atualizarDoBal(b);
       setSuccess(
-        `Carregamento de €${formatEuro(Math.abs(Number(movimento.amount ?? 0)))} estornado para ${selectedUser.name}`,
+        `Estornado €${(valor ?? montante).toFixed(2)} do carregamento de ${selectedUser.name}`,
       );
       setTimeout(() => setSuccess(''), 4000);
     } catch (err: any) {
