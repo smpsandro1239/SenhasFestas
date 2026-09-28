@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense, useMemo } from 'react';
+import { useState, useEffect, useCallback, Suspense, useMemo, useRef } from 'react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { StatCard } from '@/components/ui/stat-card';
@@ -10,7 +10,7 @@ import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
-import { ChartIcon, CashIcon, WalletIcon, ClipboardIcon } from '@/components/ui/icons';
+import { ChartIcon, CashIcon, WalletIcon, ClipboardIcon, RefreshIcon } from '@/components/ui/icons';
 import { getReports, exportOrdensCsv } from '@/lib/api';
 import { useCurrentEvent } from '@/lib/use-current-event';
 import { cn } from '@/lib/cn';
@@ -126,6 +126,28 @@ function periodoRange(periodo: Periodo): { from?: string; to?: string } {
   return { from: from.toISOString(), to: to.toISOString() };
 }
 
+// Range anterior com a mesma duração do filtro atual (para comparação de tendência).
+function periodoAnteriorRange(periodo: Periodo): { from?: string; to?: string } {
+  if (periodo === 'tudo') return {};
+  const { from } = periodoRange(periodo);
+  if (!from) return {};
+  const inicioAtual = new Date(from);
+  const diasDiferenca = periodo === 'hoje' ? 1 : periodo === '7d' ? 7 : 30;
+  const inicioAnterior = new Date(inicioAtual);
+  inicioAnterior.setDate(inicioAnterior.getDate() - diasDiferenca);
+  const fimAnterior = new Date(inicioAtual);
+  fimAnterior.setMilliseconds(-1);
+  return { from: inicioAnterior.toISOString(), to: fimAnterior.toISOString() };
+}
+
+function formatRangeLabel(periodo: Periodo, from?: string, to?: string): string {
+  if (periodo === 'tudo' || !from || !to) return 'Todo o histórico';
+  const f = new Date(from);
+  const t = new Date(to);
+  const opt: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' };
+  return `${f.toLocaleDateString('pt-PT', opt)} – ${t.toLocaleDateString('pt-PT', opt)}`;
+}
+
 function RelatoriosPage() {
   const { event } = useCurrentEvent();
   const [activeTab, setActiveTab] = useState('visao');
@@ -150,6 +172,9 @@ function RelatoriosPage() {
   const [loading, setLoading] = useState(false);
   const [loadingOrdens, setLoadingOrdens] = useState(false);
   const [error, setError] = useState('');
+  const [totalAnterior, setTotalAnterior] = useState<TotalVendas | null>(null);
+  const [ultimoRefresh, setUltimoRefresh] = useState<Date | null>(null);
+  const hasData = useRef(false);
 
   const tabs = [
     { id: 'visao', label: 'Visão Geral' },
@@ -160,17 +185,27 @@ function RelatoriosPage() {
   ];
 
   const { from, to } = useMemo(() => periodoRange(periodo), [periodo]);
+  const rangeAnterior = useMemo(() => periodoAnteriorRange(periodo), [periodo]);
+  const rangeLabel = useMemo(
+    () => formatRangeLabel(periodo, from, to),
+    [periodo, from, to],
+  );
 
   const loadResumo = useCallback(async () => {
     if (!event) return;
-    setLoading(true);
+    if (!hasData.current) setLoading(true);
     setError('');
     try {
       const base = { eventId: event.id, ...(from ? { from } : {}), ...(to ? { to } : {}) };
-      const [statsData, totalData, seriesData, metodosData, movimentosData, productsData] =
+      const baseAnterior =
+        rangeAnterior.from && rangeAnterior.to
+          ? { eventId: event.id, from: rangeAnterior.from, to: rangeAnterior.to }
+          : null;
+      const [statsData, totalData, anteriorData, seriesData, metodosData, movimentosData, productsData] =
         await Promise.all([
           getReports('estatisticas', base).catch(() => null),
           getReports('total', base).catch(() => null),
+          baseAnterior ? getReports('total', baseAnterior).catch(() => null) : Promise.resolve(null),
           getReports('series', base).catch(() => []),
           getReports('metodos', base).catch(() => []),
           getReports('movimentos', base).catch(() => []),
@@ -178,6 +213,7 @@ function RelatoriosPage() {
         ]);
       setStats(statsData ?? null);
       setTotalVendas(totalData ?? null);
+      setTotalAnterior(anteriorData ?? null);
       setSeries(Array.isArray(seriesData) ? seriesData : []);
       setMetodos(Array.isArray(metodosData) ? metodosData : []);
       setMovimentos(Array.isArray(movimentosData) ? movimentosData : []);
@@ -186,12 +222,14 @@ function RelatoriosPage() {
           ? productsData
           : productsData?.items ?? [],
       );
+      setUltimoRefresh(new Date());
+      hasData.current = true;
     } catch {
       setError('Erro ao carregar relatórios');
     } finally {
       setLoading(false);
     }
-  }, [event, from, to]);
+  }, [event, from, to, rangeAnterior.from, rangeAnterior.to]);
 
   const loadOrdens = useCallback(async () => {
     if (!event) return;
@@ -223,6 +261,19 @@ function RelatoriosPage() {
     setPeriodo(p);
   };
 
+  // Auto-refresh a cada 60s quando não está na tabela de vendas (evita reset da página atual).
+  useEffect(() => {
+    if (activeTab === 'vendas') return;
+    const id = setInterval(() => loadResumo(), 60000);
+    return () => clearInterval(id);
+  }, [activeTab, loadResumo]);
+
+  // Tendência % face ao período anterior (null quando não há comparação possível).
+  const trendPercent = (atual: number, anterior: number | undefined | null): number | null => {
+    if (anterior === undefined || anterior === null || anterior === 0) return null;
+    return ((atual - anterior) / anterior) * 100;
+  };
+
   const exportar = async () => {
     try {
       setError('');
@@ -245,6 +296,7 @@ function RelatoriosPage() {
   const maxMovimento = Math.max(1, ...movimentos.map((m) => Number(m.total || 0)));
   const maxSold = Math.max(1, ...topProducts.map((p) => Number(p.totalVendido || 0)));
   const ordemPaginas = ordemLimit > 0 ? Math.max(1, Math.ceil(ordemTotal / ordemLimit)) : 1;
+  const totalPagina = ordens.reduce((acc, o) => acc + Number(o.total || 0), 0);
 
   const tiposMovimento = [
     { tipo: 'load', label: 'Carregamentos', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', bar: 'from-emerald-500/40 to-emerald-400' },
@@ -253,6 +305,16 @@ function RelatoriosPage() {
     { tipo: 'cancel', label: 'Estornos', color: 'text-zinc-400', bg: 'bg-zinc-500/10 border-zinc-500/20', bar: 'from-zinc-500/40 to-zinc-400' },
   ];
 
+  const faturacaoAtual = Number(totalVendas?.total ?? 0);
+  const faturacaoAnterior = Number(totalAnterior?.total ?? 0);
+  const pedidosAtual = totalVendas?.pedidos ?? 0;
+  const pedidosAnterior = totalAnterior?.pedidos ?? 0;
+  const faturacaoTrend = trendPercent(faturacaoAtual, faturacaoAnterior);
+  const pedidosTrend = trendPercent(pedidosAtual, pedidosAnterior);
+  const trendLabel = (t: number | null) =>
+    t === null ? undefined : `${t >= 0 ? '↑' : '↓'} ${Math.abs(t).toFixed(1)}%`;
+  const trendDir = (t: number | null): 'up' | 'down' | undefined => (t === null ? undefined : t < 0 ? 'down' : 'up');
+
   return (
     <>
       <title>Relatórios - SenhasFestas</title>
@@ -260,25 +322,40 @@ function RelatoriosPage() {
       <AppShell>
         <PageHeader
           title="Relatórios"
-          subtitle={event ? `Análise de vendas e desempenho · ${event.name}` : 'Análise de vendas e desempenho'}
+          subtitle={
+            event
+              ? `${event.name} · ${rangeLabel} · ${ultimoRefresh ? `atualizado às ${ultimoRefresh.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}` : 'a carregar…'}`
+              : 'Análise de vendas e desempenho'
+          }
           icon={<ChartIcon className="h-5 w-5" />}
           actions={
-            <div className="flex gap-1 p-1 rounded-xl bg-surface border border-border">
-              {PERIODOS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => mudarPeriodo(p.id)}
-                  className={cn(
-                    'px-3 py-1.5 text-sm font-medium rounded-lg transition-colors',
-                    periodo === p.id
-                      ? 'bg-brand text-black'
-                      : 'text-zinc-400 hover:text-zinc-200',
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1 p-1 rounded-xl bg-surface border border-border">
+                {PERIODOS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => mudarPeriodo(p.id)}
+                    className={cn(
+                      'px-3 py-1.5 text-sm font-medium rounded-lg transition-colors',
+                      periodo === p.id
+                        ? 'bg-brand text-black'
+                        : 'text-zinc-400 hover:text-zinc-200',
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadResumo}
+                disabled={loading}
+                title="Atualizar dados"
+              >
+                <RefreshIcon className={cn('h-4 w-4', loading && 'animate-spin')} />
+              </Button>
             </div>
           }
         />
@@ -296,6 +373,8 @@ function RelatoriosPage() {
                 color="brand"
                 icon={<CashIcon className="h-5 w-5" />}
                 sub={totalVendas ? `${totalVendas.pedidos} pedidos` : undefined}
+                trend={trendLabel(faturacaoTrend)}
+                trendType={trendDir(faturacaoTrend)}
               />
               <StatCard
                 label="Pedidos"
@@ -303,6 +382,8 @@ function RelatoriosPage() {
                 color="blue"
                 icon={<ClipboardIcon className="h-5 w-5" />}
                 sub="No período selecionado"
+                trend={trendLabel(pedidosTrend)}
+                trendType={trendDir(pedidosTrend)}
               />
               <StatCard
                 label="Ticket médio"
@@ -315,6 +396,7 @@ function RelatoriosPage() {
                 }
                 color="green"
                 icon={<WalletIcon className="h-5 w-5" />}
+                sub={totalVendas?.pedidos ? `${rangeLabel}` : undefined}
               />
               <StatCard
                 label="Entregues"
@@ -334,21 +416,28 @@ function RelatoriosPage() {
                 {series.length === 0 ? (
                   <EmptyState title="Sem vendas no período" description="Ajusta o filtro de período para ver mais dados." />
                 ) : (
-                  <div className="flex items-end gap-1.5 h-48">
-                    {series.map((s) => (
-                      <div key={s.dia} className="flex-1 flex flex-col items-center gap-1 group" title={`${s.dia} · ${formatEuro(s.total)} · ${s.pedidos} pedidos`}>
-                        <span className="text-[10px] text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {formatEuro(Number(s.total) || 0)}
-                        </span>
-                        <div
-                          className="w-full rounded-t-md bg-gradient-to-t from-brand/40 to-brand transition-all duration-500"
-                          style={{ height: `${Math.max(3, (Number(s.total || 0) / maxSerie) * 100)}%` }}
-                        />
-                        <span className="text-[10px] text-zinc-500 truncate w-full text-center">
-                          {s.dia.slice(5)}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="overflow-x-auto -mx-1 px-1">
+                    <div className="flex items-end gap-1.5 h-48 min-w-[320px]" style={series.length > 14 ? { minWidth: series.length * 26 } : undefined}>
+                      {series.map((s, idx) => (
+                        <div key={s.dia} className="flex-1 flex flex-col items-center gap-1 group" title={`${s.dia} · ${formatEuro(s.total)} · ${s.pedidos} pedidos`}>
+                          <span className="text-[10px] text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {formatEuro(Number(s.total) || 0)}
+                          </span>
+                          <div
+                            className="w-full rounded-t-md bg-gradient-to-t from-brand/40 to-brand transition-all duration-500"
+                            style={{ height: `${Math.max(3, (Number(s.total || 0) / maxSerie) * 100)}%` }}
+                          />
+                          <span
+                            className={cn(
+                              'text-[10px] text-zinc-500 truncate w-full text-center',
+                              series.length > 14 && idx % 5 !== 0 && 'opacity-0',
+                            )}
+                          >
+                            {s.dia.slice(5)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </Card>
@@ -413,9 +502,13 @@ function RelatoriosPage() {
                 </Button>
               </div>
 
-              <div className="flex items-center justify-between text-sm text-zinc-400 mb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-400 mb-3">
                 <span>{ordemTotal} pedidos</span>
-                <span>Página {ordemPage} de {ordemPaginas}</span>
+                {!loadingOrdens && ordens.length > 0 && (
+                  <span className="text-zinc-500">
+                    Soma nesta página: <span className="text-zinc-200 font-medium">{formatEuro(totalPagina)}</span>
+                  </span>
+                )}
               </div>
 
               {ordens.length === 0 && !loadingOrdens ? (
@@ -488,7 +581,9 @@ function RelatoriosPage() {
                 >
                   Anterior
                 </Button>
-                <span className="text-sm text-zinc-500">{ordemTotal} resultados</span>
+                <span className="text-sm text-zinc-500">
+                  Página {ordemPage} de {ordemPaginas} · {ordemTotal} resultados
+                </span>
                 <Button
                   variant="outline"
                   size="sm"
@@ -506,7 +601,7 @@ function RelatoriosPage() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-zinc-100">Produtos Mais Vendidos</h2>
-              <Badge variant="brand" size="sm">{topProducts.length} no topo</Badge>
+              <Badge variant="brand" size="sm">{topProducts.length} no topo · {rangeLabel}</Badge>
             </div>
             {topProducts.length === 0 ? (
               <EmptyState title="Sem dados disponíveis" description="Assim que houver pedidos, o ranking aparece aqui." />
@@ -549,7 +644,7 @@ function RelatoriosPage() {
 
         {activeTab === 'saldo' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 max-w-4xl">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-4xl">
               {['load', 'consume', 'refund', 'cancel'].map((tipo) => {
                 const m = movimentos.find((x) => x.tipo === tipo);
                 const cfg = tiposMovimento.find((x) => x.tipo === tipo)!;
@@ -563,6 +658,29 @@ function RelatoriosPage() {
                   />
                 );
               })}
+            </div>
+
+            <div className="max-w-4xl">
+              <StatCard
+                label="Saldo líquido no período"
+                value={
+                  loading
+                    ? '…'
+                    : formatEuro(
+                        movimentos.reduce(
+                          (acc, m) =>
+                            acc +
+                            (m.tipo === 'consume' || m.tipo === 'refund' || m.tipo === 'cancel'
+                              ? -Number(m.total || 0)
+                              : Number(m.total || 0)),
+                          0,
+                        ),
+                      )
+                }
+                color="brand"
+                icon={<WalletIcon className="h-5 w-5" />}
+                sub="Carregamentos − consumos − reembolsos − estornos"
+              />
             </div>
 
             <Card className="max-w-2xl">
