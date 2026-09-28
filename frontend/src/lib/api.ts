@@ -277,9 +277,16 @@ export async function getReports(type: string, params?: any): Promise<any> {
   return apiRequest(`/reports/${type}${query ? `?${query}` : ''}`);
 }
 
-export async function getProducts(eventId?: string): Promise<any> {
-  const query = eventId ? `?eventId=${encodeURIComponent(eventId)}` : '';
-  return apiRequest(`/products${query}`);
+export async function getProducts(params?: { eventId?: string; page?: number; limit?: number; q?: string; categoryId?: string; availability?: string }): Promise<any> {
+  const qs = new URLSearchParams();
+  if (params?.eventId) qs.set('eventId', params.eventId);
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.q?.trim()) qs.set('q', params.q.trim());
+  if (params?.categoryId) qs.set('categoryId', params.categoryId);
+  if (params?.availability) qs.set('availability', params.availability);
+  const query = qs.toString();
+  return apiRequest(`/products${query ? `?${query}` : ''}`);
 }
 
 export async function getCategories(): Promise<any> {

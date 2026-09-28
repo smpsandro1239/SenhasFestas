@@ -34,6 +34,12 @@ export default function AdminPage() {
   const [memberTarget, setMemberTarget] = useState('');
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [productTotal, setProductTotal] = useState(0);
+  const [productPage, setProductPage] = useState(1);
+  const [productLimit, setProductLimit] = useState(20);
+  const [productSearch, setProductSearch] = useState('');
+  const [productCategory, setProductCategory] = useState('');
+  const [productAvailability, setProductAvailability] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
@@ -150,19 +156,29 @@ export default function AdminPage() {
     }
   };
 
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [data, cats] = await Promise.all([getProducts(), getCategories()]);
+      const [data, cats] = await Promise.all([
+        getProducts({
+          page: productPage,
+          limit: productLimit,
+          q: productSearch || undefined,
+          categoryId: productCategory || undefined,
+          availability: productAvailability || undefined,
+        }),
+        getCategories(),
+      ]);
       setProducts(Array.isArray(data) ? data : data?.items ?? []);
+      setProductTotal(data?.total ?? (Array.isArray(data) ? data.length : 0));
       setCategories(Array.isArray(cats) ? cats : []);
     } catch (err: any) {
       setError(err?.message ?? 'Erro ao carregar produtos');
     } finally {
       setLoading(false);
     }
-  };
+  }, [productPage, productLimit, productSearch, productCategory, productAvailability]);
 
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -310,7 +326,7 @@ export default function AdminPage() {
     if (activeTab === 'auditoria') loadAudit();
     if (activeTab === 'configuracao') loadEvents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, loadAudit]);
+  }, [activeTab, loadAudit, loadProducts]);
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -585,66 +601,166 @@ export default function AdminPage() {
         {activeTab === 'produtos' && (
           <div className="space-y-6">
             <Card>
-              <h2 className="text-xl font-bold text-zinc-50 mb-2">Produtos</h2>
-              <p className="text-zinc-400 mb-6 text-sm">
-                Catálogo de produtos e preços do evento.
-              </p>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <h2 className="text-xl font-bold text-zinc-50 mb-1">Produtos</h2>
+                  <p className="text-zinc-400 text-sm">
+                    Catálogo de produtos e preços do evento. {productTotal > 0 && `${productTotal} produto${productTotal === 1 ? '' : 's'}.`}
+                  </p>
+                </div>
+              </div>
 
-              {loading && products.length === 0 ? null : products.length === 0 ? (
-                <div className="text-sm text-zinc-400 py-4">Nenhum produto criado ainda.</div>
-              ) : (
-                <div className="space-y-3">
-                  {products.map((product) => (
-                    <Card key={product.id} hover className="bg-surface border-border-hover">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="font-semibold text-zinc-100">{product.name}</div>
-                          {product.description && (
-                            <div className="text-sm text-zinc-400 mt-1">{product.description}</div>
-                          )}
-                          <div className="flex items-center gap-2 mt-2">
-                            <Badge variant="success">€{Number(product.price).toFixed(2)}</Badge>
-                            <Badge
-                              variant={
-                                product.availability === 'available'
-                                  ? 'success'
+              <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <Input
+                  label="Procurar"
+                  value={productSearch}
+                  onChange={(e) => {
+                    setProductSearch(e.target.value);
+                    setProductPage(1);
+                  }}
+                  placeholder="Nome do produto..."
+                  className="w-full"
+                />
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1.5">Categoria</label>
+                  <select
+                    value={productCategory}
+                    onChange={(e) => {
+                      setProductCategory(e.target.value);
+                      setProductPage(1);
+                    }}
+                    className="w-full bg-surface-solid border border-border rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                  >
+                    <option value="">Todas as categorias</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1.5">Disponibilidade</label>
+                  <select
+                    value={productAvailability}
+                    onChange={(e) => {
+                      setProductAvailability(e.target.value);
+                      setProductPage(1);
+                    }}
+                    className="w-full bg-surface-solid border border-border rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                  >
+                    <option value="">Todas</option>
+                    <option value="available">Disponível</option>
+                    <option value="limited">Limitado</option>
+                    <option value="unavailable">Indisponível</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-6">
+                {loading && products.length === 0 ? null : products.length === 0 ? (
+                  <div className="text-sm text-zinc-400 py-4">
+                    {productSearch || productCategory || productAvailability
+                      ? 'Nenhum produto corresponde aos filtros.'
+                      : 'Nenhum produto criado ainda.'}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {products.map((product) => (
+                      <Card key={product.id} hover className="bg-surface border-border-hover">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="font-semibold text-zinc-100">{product.name}</div>
+                            {product.description && (
+                              <div className="text-sm text-zinc-400 mt-1">{product.description}</div>
+                            )}
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                              <Badge variant="success">€{Number(product.price).toFixed(2)}</Badge>
+                              <Badge
+                                variant={
+                                  product.availability === 'available'
+                                    ? 'success'
+                                    : product.availability === 'limited'
+                                      ? 'warning'
+                                      : 'danger'
+                                }
+                              >
+                                {product.availability === 'available'
+                                  ? 'Disponível'
                                   : product.availability === 'limited'
-                                    ? 'warning'
-                                    : 'danger'
-                              }
-                            >
-                              {product.availability === 'available'
-                                ? 'Disponível'
-                                : product.availability === 'limited'
-                                  ? 'Limitado'
-                                  : 'Indisponível'}
-                            </Badge>
+                                    ? 'Limitado'
+                                    : 'Indisponível'}
+                              </Badge>
+                              {product.stock != null && (
+                                <Badge variant="neutral">Stock: {product.stock}</Badge>
+                              )}
+                            </div>
+                            <div className="mt-2">
+                              <select
+                                value={product.category?.id ?? ''}
+                                onChange={(e) => changeProductCategory(product, e.target.value)}
+                                aria-label={`Categoria de ${product.name}`}
+                                className="text-xs bg-surface-solid border border-border rounded-lg px-2 py-1 text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                              >
+                                <option value="">Sem categoria</option>
+                                {categories.map((c) => (
+                                  <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
-                          <div className="mt-2">
-                            <select
-                              value={product.category?.id ?? ''}
-                              onChange={(e) => changeProductCategory(product, e.target.value)}
-                              aria-label={`Categoria de ${product.name}`}
-                              className="text-xs bg-surface-solid border border-border rounded-lg px-2 py-1 text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
-                            >
-                              <option value="">Sem categoria</option>
-                              {categories.map((c) => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                              ))}
-                            </select>
-                          </div>
+                          <Button
+                            variant={product.availability === 'available' ? 'danger' : 'success'}
+                            size="sm"
+                            onClick={() => toggleProductAvailability(product)}
+                            disabled={loading}
+                          >
+                            {product.availability === 'available' ? 'Desativar' : 'Ativar'}
+                          </Button>
                         </div>
-                        <Button
-                          variant={product.availability === 'available' ? 'danger' : 'success'}
-                          size="sm"
-                          onClick={() => toggleProductAvailability(product)}
-                          disabled={loading}
-                        >
-                          {product.availability === 'available' ? 'Desativar' : 'Ativar'}
-                        </Button>
-                      </div>
-                    </Card>
-                  ))}
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {productTotal > 0 && (
+                <div className="mt-6 flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-400">Por página</span>
+                    <select
+                      value={productLimit}
+                      onChange={(e) => {
+                        setProductLimit(Number(e.target.value));
+                        setProductPage(1);
+                      }}
+                      aria-label="Produtos por página"
+                      className="bg-surface-solid border border-border rounded-lg px-2 py-1.5 text-xs text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                    >
+                      <option value="20">20</option>
+                      <option value="50">50</option>
+                      <option value="100">100</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={loading || productPage <= 1}
+                      onClick={() => setProductPage(productPage - 1)}
+                    >
+                      Anterior
+                    </Button>
+                    <span className="text-xs text-zinc-400">
+                      {productPage} / {Math.max(1, Math.ceil(productTotal / productLimit))}
+                    </span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={loading || productPage >= Math.max(1, Math.ceil(productTotal / productLimit))}
+                      onClick={() => setProductPage(productPage + 1)}
+                    >
+                      Próxima
+                    </Button>
+                  </div>
                 </div>
               )}
             </Card>

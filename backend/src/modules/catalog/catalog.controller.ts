@@ -29,14 +29,27 @@ export class CatalogController {
   ) {}
 
   @Get()
-  async findAll(@Query() query: PaginationQueryDto & { eventId?: string }, @Request() req: any) {
+  async findAll(
+    @Query()
+    query: PaginationQueryDto & {
+      eventId?: string;
+      q?: string;
+      categoryId?: string;
+      availability?: string;
+    },
+    @Request() req: any,
+  ) {
     if (req.user.role === 'client' && !query.eventId) {
       return { items: [], total: 0, page: query.page, limit: query.limit };
     }
     if (query.eventId && req.user.role !== 'superadmin') {
       await this.membershipService.assertMember(req.user, query.eventId);
     }
-    return this.catalogService.findAll(query.eventId, query.page, query.limit);
+    return this.catalogService.findAll(query.eventId, query.page, query.limit, {
+      q: query.q,
+      categoryId: query.categoryId,
+      availability: query.availability,
+    });
   }
 
   @Get('categories')

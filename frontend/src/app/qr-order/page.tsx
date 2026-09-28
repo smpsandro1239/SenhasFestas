@@ -48,7 +48,7 @@ function QROrderPage() {
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getProducts(eventId || undefined);
+      const data = await getProducts(eventId ? { eventId } : undefined);
       setProducts(Array.isArray(data) ? data : data?.items ?? []);
     } catch {
       setError('Erro ao carregar produtos');

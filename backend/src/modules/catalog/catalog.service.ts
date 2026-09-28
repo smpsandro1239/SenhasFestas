@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProductEntity, CategoryEntity, UserEntity, EventEntity, OrderEntity, OrderItemEntity } from '../../entities';
-import { In } from 'typeorm';
+import { In, ILike } from 'typeorm';
 import { CreateProductDto, UpdateProductDto } from './dto';
 import { MembershipService } from '../../common/membership.service';
 
@@ -22,10 +22,24 @@ export class CatalogService {
     private readonly membershipService: MembershipService,
   ) {}
 
-  async findAll(eventId?: string, page = 1, limit = 20): Promise<{ items: ProductEntity[]; total: number; page: number; limit: number }> {
+  async findAll(
+    eventId?: string,
+    page = 1,
+    limit = 20,
+    filters: { q?: string; categoryId?: string; availability?: string } = {},
+  ): Promise<{ items: ProductEntity[]; total: number; page: number; limit: number }> {
     const where: Record<string, unknown> = { isActive: true };
     if (eventId) {
       where.event = { id: eventId };
+    }
+    if (filters.q?.trim()) {
+      where.name = ILike(`%${filters.q.trim()}%`);
+    }
+    if (filters.categoryId) {
+      where.category = { id: filters.categoryId };
+    }
+    if (filters.availability) {
+      where.availability = filters.availability;
     }
     const [items, total] = await this.productRepository.findAndCount({
       where,
