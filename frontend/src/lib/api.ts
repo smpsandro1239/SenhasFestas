@@ -353,6 +353,13 @@ export async function getUserById(userId: string): Promise<any> {
   return apiRequest(`/users/${userId}`);
 }
 
+export async function updateUser(id: string, data: any): Promise<any> {
+  return apiRequest(`/users/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function createUser(data: any): Promise<any> {
   return apiRequest('/users', {
     method: 'POST',

@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert } from '@/components/ui/alert';
 import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon } from '@/components/ui/icons';
-import { getEvents, createEvent, getUsers, getProducts, getCategories, createProduct, updateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings } from '@/lib/api';
+import { getEvents, createEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings } from '@/lib/api';
 import { downloadTextFile } from '@/lib/download';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
@@ -130,6 +130,16 @@ export default function AdminPage() {
       setError(err?.message ?? 'Erro ao remover utilizador do evento');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const changeUserRole = async (userId: string, role: string) => {
+    setError('');
+    try {
+      await updateUser(userId, { role });
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)));
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao alterar perfil do utilizador');
     }
   };
 
@@ -432,7 +442,23 @@ export default function AdminPage() {
                           <span className="block text-xs text-zinc-400">{user.email}</span>
                         </span>
                       </span>
-                      <Badge variant={roleVariant[user.role] ?? 'warning'}>{user.role}</Badge>
+                      <span className="flex items-center gap-3">
+                        <select
+                          value={user.role}
+                          onChange={(e) => changeUserRole(user.id, e.target.value)}
+                          aria-label={`Perfil de ${user.name ?? user.email}`}
+                          className="bg-surface-solid border border-border rounded-lg px-2 py-1.5 text-xs text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                        >
+                          <option value="client">Cliente</option>
+                          <option value="bar">Bar</option>
+                          <option value="kitchen">Cozinha</option>
+                          <option value="cashier">Caixa</option>
+                          <option value="treasurer">Tesoureiro</option>
+                          <option value="organizer">Organizador</option>
+                          <option value="superadmin">Superadmin</option>
+                        </select>
+                        <Badge variant={roleVariant[user.role] ?? 'warning'}>{user.role}</Badge>
+                      </span>
                     </Card>
                   ))}
                 </div>
