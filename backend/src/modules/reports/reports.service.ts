@@ -141,10 +141,13 @@ export class ReportsService {
     const query = this.orderItemRepository
       .createQueryBuilder('item')
       .leftJoin('item.product', 'product')
+      .innerJoin('item.order', 'orden')
       .select('product.id', 'id')
       .addSelect('product.name', 'name')
       .addSelect('product.price', 'price')
       .addSelect('SUM(item.quantity)', 'totalVendido')
+      .addSelect('SUM(item.subtotal)', 'receita')
+      .where('orden.status != :cancelado', { cancelado: 'cancelled' })
       .groupBy('product.id')
       .addGroupBy('product.name')
       .addGroupBy('product.price')
@@ -153,7 +156,92 @@ export class ReportsService {
 
     const scope = this.membershipService.eventColumnFor(eventIds, filtros?.eventId);
     if (scope) {
-      query.innerJoin('item.order', 'ordenEm').andWhere('ordenEm.' + scope.column, scope.params);
+      query.andWhere('orden.' + scope.column, scope.params);
+    }
+
+    const rows = await query.getRawMany();
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      price: row.price,
+      totalVendido: Number(row.totalVendido ?? 0),
+      receita: Number(row.receita ?? 0),
+    }));
+  }
+
+  async obterSeriesVendas(filtros: TotalQueryDto, utilizador: any) {
+    const eventIds = await this.membershipService.eventIdsFor(utilizador);
+
+    const query = this.orderRepository
+      .createQueryBuilder('orden')
+      .select("to_char(orden.createdAt, 'YYYY-MM-DD')", 'dia')
+      .addSelect('COALESCE(SUM(orden.total), 0)', 'total')
+      .addSelect('COUNT(orden.id)::int', 'pedidos')
+      .where('orden.status != :cancelado', { cancelado: 'cancelled' })
+      .groupBy('dia')
+      .orderBy('dia', 'ASC');
+
+    const scope = this.membershipService.eventColumnFor(eventIds, filtros?.eventId);
+    if (scope) {
+      query.andWhere('orden.' + scope.column, scope.params);
+    }
+    if (filtros?.from) {
+      query.andWhere('orden.createdAt >= :desde', { desde: filtros.from });
+    }
+    if (filtros?.to) {
+      query.andWhere('orden.createdAt <= :ate', { ate: filtros.to });
+    }
+
+    return query.getRawMany();
+  }
+
+  async obterMetodosPagamento(filtros: TotalQueryDto, utilizador: any) {
+    const eventIds = await this.membershipService.eventIdsFor(utilizador);
+
+    const query = this.orderRepository
+      .createQueryBuilder('orden')
+      .select('orden.paymentMethod', 'metodo')
+      .addSelect('COALESCE(SUM(orden.total), 0)', 'total')
+      .addSelect('COUNT(orden.id)::int', 'pedidos')
+      .where('orden.status != :cancelado', { cancelado: 'cancelled' })
+      .groupBy('orden.paymentMethod')
+      .orderBy('"total"', 'DESC');
+
+    const scope = this.membershipService.eventColumnFor(eventIds, filtros?.eventId);
+    if (scope) {
+      query.andWhere('orden.' + scope.column, scope.params);
+    }
+    if (filtros?.from) {
+      query.andWhere('orden.createdAt >= :desde', { desde: filtros.from });
+    }
+    if (filtros?.to) {
+      query.andWhere('orden.createdAt <= :ate', { ate: filtros.to });
+    }
+
+    return query.getRawMany();
+  }
+
+  async obterResumoMovimentos(filtros: TotalQueryDto, utilizador: any) {
+    const eventIds = await this.membershipService.eventIdsFor(utilizador);
+
+    const query = this.movementRepository
+      .createQueryBuilder('movimentacao')
+      .innerJoin('movimentacao.balance', 'saldo')
+      .select('movimentacao.type', 'tipo')
+      .addSelect('COALESCE(SUM(movimentacao.amount), 0)', 'total')
+      .addSelect('COUNT(movimentacao.id)::int', 'quantidade')
+      .groupBy('movimentacao.type')
+      .orderBy('"total"', 'DESC');
+
+    const scope = this.membershipService.eventColumnFor(eventIds, filtros?.eventId);
+    if (scope) {
+      query.andWhere('saldo.' + scope.column, scope.params);
+    }
+    if (filtros?.from) {
+      query.andWhere('movimentacao.createdAt >= :desde', { desde: filtros.from });
+    }
+    if (filtros?.to) {
+      query.andWhere('movimentacao.createdAt <= :ate', { ate: filtros.to });
     }
 
     return query.getRawMany();

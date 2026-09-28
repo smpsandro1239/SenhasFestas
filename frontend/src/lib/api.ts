@@ -277,6 +277,27 @@ export async function getReports(type: string, params?: any): Promise<any> {
   return apiRequest(`/reports/${type}${query ? `?${query}` : ''}`);
 }
 
+export async function exportOrdensCsv(params?: any): Promise<void> {
+  const query = params ? new URLSearchParams(params).toString() : '';
+  const resp = await fetch(`${API_BASE}/reports/export.csv${query ? `?${query}` : ''}`, {
+    method: 'GET',
+    credentials: 'include',
+  });
+  if (!resp.ok) {
+    const msg = (await readErrorBody(resp)) || `Erro na exportação (${resp.status})`;
+    throw new ApiError(msg, resp.status);
+  }
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ordens-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function getProducts(params?: { eventId?: string; page?: number; limit?: number; q?: string; categoryId?: string; availability?: string }): Promise<any> {
   const qs = new URLSearchParams();
   if (params?.eventId) qs.set('eventId', params.eventId);

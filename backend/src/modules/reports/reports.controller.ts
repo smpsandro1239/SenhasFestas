@@ -45,6 +45,24 @@ export class ReportsController {
     return this.reportsService.topProducts(filters, req.user);
   }
 
+  @Get('series')
+  @Roles(...STAFF_ROLES)
+  async seriesVendas(@Query() filters: TotalQueryDto, @Request() req: any) {
+    return this.reportsService.obterSeriesVendas(filters, req.user);
+  }
+
+  @Get('metodos')
+  @Roles(...STAFF_ROLES)
+  async metodosPagamento(@Query() filters: TotalQueryDto, @Request() req: any) {
+    return this.reportsService.obterMetodosPagamento(filters, req.user);
+  }
+
+  @Get('movimentos')
+  @Roles(...STAFF_ROLES)
+  async resumoMovimentos(@Query() filters: TotalQueryDto, @Request() req: any) {
+    return this.reportsService.obterResumoMovimentos(filters, req.user);
+  }
+
   @Get('estatisticas')
   @Roles(...STAFF_ROLES)
   async estatisticas(@Request() req: any) {
