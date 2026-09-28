@@ -112,11 +112,11 @@ function BalancePage() {
 
       {error && <div className="mt-4"><Alert variant="error" message={error} /></div>}
 
-      {!isStaff && user && (
+      {user && accessCode && (
         <div className="mt-6 rounded-xl border border-amber-300/25 gradient-brand-soft p-4 text-center">
           <p className="text-sm font-semibold text-amber-200">QR para recarga na caixa</p>
           <div className="mt-3 mx-auto bg-white p-3 rounded-xl w-fit">
-            <QRCodeSVG value={user.id} size={128} />
+            <QRCodeSVG value={accessCode} size={160} />
           </div>
           {accessCode && (
             <div className="mt-3">

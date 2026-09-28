@@ -200,7 +200,8 @@ function CaixaPage() {
     setError('');
     setSuccess('');
     try {
-      const u = await getUserById(code.trim());
+      const valor = code.trim();
+      const u = /^\d{6}$/.test(valor) ? await getUserByAccessCode(valor) : await getUserById(valor);
       if (!u || u.role !== 'client') {
         setError('O código lido não corresponde a um cliente.');
         return;
