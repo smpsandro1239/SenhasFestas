@@ -9,6 +9,8 @@ import {
   CashClosureEntity,
 } from '../../entities';
 import { CreateEventDto, UpdateEventDto, AddMemberDto, EventSettingsDto } from './dto';
+import { AuditService } from '../audit/audit.service';
+import { eventWindowMessage } from '../../common/event-window';
 
 @Injectable()
 export class EventService {
@@ -21,9 +23,11 @@ export class EventService {
     private readonly orderRepository: Repository<OrderEntity>,
     @InjectRepository(CashClosureEntity)
     private readonly cashClosureRepository: Repository<CashClosureEntity>,
+    private readonly auditService: AuditService,
   ) {}
 
   async findByUser(user: any): Promise<EventEntity[]> {
+    await this.autoCloseExpired();
     if (user?.role === 'superadmin') {
       return this.eventRepository.find();
     }
@@ -32,6 +36,81 @@ export class EventService {
       .innerJoin(EventUserEntity, 'eu', 'eu.eventId = event.id')
       .where('eu.userId = :userId', { userId: user?.id })
       .getMany();
+  }
+
+  /**
+   * Fecha eventos ativos cuja janela (endDate + 1 dia às 06:00 Europe/Lisbon)
+   * já passou. Idempotente: o UPDATE só afeta linhas ainda 'active', evitando
+   * duplicação de auditoria se o cron e o lazy check correrem em simultâneo.
+   */
+  async autoCloseExpired(now: Date = new Date()): Promise<number> {
+    const ativos = await this.eventRepository.find({ where: { status: 'active' as any } });
+    let fechados = 0;
+    for (const evento of ativos) {
+      const motivo = eventWindowMessage(evento, now);
+      if (!motivo?.includes('terminou')) continue;
+      const { affected } = await this.eventRepository.update(
+        { id: evento.id, status: 'active' as any },
+        { status: 'closed' as any },
+      );
+      if (affected !== 1) continue;
+      fechados += 1;
+      await this.auditService.record({
+        action: 'STATUS',
+        entity: 'event',
+        entityId: evento.id,
+        eventId: evento.id,
+        actorId: undefined,
+        actorRole: 'system',
+        after: { status: 'closed' },
+        details: { automatico: true, motivo, fechadoEm: now.toISOString() },
+      });
+    }
+    return fechados;
+  }
+
+  /**
+   * Guard financeiro/operacional: o evento tem de estar a decorrer dentro da
+   * janela de datas. Se a janela já passou e o evento ainda está 'active',
+   * fecha-o (idempotente + auditoria) antes de lançar — o auto-close nunca
+   * bloqueia por mais do que um UPDATE condicional.
+   */
+  async assertEventOperavel(event: EventEntity): Promise<void> {
+    const hoje = new Date();
+    const motivo = eventWindowMessage(event, hoje);
+    if (event.status !== 'active') {
+      throw new ForbiddenException(
+        event.status === 'draft' ? 'Evento ainda não está ativo' : 'Evento encerrado',
+      );
+    }
+    if (motivo) {
+      const { affected } = await this.eventRepository.update(
+        { id: event.id, status: 'active' as any },
+        { status: 'closed' as any },
+      );
+      if (affected === 1) {
+        await this.auditService.record({
+          action: 'STATUS',
+          entity: 'event',
+          entityId: event.id,
+          eventId: event.id,
+          actorId: undefined,
+          actorRole: 'system',
+          after: { status: 'closed' },
+          details: { automatico: true, motivo, fechadoEm: hoje.toISOString() },
+        });
+      }
+      throw new ForbiddenException(motivo);
+    }
+  }
+
+  async assertEventOperavelById(eventId: string): Promise<EventEntity> {
+    const event = await this.eventRepository.findOne({ where: { id: eventId } });
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+    await this.assertEventOperavel(event);
+    return event;
   }
 
   async findOne(id: string, user: UserEntity): Promise<EventEntity> {
@@ -76,6 +155,14 @@ export class EventService {
     status: 'draft' | 'active' | 'closed',
   ): Promise<EventEntity> {
     const event = await this.findOne(id, user);
+    if (status === 'active') {
+      const motivo = eventWindowMessage(event, new Date());
+      if (motivo?.includes('terminou')) {
+        throw new ConflictException(
+          'Não é possível reabrir o evento: a data de fim já passou. Aumente a data primeiro.',
+        );
+      }
+    }
     event.status = status;
     return this.eventRepository.save(event);
   }

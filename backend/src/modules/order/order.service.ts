@@ -8,6 +8,7 @@ import { OrderGateway } from '../../websocket/order.gateway';
 import { NotificationService } from '../../services/notification.service';
 import { MovementType } from '../../entities';
 import { centavos, soma, subtrai } from '../../common/money';
+import { EventService } from '../event/event.service';
 
 @Injectable()
 export class OrderService {
@@ -31,6 +32,7 @@ export class OrderService {
     private readonly qrCodeService: QRCodeService,
     private readonly orderGateway: OrderGateway,
     private readonly notificationService: NotificationService,
+    private readonly eventService: EventService,
   ) {}
 
   async create(user: any, dto: CreateOrderDto): Promise<any> {
@@ -38,9 +40,7 @@ export class OrderService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
-    if (event.status !== 'active') {
-      throw new ForbiddenException('Evento não está ativo');
-    }
+    await this.eventService.assertEventOperavel(event);
 
     const isMember = await this.eventUserRepository.findOne({
       where: { event: { id: event.id }, user: { id: user.id } },

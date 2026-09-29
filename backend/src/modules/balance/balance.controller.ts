@@ -83,6 +83,12 @@ export class BalanceController {
     return this.balanceService.getBalanceHistory(userId, eventId);
   }
 
+  @Get('event/:eventId/outstanding')
+  @Roles(...FINANCE_ROLES)
+  async outstanding(@Param('eventId', ParseUUIDPipe) eventId: string, @Request() req: any) {
+    return this.balanceService.listSaldosPendentes(eventId, req.user);
+  }
+
   private assertCanAccess(requestUser: any, userId: string) {
     if (requestUser.role === 'client') {
       if (requestUser.id !== userId) {

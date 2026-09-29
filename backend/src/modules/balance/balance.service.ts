@@ -1,11 +1,12 @@
 ﻿import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, MoreThan } from 'typeorm';
 import { BalanceEntity, UserEntity, BalanceMovementEntity, EventEntity, EventUserEntity, MovementType } from '../../entities';
 import { LoadBalanceDto, DeductBalanceDto, ReverseLoadDto } from './dto';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { toPublicUser } from '../../common/serializers';
 import { centavos, soma, subtrai } from '../../common/money';
+import { EventService } from '../event/event.service';
 
 @Injectable()
 export class BalanceService {
@@ -23,6 +24,7 @@ export class BalanceService {
     @InjectDataSource()
     private readonly dataSource: DataSource,
     private readonly orderGateway: OrderGateway,
+    private readonly eventService: EventService,
   ) {}
 
   async assertMemberEvent(userId: string, eventId: string): Promise<void> {
@@ -43,6 +45,9 @@ export class BalanceService {
   }
 
   async loadBalance(userId: string, dto: LoadBalanceDto, actor?: any): Promise<Partial<BalanceEntity>> {
+    if (dto.eventId) {
+      await this.eventService.assertEventOperavelById(dto.eventId);
+    }
     const updated = await this.runLoadTransaction(userId, dto, actor);
     this.orderGateway.emitOrderUpdate(updated.id, 'balance_updated', updated.event?.id);
     return {
@@ -222,6 +227,9 @@ export class BalanceService {
     dto: DeductBalanceDto,
     actor?: any,
   ): Promise<{ id: string; currentBalance: number; movement: BalanceMovementEntity }> {
+    if (dto.eventId) {
+      await this.eventService.assertEventOperavelById(dto.eventId);
+    }
     const resultado = await this.dataSource.transaction(async (manager) => {
       const balance = await manager.findOne(BalanceEntity, {
         where: dto.eventId
@@ -277,6 +285,30 @@ export class BalanceService {
       order: { createdAt: 'DESC' },
       take: 50,
     });
+  }
+
+  async listSaldosPendentes(
+    eventId: string,
+    utilizador: any,
+  ): Promise<{ userId: string; name: string; email?: string; balance: number }[]> {
+    const evento = await this.eventRepository.findOne({ where: { id: eventId } });
+    if (!evento) {
+      throw new NotFoundException('Evento não encontrado');
+    }
+    if (utilizador.role !== 'superadmin') {
+      await this.assertMemberEvent(utilizador.id, eventId);
+    }
+    const saldos = await this.balanceRepository.find({
+      where: { event: { id: eventId }, currentBalance: MoreThan(0) as any },
+      relations: { user: true },
+      order: { currentBalance: 'DESC' },
+    });
+    return saldos.map((saldo) => ({
+      userId: saldo.user?.id,
+      name: saldo.user?.name ?? 'Cliente',
+      email: saldo.user?.email,
+      balance: Number(saldo.currentBalance),
+    }));
   }
 
   async getBalance(

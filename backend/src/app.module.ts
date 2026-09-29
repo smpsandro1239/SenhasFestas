@@ -15,6 +15,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { CashClosureModule } from './modules/cash-closure/cash-closure.module';
 import { UserModule } from './modules/user/user.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { CronModule } from './modules/cron/cron.module';
 import { RedisModule } from './common/redis/redis.module';
 import { MembershipModule } from './common/membership.module';
 import { WebSocketModule } from './websocket/websocket.module';
@@ -67,6 +68,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     CashClosureModule,
     UserModule,
     AuditModule,
+    CronModule,
   ],
   controllers: [AppController, HealthController],
   providers: [

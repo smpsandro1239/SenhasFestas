@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CashClosureEntity } from '../../entities';
 import { MembershipService } from '../../common/membership.service';
+import { EventService } from '../event/event.service';
 import { CreateCashClosureDto, CloseCashClosureDto } from './dto';
 import { centavos } from '../../common/money';
 
@@ -12,6 +13,7 @@ export class CashClosureService {
     @InjectRepository(CashClosureEntity)
     private readonly cashClosureRepository: Repository<CashClosureEntity>,
     private readonly membershipService: MembershipService,
+    private readonly eventService: EventService,
   ) {}
 
   async abrirCaixa(
@@ -20,6 +22,7 @@ export class CashClosureService {
     dto: CreateCashClosureDto,
   ): Promise<CashClosureEntity> {
     await this.membershipService.assertMember(utilizador, dto.eventId);
+    await this.eventService.assertEventOperavelById(dto.eventId);
     const novoFecho = this.cashClosureRepository.create({
       eventId: dto.eventId,
       openedById: operadorId,

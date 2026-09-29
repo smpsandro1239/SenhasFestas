@@ -2,10 +2,11 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CashClosureController } from './cash-closure.controller';
 import { CashClosureService } from './cash-closure.service';
+import { EventModule } from '../event/event.module';
 import { CashClosureEntity } from '../../entities';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([CashClosureEntity])],
+  imports: [TypeOrmModule.forFeature([CashClosureEntity]), EventModule],
   controllers: [CashClosureController],
   providers: [CashClosureService],
   exports: [CashClosureService],
