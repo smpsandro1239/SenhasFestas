@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert } from '@/components/ui/alert';
 import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon } from '@/components/ui/icons';
-import { getEvents, createEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings } from '@/lib/api';
+import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings } from '@/lib/api';
 import { downloadTextFile } from '@/lib/download';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
@@ -70,6 +70,10 @@ export default function AdminPage() {
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [eventEditing, setEventEditing] = useState<any>(null);
+  const [eventEditForm, setEventEditForm] = useState({ name: '', location: '', startDate: '', endDate: '' });
+  const [eventDeleting, setEventDeleting] = useState<any>(null);
+  const [actionLoadingEventId, setActionLoadingEventId] = useState('');
 
   const tabs = [
     { id: 'eventos', label: 'Eventos', icon: <CalendarIcon className="h-4 w-4" /> },
@@ -352,6 +356,70 @@ export default function AdminPage() {
     }
   };
 
+  const changeEventStatus = async (event: any, status: 'draft' | 'active' | 'closed') => {
+    setActionLoadingEventId(event.id);
+    setError('');
+    try {
+      await updateEventStatus(event.id, status);
+      await loadEvents();
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao alterar estado do evento');
+    } finally {
+      setActionLoadingEventId('');
+    }
+  };
+
+  const openEditEvent = (event: any) => {
+    setEventEditing(event);
+    setEventEditForm({
+      name: event.name ?? '',
+      location: event.location ?? '',
+      startDate: event.startDate ? String(event.startDate).slice(0, 10) : '',
+      endDate: event.endDate ? String(event.endDate).slice(0, 10) : '',
+    });
+    setError('');
+  };
+
+  const handleSaveEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!eventEditing) return;
+    if (!eventEditForm.name || !eventEditForm.startDate || !eventEditForm.endDate) {
+      setError('Preencha nome e datas do evento');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      await updateEvent(eventEditing.id, {
+        name: eventEditForm.name,
+        location: eventEditForm.location || undefined,
+        startDate: eventEditForm.startDate,
+        endDate: eventEditForm.endDate,
+      });
+      setEventEditing(null);
+      await loadEvents();
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao guardar evento');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteEvent = async () => {
+    if (!eventDeleting) return;
+    setLoading(true);
+    setError('');
+    try {
+      await deleteEvent(eventDeleting.id);
+      setEventDeleting(null);
+      await loadEvents();
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao eliminar evento');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
       <title>Admin - SenhasFestas</title>
@@ -405,6 +473,59 @@ export default function AdminPage() {
                         >
                           {event.status === 'active' ? 'Ativo' : event.status === 'draft' ? 'Rascunho' : 'Fechado'}
                         </Badge>
+                      </div>
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
+                        {event.status === 'draft' && (
+                          <Button
+                            variant="success"
+                            size="sm"
+                            loading={actionLoadingEventId === event.id}
+                            onClick={() => changeEventStatus(event, 'active')}
+                          >
+                            Ativar Evento
+                          </Button>
+                        )}
+                        {event.status === 'active' && (
+                          <>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              loading={actionLoadingEventId === event.id}
+                              onClick={() => changeEventStatus(event, 'closed')}
+                            >
+                              Fechar Evento
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              loading={actionLoadingEventId === event.id}
+                              onClick={() => changeEventStatus(event, 'draft')}
+                            >
+                              Voltar a Rascunho
+                            </Button>
+                          </>
+                        )}
+                        {event.status === 'closed' && (
+                          <Button
+                            variant="success"
+                            size="sm"
+                            loading={actionLoadingEventId === event.id}
+                            onClick={() => changeEventStatus(event, 'active')}
+                          >
+                            Reabrir Evento
+                          </Button>
+                        )}
+                        <Button variant="outline" size="sm" onClick={() => openEditEvent(event)}>
+                          Editar
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEventDeleting(event)}
+                          className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        >
+                          Eliminar
+                        </Button>
                       </div>
                     </Card>
                   ))}
@@ -1127,6 +1248,110 @@ export default function AdminPage() {
                 </div>
               </div>
             </Card>
+          </div>
+        )}
+
+        {eventEditing && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="event-edit-title"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+          >
+            <div className="w-full sm:max-w-md bg-surface-solid border border-border rounded-t-3xl sm:rounded-3xl p-6 animate-slide-up max-h-[90vh] overflow-y-auto">
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h2 id="event-edit-title" className="text-2xl font-bold text-zinc-50">
+                    Editar Evento
+                  </h2>
+                  <p className="text-zinc-400 text-sm mt-1">{eventEditing.name}</p>
+                </div>
+                <button
+                  onClick={() => setEventEditing(null)}
+                  aria-label="Fechar diálogo"
+                  className="p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-surface"
+                >
+                  <CloseIcon className="h-4 w-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEvent} className="space-y-4">
+                <Input
+                  label="Nome do evento"
+                  value={eventEditForm.name}
+                  onChange={(e) => setEventEditForm({ ...eventEditForm, name: e.target.value })}
+                  placeholder="Festa de Aldeia - Agosto 2026"
+                  required
+                />
+                <Input
+                  label="Local"
+                  value={eventEditForm.location}
+                  onChange={(e) => setEventEditForm({ ...eventEditForm, location: e.target.value })}
+                  placeholder="Praça Central"
+                />
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Início"
+                    type="date"
+                    value={eventEditForm.startDate}
+                    onChange={(e) => setEventEditForm({ ...eventEditForm, startDate: e.target.value })}
+                    required
+                  />
+                  <Input
+                    label="Fim"
+                    type="date"
+                    value={eventEditForm.endDate}
+                    onChange={(e) => setEventEditForm({ ...eventEditForm, endDate: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="flex items-center gap-3 pt-2">
+                  <Button type="submit" loading={loading}>
+                    {loading ? 'A guardar...' : 'Guardar Alterações'}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setEventEditing(null)}>
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {eventDeleting && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="event-delete-title"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+          >
+            <div className="w-full sm:max-w-md bg-surface-solid border border-border rounded-t-3xl sm:rounded-3xl p-6 animate-slide-up">
+              <div className="flex items-start justify-between mb-4">
+                <h2 id="event-delete-title" className="text-xl font-bold text-zinc-50">
+                  Eliminar Evento?
+                </h2>
+                <button
+                  onClick={() => setEventDeleting(null)}
+                  aria-label="Fechar diálogo"
+                  className="p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-surface"
+                >
+                  <CloseIcon className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="text-zinc-400 text-sm mb-6">
+                Esta ação elimina o evento{' '}
+                <span className="text-zinc-200 font-medium">{eventDeleting.name}</span>. Só é
+                possível se não tiver pedidos em curso nem caixa aberto.
+              </p>
+              <div className="flex items-center gap-3">
+                <Button variant="danger" type="button" onClick={handleDeleteEvent} loading={loading}>
+                  {loading ? 'A eliminar...' : 'Sim, eliminar'}
+                </Button>
+                <Button variant="outline" type="button" onClick={() => setEventDeleting(null)}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
           </div>
         )}
 

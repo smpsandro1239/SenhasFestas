@@ -377,6 +377,22 @@ export async function updateEvent(id: string, data: any): Promise<any> {
   });
 }
 
+export async function updateEventStatus(
+  id: string,
+  status: 'draft' | 'active' | 'closed',
+): Promise<any> {
+  return apiRequest(`/events/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function deleteEvent(id: string): Promise<any> {
+  return apiRequest(`/events/${id}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function getUsers(q?: string): Promise<any> {
   const query = q ? `?q=${encodeURIComponent(q)}` : '';
   return apiRequest(`/users${query}`);
