@@ -63,6 +63,10 @@ function BalancePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (!eventId) {
+      setError('Sem evento ativo — não é possível recarregar');
+      return;
+    }
     setLoading(true);
     setError('');
 
@@ -145,6 +149,19 @@ function BalancePage() {
           <Alert
             variant="info"
             message="Para carregar saldo, dirija-se ao bar ou ao caixa do evento. O carregamento é feito presencialmente pela equipa."
+          />
+          <div className="text-center mt-6">
+            <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-300 transition-colors">
+              <ArrowLeftIcon className="h-4 w-4" />
+              Voltar ao menu
+            </Link>
+          </div>
+        </div>
+      ) : !eventId ? (
+        <div className="mt-6">
+          <Alert
+            variant="info"
+            message="Sem evento ativo de momento. O carregamento de saldo exige um evento em curso."
           />
           <div className="text-center mt-6">
             <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-300 transition-colors">
