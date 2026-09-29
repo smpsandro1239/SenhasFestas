@@ -264,6 +264,10 @@ export async function getBalanceHistory(userId: string, eventId?: string): Promi
   return apiRequest(`/balances/${userId}/history${query}`);
 }
 
+export async function getOutstandingBalances(eventId: string): Promise<any> {
+  return apiRequest(`/balances/event/${eventId}/outstanding`);
+}
+
 export async function getKitchenOrders(query?: string): Promise<any> {
   return apiRequest(`/kitchen/pedidos${query ? `?${query}` : ''}`);
 }

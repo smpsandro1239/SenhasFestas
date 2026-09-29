@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert } from '@/components/ui/alert';
 import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon } from '@/components/ui/icons';
-import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings } from '@/lib/api';
+import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances } from '@/lib/api';
 import { downloadTextFile } from '@/lib/download';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
@@ -74,6 +74,10 @@ export default function AdminPage() {
   const [eventEditForm, setEventEditForm] = useState({ name: '', location: '', startDate: '', endDate: '' });
   const [eventDeleting, setEventDeleting] = useState<any>(null);
   const [actionLoadingEventId, setActionLoadingEventId] = useState('');
+  const [outstandingEventId, setOutstandingEventId] = useState('');
+  const [outstandingBalances, setOutstandingBalances] = useState<any[]>([]);
+  const [outstandingLoading, setOutstandingLoading] = useState(false);
+  const [outstandingTotal, setOutstandingTotal] = useState(0);
 
   const tabs = [
     { id: 'eventos', label: 'Eventos', icon: <CalendarIcon className="h-4 w-4" /> },
@@ -363,9 +367,35 @@ export default function AdminPage() {
       await updateEventStatus(event.id, status);
       await loadEvents();
     } catch (err: any) {
-      setError(err?.message ?? 'Erro ao alterar estado do evento');
+      // Se o backend recusar reabrir (data de fim já passou), abre o editor para estender a data.
+      const msg = err?.message ?? '';
+      if (status === 'active' && /data de fim já passou|terminou/i.test(msg)) {
+        setError(`${msg} — estenda a data no formulário abaixo e tente reabrir novamente.`);
+        openEditEvent(event);
+      } else {
+        setError(msg || 'Erro ao alterar estado do evento');
+      }
     } finally {
       setActionLoadingEventId('');
+    }
+  };
+
+  const loadOutstanding = async (eventId: string) => {
+    if (!eventId) {
+      setOutstandingBalances([]);
+      setOutstandingTotal(0);
+      return;
+    }
+    setOutstandingLoading(true);
+    setError('');
+    try {
+      const list = await getOutstandingBalances(eventId);
+      setOutstandingBalances(Array.isArray(list) ? list : []);
+      setOutstandingTotal((Array.isArray(list) ? list : []).reduce((sum, s: any) => sum + Number(s.balance ?? 0), 0));
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao carregar saldos pendentes');
+    } finally {
+      setOutstandingLoading(false);
     }
   };
 
@@ -569,6 +599,66 @@ export default function AdminPage() {
                   {loading ? 'A criar...' : 'Criar Evento'}
                 </Button>
               </form>
+            </Card>
+
+            <Card>
+              <h2 className="text-xl font-bold text-zinc-50 mb-2">Saldos pendentes por evento</h2>
+              <p className="text-zinc-400 mb-4 text-sm">
+                Clientes com saldo carregado ainda não gasto. Os estornos continuam disponíveis
+                depois do evento fechar — nunca há devolução automática.
+              </p>
+
+              <div className="space-y-4 max-w-lg">
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-medium text-zinc-400">Evento</label>
+                  <select
+                    value={outstandingEventId}
+                    onChange={(e) => {
+                      setOutstandingEventId(e.target.value);
+                      loadOutstanding(e.target.value);
+                    }}
+                    className="w-full bg-surface-solid border border-border rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                  >
+                    <option value="">Selecionar evento...</option>
+                    {events.map((ev) => (
+                      <option key={ev.id} value={ev.id}>
+                        {ev.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {outstandingEventId && (
+                  <div>
+                    {outstandingLoading ? (
+                      <div className="text-sm text-zinc-400 py-2">A carregar saldos...</div>
+                    ) : outstandingBalances.length === 0 ? (
+                      <div className="text-sm text-zinc-400 py-2">
+                        Nenhum cliente com saldo pendente neste evento.
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between py-2 border-b border-border">
+                          <span className="text-xs text-zinc-400">
+                            {outstandingBalances.length} cliente{outstandingBalances.length === 1 ? '' : 's'} com saldo
+                          </span>
+                          <Badge variant="warning">
+                            Total: €{outstandingTotal.toFixed(2)}
+                          </Badge>
+                        </div>
+                        <div className="space-y-2 pt-2 max-h-72 overflow-y-auto">
+                          {outstandingBalances.map((s: any) => (
+                            <Card key={s.userId} padding="sm" className="flex items-center justify-between bg-surface">
+                              <span className="text-sm text-zinc-200">{s.name}</span>
+                              <Badge variant="success">€{Number(s.balance).toFixed(2)}</Badge>
+                            </Card>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </Card>
           </div>
         )}

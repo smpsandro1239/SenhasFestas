@@ -215,90 +215,102 @@ function QROrderPage() {
         </div>
       </header>
 
-      {/* Products */}
+{/* Products */}
       <main className="max-w-lg mx-auto px-4 py-6 pb-32">
-        <h2 className="text-lg font-bold text-zinc-100 mb-4">Escolha os seus petiscos</h2>
-
-        {loading ? (
-          <div className="space-y-3">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="shimmer h-24 rounded-2xl" />
-            ))}
+        {event?.status === 'closed' ? (
+          <div className="rounded-2xl border border-zinc-800 bg-surface p-8 text-center">
+            <h2 className="text-2xl font-bold text-zinc-50 mb-2">Evento encerrado</h2>
+            <p className="text-zinc-400 text-sm">
+              Este evento já terminou e não aceita mais pedidos. Se tiver saldo por gastar,
+              fale com o caixa para devolver o valor.
+            </p>
           </div>
-        ) : !eventId ? (
-          <Alert variant="info" message="Evento não identificado. Peça o código QR da sua mesa para fazer pedidos." />
-        ) : error ? (
-          <Alert variant="error" message={error} />
-        ) : products.length === 0 ? (
-          <Alert variant="info" message="Nenhum produto disponível de momento." />
         ) : (
           <div className="space-y-6">
-            {groupedProducts.map((group) => (
-              <section key={group.category?.id ?? 'sem-categoria'} aria-label={group.category?.name ?? 'Outros'}>
-                <div className="flex items-center gap-2 mb-2">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-300">
-                    {group.category?.name ?? 'Outros'}
-                  </h3>
-                  <div className="flex-1 h-px bg-border" />
-                </div>
-                <div className="grid grid-cols-1 gap-3">
-                  {group.items.map((product: Product) => {
-                    const cartItem = cart.find((item) => item.id === product.id);
-                    const qty = cartItem?.quantity || 0;
-                    return (
-                      <div
-                        key={product.id}
-                        className={cn(
-                          'rounded-2xl p-4 flex items-center gap-4 transition-all duration-200 border',
-                          qty > 0
-                            ? 'bg-brand/5 border-brand/30'
-                            : 'bg-surface border-border',
-                        )}
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <h4 className="font-semibold text-zinc-100">{product.name}</h4>
-                            <span className="text-sm font-bold text-brand-light">
-                              €{Number(product.price).toFixed(2)}
-                            </span>
-                          </div>
-                          {product.description && (
-                            <p className="text-sm text-zinc-400 mt-0.5 line-clamp-2">
-                              {product.description}
-                            </p>
-                          )}
-                        </div>
+            <h2 className="text-lg font-bold text-zinc-100 mb-4">Escolha os seus petiscos</h2>
 
-                        <div className="flex items-center gap-2.5 shrink-0">
-                          {qty > 0 && (
-                            <button
-                              onClick={() => removeFromCart(product.id)}
-                              className="h-8 w-8 rounded-lg bg-surface border border-border text-zinc-300 hover:bg-surface-hover flex items-center justify-center transition-colors"
-                            >
-                              <MinusIcon className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                          <span className={cn('text-sm font-semibold w-5 text-center', qty > 0 ? 'text-zinc-100' : 'text-transparent')}>
-                            {qty}
-                          </span>
-                          <button
-                            onClick={() => addToCart(product)}
+            {loading ? (
+              <div className="space-y-3">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="shimmer h-24 rounded-2xl" />
+                ))}
+              </div>
+            ) : !eventId ? (
+              <Alert variant="info" message="Evento não identificado. Peça o código QR da sua mesa para fazer pedidos." />
+            ) : error ? (
+              <Alert variant="error" message={error} />
+            ) : products.length === 0 ? (
+              <Alert variant="info" message="Nenhum produto disponível de momento." />
+            ) : (
+              <div className="space-y-6">
+                {groupedProducts.map((group) => (
+                  <section key={group.category?.id ?? 'sem-categoria'} aria-label={group.category?.name ?? 'Outros'}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-300">
+                        {group.category?.name ?? 'Outros'}
+                      </h3>
+                      <div className="flex-1 h-px bg-border" />
+                    </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      {group.items.map((product: Product) => {
+                        const cartItem = cart.find((item) => item.id === product.id);
+                        const qty = cartItem?.quantity || 0;
+                        return (
+                          <div
+                            key={product.id}
                             className={cn(
-                              'h-8 w-8 rounded-lg flex items-center justify-center transition-all',
+                              'rounded-2xl p-4 flex items-center gap-4 transition-all duration-200 border',
                               qty > 0
-                                ? 'bg-brand text-black hover:bg-brand-hover'
-                                : 'bg-surface border border-border text-zinc-300 hover:bg-surface-hover',
+                                ? 'bg-brand/5 border-brand/30'
+                                : 'bg-surface border-border',
                             )}
                           >
-                            <PlusIcon className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <h4 className="font-semibold text-zinc-100">{product.name}</h4>
+                                <span className="text-sm font-bold text-brand-light">
+                                  €{Number(product.price).toFixed(2)}
+                                </span>
+                              </div>
+                              {product.description && (
+                                <p className="text-sm text-zinc-400 mt-0.5 line-clamp-2">
+                                  {product.description}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2.5 shrink-0">
+                              {qty > 0 && (
+                                <button
+                                  onClick={() => removeFromCart(product.id)}
+                                  className="h-8 w-8 rounded-lg bg-surface border border-border text-zinc-300 hover:bg-surface-hover flex items-center justify-center transition-colors"
+                                >
+                                  <MinusIcon className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              <span className={cn('text-sm font-semibold w-5 text-center', qty > 0 ? 'text-zinc-100' : 'text-transparent')}>
+                                {qty}
+                              </span>
+                              <button
+                                onClick={() => addToCart(product)}
+                                className={cn(
+                                  'h-8 w-8 rounded-lg flex items-center justify-center transition-all',
+                                  qty > 0
+                                    ? 'bg-brand text-black hover:bg-brand-hover'
+                                    : 'bg-surface border border-border text-zinc-300 hover:bg-surface-hover',
+                                )}
+                              >
+                                <PlusIcon className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </main>

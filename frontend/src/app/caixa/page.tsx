@@ -332,6 +332,16 @@ function CaixaPage() {
           icon={<CashIcon className="h-5 w-5" />}
         />
 
+        {event?.status === 'closed' && (
+          <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+            <span className="font-semibold text-amber-300">Evento encerrado.</span>{' '}
+            <span className="text-amber-200/80">
+              Carregamentos, descontos e abertura de caixa estão bloqueados. Os estornos de saldo
+              continuam disponíveis para devolver dinheiro a clientes.
+            </span>
+          </div>
+        )}
+
         <Tabs items={tabs} activeTab={activeTab} onChange={setActiveTab} className="mb-6" />
 
         {activeTab === 'fecho' && (
@@ -355,6 +365,7 @@ function CaixaPage() {
                     onChange={(e) => setFormData({ ...formData, valorInicial: e.target.value })}
                     placeholder="Ex: 50.00"
                     required
+                    disabled={event?.status === 'closed'}
                   />
                   <Textarea
                     label="Observações (opcional)"
@@ -362,8 +373,9 @@ function CaixaPage() {
                     onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
                     rows={3}
                     placeholder="Observações sobre o fundo de troco..."
+                    disabled={event?.status === 'closed'}
                   />
-                  <Button type="submit" loading={loading} variant="success" className="w-full" size="lg">
+                  <Button type="submit" loading={loading} variant="success" className="w-full" size="lg" disabled={event?.status === 'closed'}>
                     {loading ? 'A abrir...' : 'Abrir Caixa'}
                   </Button>
                 </form>
@@ -572,12 +584,15 @@ function CaixaPage() {
                     variant={movementMode === 'load' ? 'success' : 'danger'}
                     className="w-full"
                     size="lg"
+                    disabled={event?.status === 'closed'}
                   >
                     {loading
                       ? 'A processar...'
-                      : movementMode === 'load'
-                        ? 'Confirmar Carregamento'
-                        : 'Confirmar Desconto'}
+                      : event?.status === 'closed'
+                        ? 'Evento encerrado — só estornos'
+                        : movementMode === 'load'
+                          ? 'Confirmar Carregamento'
+                          : 'Confirmar Desconto'}
                   </Button>
                 </>
               )}
