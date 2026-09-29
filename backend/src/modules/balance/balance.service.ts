@@ -45,12 +45,10 @@ export class BalanceService {
   }
 
   async loadBalance(userId: string, dto: LoadBalanceDto, actor?: any): Promise<Partial<BalanceEntity>> {
-    // Decisão: saldos sem eventId (legacy/globais) ficam fora da janela operacional.
-    // Staff é forçado a eventId pelo controller (assertStaffEventScope); só superadmin
-    // pode carregar sem evento — contorna a janela de propósito.
-    if (dto.eventId) {
-      await this.eventService.assertEventOperavelById(dto.eventId);
+    if (!dto.eventId) {
+      throw new ForbiddenException('Carregamento de saldo exige eventId (evita saldo sem scope de evento)');
     }
+    await this.eventService.assertEventOperavelById(dto.eventId);
     const updated = await this.runLoadTransaction(userId, dto, actor);
     this.orderGateway.emitOrderUpdate(updated.id, 'balance_updated', updated.event?.id);
     return {
@@ -230,11 +228,10 @@ export class BalanceService {
     dto: DeductBalanceDto,
     actor?: any,
   ): Promise<{ id: string; currentBalance: number; movement: BalanceMovementEntity }> {
-    // Decisão: saldos sem eventId (legacy/globais) ficam fora da janela operacional —
-    // mesma regra do loadBalance (só superadmin chega aqui sem eventId).
-    if (dto.eventId) {
-      await this.eventService.assertEventOperavelById(dto.eventId);
+    if (!dto.eventId) {
+      throw new ForbiddenException('Desconto de saldo exige eventId (evita saldo sem scope de evento)');
     }
+    await this.eventService.assertEventOperavelById(dto.eventId);
     const resultado = await this.dataSource.transaction(async (manager) => {
       const balance = await manager.findOne(BalanceEntity, {
         where: dto.eventId

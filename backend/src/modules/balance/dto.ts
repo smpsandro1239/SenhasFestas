@@ -10,8 +10,7 @@ export class LoadBalanceDto {
   paymentMethod?: string;
 
   @IsUUID()
-  @IsOptional()
-  eventId?: string;
+  eventId: string;
 }
 
 export class DeductBalanceDto {
@@ -20,8 +19,7 @@ export class DeductBalanceDto {
   amount: number;
 
   @IsUUID()
-  @IsOptional()
-  eventId?: string;
+  eventId: string;
 
   @IsString()
   @IsOptional()

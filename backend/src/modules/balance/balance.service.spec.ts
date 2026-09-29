@@ -55,18 +55,13 @@ describe('BalanceService — guard de janela operacional', () => {
       expect((balanceService as any).dataSource.transaction).not.toHaveBeenCalled();
     });
 
-    it('NÃO chama o guard quando não há eventId (contorna a janela)', async () => {
-      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) =>
-        fn({
-          findOne: vi.fn().mockResolvedValue({ id: 'b1', currentBalance: 0, event: null }),
-          create: vi.fn(),
-          save: vi.fn().mockImplementation((_e, entity) => Promise.resolve(entity)),
-        }),
-      );
+    it('RECUSA carregamento sem eventId (evita saldo sem scope de evento)', async () => {
+      (balanceService as any).dataSource.transaction = vi.fn();
 
-      await balanceService.loadBalance('u1', { amount: 10 } as any, { id: 'staff' });
-
-      expect(eventService.assertEventOperavelById).not.toHaveBeenCalled();
+      await expect(
+        balanceService.loadBalance('u1', { amount: 10 } as any, { id: 'staff' }),
+      ).rejects.toThrow(ForbiddenException);
+      expect((balanceService as any).dataSource.transaction).not.toHaveBeenCalled();
     });
   });
 
@@ -97,18 +92,13 @@ describe('BalanceService — guard de janela operacional', () => {
       expect((balanceService as any).dataSource.transaction).not.toHaveBeenCalled();
     });
 
-    it('NÃO chama o guard quando não há eventId (contorna a janela)', async () => {
-      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) =>
-        fn({
-          findOne: vi.fn().mockResolvedValue({ id: 'b1', currentBalance: 100 }),
-          save: vi.fn().mockImplementation((_e, entity) => Promise.resolve(entity)),
-          create: vi.fn(),
-        }),
-      );
+    it('RECUSA desconto sem eventId (evita saldo sem scope de evento)', async () => {
+      (balanceService as any).dataSource.transaction = vi.fn();
 
-      await balanceService.deductBalance('u1', { amount: 10 } as any, { id: 'staff' });
-
-      expect(eventService.assertEventOperavelById).not.toHaveBeenCalled();
+      await expect(
+        balanceService.deductBalance('u1', { amount: 10 } as any, { id: 'staff' }),
+      ).rejects.toThrow(ForbiddenException);
+      expect((balanceService as any).dataSource.transaction).not.toHaveBeenCalled();
     });
   });
 });
