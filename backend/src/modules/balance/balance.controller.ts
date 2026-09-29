@@ -32,7 +32,7 @@ export class BalanceController {
     @Body() dto: LoadBalanceDto,
     @Request() req: any,
   ) {
-    if (dto.eventId && req.user.role !== 'superadmin') {
+    if (req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
     this.assertStaffEventScope(req.user, dto.eventId);
@@ -62,7 +62,7 @@ export class BalanceController {
     @Body() dto: DeductBalanceDto,
     @Request() req: any,
   ) {
-    if (dto.eventId && req.user.role !== 'superadmin') {
+    if (req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
     this.assertStaffEventScope(req.user, dto.eventId);
