@@ -141,6 +141,19 @@ describe('EventService — autoCloseExpired (janela de datas)', () => {
     expect(fechados).toBe(0);
     expect(mockEventRepository.update).not.toHaveBeenCalled();
   });
+
+  it('fecha com now real (simula "Festa Teste 2026": endDate 07/09 à data atual)', async () => {
+    mockEventRepository.find.mockResolvedValue([eventoAtivo('2026-09-07T00:00:00Z')]);
+    mockEventRepository.update.mockResolvedValue({ affected: 1 });
+
+    const fechados = await service.autoCloseExpired();
+
+    expect(fechados).toBe(1);
+    expect(mockEventRepository.update).toHaveBeenCalledWith(
+      { id: 'eventoY', status: 'active' },
+      { status: 'closed' },
+    );
+  });
 });
 
 describe('EventService — assertEventOperavel (guard de janela)', () => {
