@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Headers, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Headers, ForbiddenException, Logger } from '@nestjs/common';
 import { EventService } from '../event/event.service';
 
 const CRON_SECRET_ENV = 'CRON_SECRET';
@@ -10,6 +10,8 @@ const CRON_SECRET_ENV = 'CRON_SECRET';
  */
 @Controller('cron')
 export class CronController {
+  private readonly logger = new Logger(CronController.name);
+
   constructor(private readonly eventService: EventService) {}
 
   @Get('close-events')
@@ -19,6 +21,7 @@ export class CronController {
   ): Promise<{ fechados: number }> {
     this.assertAutorizado(authorization, secret);
     const fechados = await this.eventService.autoCloseExpired();
+    this.logger.log(`Cron close-events executado: ${fechados} evento(s) fechado(s)`);
     return { fechados };
   }
 

@@ -45,6 +45,9 @@ export class BalanceService {
   }
 
   async loadBalance(userId: string, dto: LoadBalanceDto, actor?: any): Promise<Partial<BalanceEntity>> {
+    // Decisão: saldos sem eventId (legacy/globais) ficam fora da janela operacional.
+    // Staff é forçado a eventId pelo controller (assertStaffEventScope); só superadmin
+    // pode carregar sem evento — contorna a janela de propósito.
     if (dto.eventId) {
       await this.eventService.assertEventOperavelById(dto.eventId);
     }
@@ -227,6 +230,8 @@ export class BalanceService {
     dto: DeductBalanceDto,
     actor?: any,
   ): Promise<{ id: string; currentBalance: number; movement: BalanceMovementEntity }> {
+    // Decisão: saldos sem eventId (legacy/globais) ficam fora da janela operacional —
+    // mesma regra do loadBalance (só superadmin chega aqui sem eventId).
     if (dto.eventId) {
       await this.eventService.assertEventOperavelById(dto.eventId);
     }
