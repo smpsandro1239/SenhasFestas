@@ -6,6 +6,10 @@ Estado do projeto: 16 fixes da auditoria em produção, 161 testes backend,
 Este ficheiro consolida tudo o que falta, para não ter de procurar no
 `test-kit.md`, no `post-fixes.md` ou no histórico de conversa.
 
+**Migração de runtime pronta, não pusheada:** `5a98d15` (Node.js 24) e
+`f439dae` (Postgres 18, Redis 8). `main` está 2 commits à frente de
+`origin/main`. Secção 6.
+
 ---
 
 ## 0. A11-0 — segredos em texto claro no repositório público — PRIORIDADE
@@ -135,7 +139,47 @@ ali — se apareceu, foi introduzido sem o registo.
 
 ---
 
-## 6. Fase 3 (opcional — só se disseres "quero continuar")
+## 6. Push da migração de runtime — depois da rotação
+
+**Porquê existe esta secção.** Dois commits estão commitados localmente e não
+pusheados. Nenhum foi executado na prática: as tags novas do CI nunca correram,
+e o volume local do Postgres nunca foi testado (não há Docker na máquina onde
+isto foi preparado). **O primeiro push é o primeiro smoke test real.**
+
+| # | Item | Onde | Onde está o procedimento |
+|---|---|---|---|
+| 6.1 | `DATABASE_URL` — role novo no Neon | Consola Neon → Password | `docs/a11-rotation.md` §5 |
+| 6.2 | `DATABASE_URL` no backend Vercel | `senhasfestas-api` / production | `docs/a11-rotation.md` §4 |
+| 6.3 | **`DB_PASSWORD` (+ `DB_HOST`/`DB_USERNAME`) nos GitHub Secrets** | GitHub → Settings → Secrets | `docs/runbook-push-node-pg.md` §1.3 |
+| 6.4 | `JWT_SECRET` — **os dois** projetos, mesmo valor | `senhasfestas-api` + `senhas-festas` | `docs/a11-rotation.md` §4 |
+| 6.5 | `CRON_SECRET` — backend | `senhasfestas-api` / production | `docs/runbook-push-node-pg.md` §1.5 |
+| 6.6 | Volume local do Postgres (só se tiveres dados) | `docker compose` | `docs/dev-pg18-migration.md` |
+| 6.7 | `git push origin main` | — | `docs/runbook-push-node-pg.md` §2 |
+| 6.8 | CI verde (backend + frontend) | GitHub Actions | `docs/runbook-push-node-pg.md` §3 |
+| 6.9 | Deploy verde | GitHub Actions | `docs/runbook-push-node-pg.md` §4 |
+| 6.10 | `/api/health` 200 **e** um pedido real que toque na BD | produção | `docs/runbook-push-node-pg.md` §5 |
+| 6.11 | Cron com o segredo novo → 200, não 403 | produção | `docs/runbook-push-node-pg.md` §5.4 |
+
+> **6.3 não é a mesma coisa que 6.2.** O job `deploy` do CI lê `DB_PASSWORD` /
+> `DB_HOST` / `DB_USERNAME` / `DB_NAME`, **não** `DATABASE_URL`
+> (`.github/workflows/ci.yml`; consumido em
+> `backend/src/database/data-source.ts:7-12`). Actualizar o `DATABASE_URL` nos
+> GitHub Secrets não muda nada para o `migration:run`. São dois caminhos
+> separados: Vercel para o backend, GitHub Secrets para o CI.
+
+> **Ordem.** 6.1 → 6.2 → 6.3 → 6.4 → 6.5 → 6.7. A rotação do `DATABASE_URL`
+> primeiro porque dá acesso directo aos dados e não tem dependências. O
+> `JWT_SECRET` só depois, porque rotacioná-lo faz logout de toda a gente — não
+> se quer isso a meio de um evento. O push no fim, porque é o que executa
+> `migration:run` contra a produção.
+
+> **O `JWT_SECRET` no frontend é suposto estar lá.** Não remova
+> (`docs/a11-rotation.md` §0). Se desaparecer, `middleware.ts` trata o token
+> como expirado e deixa passar todas as rotas — sem erro e sem log.
+
+---
+
+## 7. Fase 3 (opcional — só se disseres "quero continuar")
 
 Nada disto é urgente. Está priorizado em `docs/post-fixes.md`.
 
@@ -162,6 +206,17 @@ Preencher à medida que executas.
 | 3 | Bloco 2 (2A, passo 4) | ☐ passou / ☐ falhou / ☐ não testável | | |
 | 4 | B7 (IVA) | ☐ aplicar / ☐ remover | | |
 | 5 | A2 (Redis) | ☐ bloquear / ☐ permitir | | |
+| 6.1 | Neon — `DATABASE_URL` rotado | ☐ por fazer | | |
+| 6.2 | Vercel backend — `DATABASE_URL` | ☐ por fazer | | |
+| 6.3 | GitHub Secrets — `DB_PASSWORD` (+ host/user) | ☐ por fazer | | |
+| 6.4 | `JWT_SECRET` nos dois projetos Vercel | ☐ por fazer | | |
+| 6.5 | `CRON_SECRET` no backend | ☐ por fazer | | |
+| 6.6 | Volume local PG15→PG18 | ☐ limpo / ☐ dump-restore / ☐ não aplicável | | |
+| 6.7 | Push | ☐ feito | | SHA: |
+| 6.8 | CI verde | ☐ passou / ☐ falhou | | |
+| 6.9 | Deploy verde | ☐ passou / ☐ falhou | | |
+| 6.10 | `/api/health` + pedido real | ☐ 200 | | |
+| 6.11 | Cron com segredo novo | ☐ 200 / ☐ 403 | | |
 
 **Data:** _______
 **Executado por:** _______
