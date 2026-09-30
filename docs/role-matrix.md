@@ -129,6 +129,23 @@ constante nova com justificação.
 Recomendação: usar FINANCE_ROLES (o padrão do sistema é "quem vê finanças =
 quem gere finanças"; bar/kitchen só precisam do KDS).
 
+Verificação feita: `reports/estatisticas` e `GET /kitchen/stats` devolvem a
+mesma forma (`{ recebidos, emPreparacao, prontos, entregues, total }`); o KDS
+conta por estado ao vivo, o reports adiciona filtro `from`/`to` e entregues por
+`updatedAt` (semântica analítica). Para bar/kitchen, o KDS cobre a necessidade
+operacional → D-2 completo é seguro, sem perda de função.
+
+### D-2b. Superadmin e membership (default fechado — mantém comportamento atual)
+
+Comportamento atual (confirmado em `membership.service.ts`):
+`assertMember` faz early return para `superadmin` → **o superadmin bypassa a
+membership e pode operar em qualquer evento, mesmo sem estar listado como
+membro**. Não é só "não reduzido"; é omnipresente.
+
+**Decisão (default): manter A.** Rebaixar para B ("superadmin precisa de se
+adicionar a cada evento") seria mudança de comportamento com impacto
+operacional e não é o objetivo do 2A. Documentado para não ser redescoberto.
+
 ### D-3. Onde resolver a event-role (default fechado — decisão de engenharia)
 
 **Consultar `EventUserEntity` no guard/helper a cada request com scope de
@@ -157,3 +174,26 @@ prematura — só se houver medição de lentidão. Não é pergunta de produto.
     específica).
 5. Mesma pessoa em dois eventos com roles diferentes → comporta-se conforme a
    role de cada evento.
+
+## 6. Plano de verificação manual (produção, depois do deploy)
+
+O mesmo ritual do 1A: verificar no ecrã real, não só nos testes unitários.
+
+1. **Elevação por evento**: cria/promove o utilizador A (global `client`) a
+   `cashier` no Magusto (via `POST /events/:id/members` ou PATCH). Faz login
+   como A → deve conseguir `GET /users/by-access-code/:code` no Magusto
+   (câmara QR do caixa) e 403 num evento onde não é membro.
+2. **Rebaixa por evento**: rebaixa o utilizador B (global `organizer`) a
+   `client` no Magusto. Faz login como B → 403 em
+   `GET /events/:id/members`, `reports/*`, `users/*` do Magusto; consegue ver
+   `GET /orders/mine` e carregar o próprio saldo (ação de cliente).
+3. **Superadmin imune**: `superadmin` global com event-role `client` (ou bar)
+   no Magusto → continua a aceder a tudo, sem se adicionar como membro
+   (bypass, D-2b).
+4. **Instantaneidade (sem cache)**: com A logado como `cashier` no Magusto,
+   rebaixa-o para `client` e repete o pedido do passo 1 → 403 **imediatamente,
+   sem re-login**. Confirma que a event-role é lida da BD a cada request
+   (D-3), não do token.
+5. **D-2 (se aprovado)**: com um utilizador `bar` (global ou event-role) no
+   Magusto → 403 em `reports/*` e `users/*`; `GET /kitchen/stats` continua a
+   funcionar (cobertura operacional confirmada).
