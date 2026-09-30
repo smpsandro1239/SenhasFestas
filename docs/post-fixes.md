@@ -106,7 +106,8 @@ Nada disto é necessário para o sistema funcionar. É dívida com custo conheci
 
 | Item | Pergunta | Estado |
 |---|---|---|
-| A11 | `JWT_SECRET` aparece nas env vars do frontend `senhas-festas` no Vercel? | **Por verificar** (urgente) |
+| **A11-0** | **Segredos de JWT e de BD em texto claro num repositório público** (`docs/vercel-deploy.md`, desde `9612b40`) | **Por fazer — urgente.** Runbook em `docs/a11-rotation.md` |
+| A11 | `JWT_SECRET` aparece nas env vars do frontend `senhas-festas` no Vercel? | **Respondido: e suposto estar.** O `middleware.ts` valida o cookie no servidor; sem a variável as páginas deixam de se proteger. Não remover |
 | Bloco 1 | Matriz 1A em produção: bar dá 403, cashier passa | **Por executar** |
 | Bloco 2 | Matriz 2A em produção, passo 4 (promoção de event-role com sessão aberta) | **Por executar** |
 | B7 | IVA 6% — aplicar ou remover da UI? Recomendação: **remover** (a UI promete o que o código nunca fez) | **Por decidir** |
