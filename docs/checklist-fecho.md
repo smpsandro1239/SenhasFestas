@@ -1,7 +1,7 @@
 # Checklist de fecho — 7 itens, ~25 minutos
 
 Estado do projeto: 16 fixes da auditoria em produção, 161 testes backend,
-9 frontend, `tsc` limpo nos dois. Fila de fixes **vazia**.
+21 frontend, `tsc` limpo nos dois. Fila de fixes **vazia**.
 
 Este ficheiro consolida tudo o que falta, para não ter de procurar no
 `test-kit.md`, no `post-fixes.md` ou no histórico de conversa.
