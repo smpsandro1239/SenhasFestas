@@ -7,8 +7,8 @@ Este ficheiro consolida tudo o que falta, para não ter de procurar no
 `test-kit.md`, no `post-fixes.md` ou no histórico de conversa.
 
 **Migração de runtime pronta, não pusheada:** `5a98d15` (Node.js 24) e
-`f439dae` (Postgres 18, Redis 8). `main` está 2 commits à frente de
-`origin/main`. Secção 6.
+`f439dae` (Postgres 18, Redis 8), mais dois commits só de documentação.
+`main` está 4 commits à frente de `origin/main`. Secção 6.
 
 ---
 

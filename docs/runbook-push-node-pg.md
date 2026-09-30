@@ -1,11 +1,16 @@
 # Runbook — push dos commits de migração (Node 24, PG18, Redis 8)
 
-Dois commits locais, ainda não pusheados:
+Quatro commits locais, ainda não pusheados:
 
 | Commit | O que muda |
 |---|---|
 | `5a98d15` | `chore(runtime): exigir Node.js 24 LTS` — `engines`, Dockerfiles, CI, `build.vercel.mjs` |
 | `f439dae` | `chore(db): subir Postgres 15→18 e Redis 7→8` — tags no CI e no compose, + montagem do volume |
+| `6e24dc9` | `docs: runbook do push + migração local de PG15→18` — só documentação |
+| `ca3d471` | `docs: corrigir contagem de testes frontend (9 → 21)` — só documentação |
+
+Só os dois primeiros mexem em código. Os dois últimos são este documento e a
+correcção da contagem de testes, e não afectam o deploy.
 
 Objectivo deste documento: quando disseres **"rotação feita, push agora"**, a
 execução é mecânica e cada passo é verificável. Nada aqui é executado pelo
@@ -22,14 +27,25 @@ agente sem a tua ordem — nem o push, nem a rotação.
 
 Verificar **todas** antes de fazer seja o que for. Se alguma falhar, parar.
 
-### 1.1 Os commits são exactamente dois
+### 1.1 Os commits são exactamente estes quatro
 
 ```bash
 git log origin/main..HEAD --oneline
 ```
 
-Esperado: exactamente `f439dae` e `5a98d15`. Mais ou menos commits significa que
-a árvore não é a que este runbook descreve — reler antes de continuar.
+Esperado, do mais recente ao mais antigo:
+
+```
+ca3d471 docs: corrigir contagem de testes frontend (9 -> 21)
+6e24dc9 docs: runbook do push + migracao local de PG15-18
+f439dae chore(db): subir Postgres 15-18 e Redis 7-8
+5a98d15 chore(runtime): exigir Node.js 24 LTS
+```
+
+Mais ou menos commits significa que a árvore não é a que este runbook descreve —
+reler antes de continuar. Os dois primeiros são só documentação, portanto se
+aparecer outro commit **deles**, o deploy não muda; qualquer outro commit de
+código invalida o que está escrito a seguir.
 
 ### 1.2 Rotação do `DATABASE_URL` (Neon)
 
@@ -245,10 +261,10 @@ Não faz rollback do Node 24 por si só. O diagnostico decide:
 | Produção não arranca | Runtime Vercel | Confirmar `nodejs24.x` em `backend/build.vercel.mjs` (linha 43) e que o `.vercel/output` foi regenerado |
 | `DATABASE_URL` antiga ainda a funcionar | Rotação incompleta no Neon | Concluir a rotação. **Isto não depende do push** |
 
-Um `git revert` dos dois commits é tecnicamente possível e deixa o
-`docker-compose.yml` com a montagem antiga. **Não é o primeiro recurso** — o
-PG18 não é a causa provável de um deploy quebrado, e reverter o compose não
-desfaz nada do que já foi para a Neon.
+Um `git revert` dos **dois commits de código** (`5a98d15` e `f439dae`) é
+tecnicamente possível e deixa o `docker-compose.yml` com a montagem antiga.
+**Não é o primeiro recurso** — o PG18 não é a causa provável de um deploy
+partido, e reverter o compose não desfaz nada do que já foi para a Neon.
 
 ---
 
