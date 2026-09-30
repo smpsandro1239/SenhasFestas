@@ -24,7 +24,7 @@ await build({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  target: 'node20',
+  target: 'node24',
   external: ['@nestjs/microservices'],
   define: { 'import.meta.url': '"/workspace/bundle.js"' },
   outfile: path.join(funcDir, 'index.js'),
@@ -40,7 +40,7 @@ writeFileSync(
   path.join(funcDir, '.vc-config.json'),
   JSON.stringify(
     {
-      runtime: 'nodejs20.x',
+      runtime: 'nodejs24.x',
       handler: 'index.js',
       launcherType: 'Nodejs',
       maxDuration: 30,
