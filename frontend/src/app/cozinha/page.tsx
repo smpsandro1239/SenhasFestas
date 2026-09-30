@@ -163,7 +163,7 @@ function CozinhaPageInner() {
                   </span>
                   <span
                     aria-live="polite"
-                    title="Estado da ligação em tempo real"
+                    title="Estado da ligação em tempo real. O polling de 3s continua sempre como rede de segurança."
                     className={
                       'px-2.5 py-1 rounded-full font-semibold text-xs tabular-nums border ' +
                       (socketStatus === 'connected'
@@ -177,7 +177,7 @@ function CozinhaPageInner() {
                       ? 'Ligado'
                       : socketStatus === 'reconnecting'
                         ? 'Reconectando...'
-                        : 'Sem ligação'}
+                        : 'Sem realtime — dados via polling'}
                   </span>
                 </div>
                 <p className="text-xs text-zinc-400 mt-0.5">Atualização automática a cada 3s</p>

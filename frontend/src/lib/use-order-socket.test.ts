@@ -101,4 +101,29 @@ describe('criarSocketAutenticado (A10: WS re-autentica e expõe erros)', () => {
     expect(onStatus).toHaveBeenCalledWith('connected');
     expect(socket.emit).toHaveBeenCalledWith('joinEvent', 'e1');
   });
+
+  it('trata error pós-conexão: expõe reconnecting (não volta a engolir erros)', async () => {
+    const socket = novoFakeSocket();
+    (io as any).mockReturnValue(socket);
+    (getAccessToken as any).mockReturnValue('token');
+    const onStatus = vi.fn();
+
+    criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus, onOrderUpdated: vi.fn() });
+    await disparar(socket, 'error');
+
+    expect(onStatus).toHaveBeenCalledWith('reconnecting');
+  });
+
+  it('não desiste após poucas tentativas: reconnectionAttempts é Infinity (blip de rede 30s não mata o socket)', () => {
+    const socket = novoFakeSocket();
+    (io as any).mockReturnValue(socket);
+    (getAccessToken as any).mockReturnValue('token');
+
+    criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus: vi.fn(), onOrderUpdated: vi.fn() });
+
+    expect(io).toHaveBeenCalledWith(
+      'ws://x',
+      expect.objectContaining({ reconnection: true, reconnectionAttempts: Infinity }),
+    );
+  });
 });

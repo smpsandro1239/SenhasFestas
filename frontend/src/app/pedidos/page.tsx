@@ -129,6 +129,7 @@ function PedidosPageInner() {
               {socketStatus !== 'connected' && socketStatus !== 'disabled' && (
                 <span
                   aria-live="polite"
+                  title="O polling de 5s continua sempre como rede de segurança."
                   className={
                     'px-2.5 py-1.5 rounded-full text-xs font-semibold border ' +
                     (socketStatus === 'reconnecting'
@@ -136,7 +137,7 @@ function PedidosPageInner() {
                       : 'bg-red-500/10 text-red-400 border-red-500/30')
                   }
                 >
-                  {socketStatus === 'reconnecting' ? 'Reconectando...' : 'Sem ligação'}
+                  {socketStatus === 'reconnecting' ? 'Reconectando...' : 'Sem realtime — dados via polling'}
                 </span>
               )}
               <Button variant="secondary" onClick={fetchOrders} icon={<RefreshIcon className="h-4 w-4" />}>
