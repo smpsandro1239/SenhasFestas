@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { hostConfiavel } from './middleware/security.middleware';
 import { AppModule } from './app.module';
 
 export interface CriarAplicacaoOpcoes {
@@ -28,9 +29,27 @@ export async function criarAplicacao(opcoes: CriarAplicacaoOpcoes = {}): Promise
   }
 
   if (trustProxy !== undefined) {
+    const trustedHosts = new Set([
+      ...(process.env.FRONTEND_URL || 'http://localhost:3001')
+        .split(',')
+        .map((o) => o.trim().replace(/\/+$/, '')),
+      ...(process.env.API_TRUSTED_HOSTS || '')
+        .split(',')
+        .map((o) => o.trim().replace(/\/+$/, ''))
+        .filter(Boolean),
+    ]);
+
     app.use((req, res, next) => {
       if (!req.secure) {
-        return res.redirect(301, `https://${req.headers.host}${req.originalUrl}`);
+        // Open redirect fix (A6): o 301 antigo refletia qualquer Host
+        // (https://${req.headers.host}) — um atacante controlava o domínio do
+        // redirect. Só redireciona para hosts confiáveis: FRONTEND_URL,
+        // API_TRUSTED_HOSTS, localhost, ou *.vercel.app (previews não partem).
+        const host = String(req.headers.host || '');
+        if (!hostConfiavel(host, trustedHosts)) {
+          return res.status(400).json({ statusCode: 400, message: 'Host não permitido' });
+        }
+        return res.redirect(301, `https://${host}${req.originalUrl}`);
       }
       next();
     });
@@ -40,8 +59,15 @@ export async function criarAplicacao(opcoes: CriarAplicacaoOpcoes = {}): Promise
 
   app.setGlobalPrefix('api', { exclude: ['api/docs'] });
 
+  const corsOrigins = (process.env.FRONTEND_URL || 'http://localhost:3001')
+    .split(',')
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+    // A6: allowlist explícita (array), não reflete a origem do pedido.
+    // Alinhada com o security.middleware e o order.gateway (ambos fazem split).
+    origin: corsOrigins,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,

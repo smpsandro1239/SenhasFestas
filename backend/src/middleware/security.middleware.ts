@@ -1,6 +1,28 @@
 import { Injectable, NestMiddleware, HttpStatus } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 
+const VERCEL_APP_RE = /^(?:[\w-]+\.)+vercel\.app$/;
+
+function normalizarOrigem(valor: string): string {
+  return valor
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/+$/, '')
+    .replace(/:\d+$/, '');
+}
+
+export function hostConfiavel(host: string | undefined, confiaveis: Set<string>): boolean {
+  if (!host) {
+    return false;
+  }
+  const normalizado = normalizarOrigem(host);
+  const listaNormalizada = new Set([...confiaveis].map(normalizarOrigem));
+  if (listaNormalizada.has(normalizado)) {
+    return true;
+  }
+  return normalizado === 'localhost' || VERCEL_APP_RE.test(normalizado);
+}
+
 @Injectable()
 export class SecurityMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
