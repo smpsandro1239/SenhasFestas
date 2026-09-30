@@ -43,10 +43,30 @@ Critérios adicionais quando houver dois eventos: mesma pessoa com roles
 diferentes em cada evento comporta-se conforme a role de cada evento (critério
 5 da matriz).
 
+## Bloco 3 — A10: WebSocket re-autentica na reconexão e mostra o estado
+
+Fix A10: o token é relido do getter a **cada** conexão/reconexão (não capturado no
+mount); num `connect_error` o cliente faz refresh e re-autentica com o token novo;
+se o refresh falhar, a UI mostra o estado em vez de falhar em silêncio. KDS mostra
+badge sempre; `/pedidos` só em erro. O polling HTTP (3s/5s) continua como rede de
+segurança — não é substituído pelo socket.
+
+| # | Ação | Esperado | Resultado |
+|---|---|---|---|
+| 1 | Login `cashier` → abrir `/cozinha` e criar um pedido de teste | Pedido aparece na KDS (polling ou socket); badge KDS mostra **Ligado** | passou / falhou / não testável |
+| 2 | DevTools → kill a ligação WS (`Network → WS → Right-click → Close` OU `socket.disconnect()` na consola não acessível) | Badge muda para **Reconectando...** e volta a **Ligado** em segundos; pedidos continuam a chegar | passou / falhou / não testável |
+| 3 | Expirar o token à força: apagar `accessToken` da memória do módulo não é possível via DevTools → **usar o caminho real de TTL**: esperar ≥15 min OU alterar temporariamente o TTL do JWT para 1 min no backend (não commit) | O refresh roda em `connect_error`; socket volta a ligar com token novo; **Ligado** mantém-se após o TTL | passou / falhou / não testável |
+| 4 | Abrir `/pedidos` no mesmo utilizador e repetir o passo 2 | Badge **não** visível quando ligado; aparece **Reconectando...**/**Sem ligação** apenas em erro | passou / falhou / não testável |
+| 5 | Sem rede (Flight Mode): KDS perde socket; rede volta | Badge: **Reconectando...** → **Ligado**; sem falha em silêncio permanente | passou / falhou / não testável |
+
+> Nota: objetivo mínimo do A10 é **não mentir ao utilizador** — se a reconexão
+> falhar, o estado de erro aparece. A recuperação automática (passos 2-3) é o
+> cenário principal; o passo 5 valida o caso de rede intermédia.
+
 ## Registo
 
 - Data da execução:
 - Executado por:
 - Ambiente (URL API / UI):
-- Resumo: Bloco 1 — passou __ / falhou __ / não testável __; Bloco 2 — passou __ / falhou __ / não testável __
+- Resumo: Bloco 1 — passou __ / falhou __ / não testável __; Bloco 2 — passou __ / falhou __ / não testável __; Bloco 3 — passou __ / falhou __ / não testável __
 - Notas (URLs, capturas, mensagens de erro inesperadas):

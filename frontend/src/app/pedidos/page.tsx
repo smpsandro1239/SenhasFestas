@@ -64,7 +64,7 @@ function PedidosPageInner() {
     }
   }, [isClient]);
 
-  useOrderSocket(fetchOrders, eventoAtual?.id);
+  const { status: socketStatus } = useOrderSocket(fetchOrders, eventoAtual?.id);
 
   useEffect(() => {
     fetchOrders();
@@ -125,9 +125,24 @@ function PedidosPageInner() {
           subtitle={isClient ? 'Acompanha o estado dos teus pedidos' : 'Acompanhe e atualize o estado de cada pedido'}
           icon={<ClipboardIcon className="h-5 w-5" />}
           actions={
-            <Button variant="secondary" onClick={fetchOrders} icon={<RefreshIcon className="h-4 w-4" />}>
-              Atualizar
-            </Button>
+            <>
+              {socketStatus !== 'connected' && socketStatus !== 'disabled' && (
+                <span
+                  aria-live="polite"
+                  className={
+                    'px-2.5 py-1.5 rounded-full text-xs font-semibold border ' +
+                    (socketStatus === 'reconnecting'
+                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                      : 'bg-red-500/10 text-red-400 border-red-500/30')
+                  }
+                >
+                  {socketStatus === 'reconnecting' ? 'Reconectando...' : 'Sem ligação'}
+                </span>
+              )}
+              <Button variant="secondary" onClick={fetchOrders} icon={<RefreshIcon className="h-4 w-4" />}>
+                Atualizar
+              </Button>
+            </>
           }
         />
 

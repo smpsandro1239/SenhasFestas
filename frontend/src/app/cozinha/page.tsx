@@ -93,7 +93,7 @@ function CozinhaPageInner() {
     }
   }, []);
 
-  useOrderSocket(fetchOrders, eventoAtual?.id);
+  const { status: socketStatus } = useOrderSocket(fetchOrders, eventoAtual?.id);
 
   useEffect(() => {
     fetchOrders();
@@ -160,6 +160,24 @@ function CozinhaPageInner() {
                     className="px-2.5 py-1 rounded-full brand-chip font-semibold text-xs tabular-nums"
                   >
                     {tabs[0].count} na fila
+                  </span>
+                  <span
+                    aria-live="polite"
+                    title="Estado da ligação em tempo real"
+                    className={
+                      'px-2.5 py-1 rounded-full font-semibold text-xs tabular-nums border ' +
+                      (socketStatus === 'connected'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        : socketStatus === 'reconnecting'
+                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                          : 'bg-red-500/10 text-red-400 border-red-500/30')
+                    }
+                  >
+                    {socketStatus === 'connected'
+                      ? 'Ligado'
+                      : socketStatus === 'reconnecting'
+                        ? 'Reconectando...'
+                        : 'Sem ligação'}
                   </span>
                 </div>
                 <p className="text-xs text-zinc-400 mt-0.5">Atualização automática a cada 3s</p>
