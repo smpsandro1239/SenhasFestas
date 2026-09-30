@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrderEntity } from '../../entities';
 import { MembershipService } from '../../common/membership.service';
+import { reembolsarSaldoEmTransacao } from '../../common/order-refund';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { KitchenQueryDto } from './dto';
 
@@ -95,7 +96,13 @@ export class KitchenService {
         throw new BadRequestException('Pedido mudou de estado, tente novamente');
       }
       atual.status = novoEstado;
-      return manager.save(OrderEntity, atual);
+      const salvo = await manager.save(OrderEntity, atual);
+
+      if (novoEstado === 'cancelled') {
+        await reembolsarSaldoEmTransacao(manager, atual);
+      }
+
+      return salvo;
     });
 
     // Emitir evento WebSocket para a cozinha
