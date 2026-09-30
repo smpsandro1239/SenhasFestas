@@ -3,7 +3,6 @@ import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource, MoreThan } from 'typeorm';
 import { BalanceEntity, UserEntity, BalanceMovementEntity, EventEntity, EventUserEntity, MovementType } from '../../entities';
 import { LoadBalanceDto, DeductBalanceDto, ReverseLoadDto } from './dto';
-import { OrderGateway } from '../../websocket/order.gateway';
 import { toPublicUser } from '../../common/serializers';
 import { centavos, soma, subtrai } from '../../common/money';
 import { EventService } from '../event/event.service';
@@ -23,7 +22,6 @@ export class BalanceService {
     private readonly eventUserRepository: Repository<EventUserEntity>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
-    private readonly orderGateway: OrderGateway,
     private readonly eventService: EventService,
   ) {}
 
@@ -50,7 +48,6 @@ export class BalanceService {
     }
     await this.eventService.assertEventOperavelById(dto.eventId);
     const updated = await this.runLoadTransaction(userId, dto, actor);
-    this.orderGateway.emitOrderUpdate(updated.id, 'balance_updated', updated.event?.id);
     return {
       id: updated.id,
       currentBalance: updated.currentBalance,
@@ -159,7 +156,6 @@ export class BalanceService {
       };
     });
 
-    this.orderGateway.emitOrderUpdate(resultado.balance.id, 'balance_updated', resultado.eventId);
     return resultado;
   }
 
@@ -270,7 +266,6 @@ export class BalanceService {
       };
     });
 
-    this.orderGateway.emitOrderUpdate(resultado.id, 'balance_updated', dto.eventId);
     return resultado;
   }
 
