@@ -29,13 +29,13 @@ export class KitchenService {
   }> {
     const eventIds = await this.obterEventosDoUtilizador(utilizador);
     const page = filtros?.page ?? 1;
-    const limit = filtros?.limit ?? 20;
+    const limit = filtros?.limit ?? 100;
 
     const query = this.orderRepository
       .createQueryBuilder('pedido')
       .leftJoinAndSelect('pedido.items', 'itens')
       .leftJoinAndSelect('itens.product', 'produto')
-      .orderBy('pedido.createdAt', 'ASC');
+      .orderBy('pedido.createdAt', 'DESC');
 
     if (filtros?.status) {
       query.andWhere('pedido.status = :status', { status: filtros.status });

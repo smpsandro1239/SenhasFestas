@@ -131,3 +131,67 @@ describe('KitchenService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
     );
   });
 });
+describe('KitchenService — A12: KDS mostra os pedidos mais recentes (ordem DESC, sem corte a 20)', () => {
+  const criarPedidos = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `p${i + 1}`,
+      status: 'received',
+      createdAt: new Date(2026, 0, i + 1).toISOString(), // p25 é o mais recente
+      items: [],
+      event: { id: 'evt1' },
+    }));
+
+  function criarRepoComPedidos(pedidos: any[]) {
+    let take = 20;
+    let skip = 0;
+    let dir = 'ASC';
+    const qb: any = {
+      leftJoinAndSelect: vi.fn(() => qb),
+      orderBy: vi.fn((_col: string, d: string) => {
+        dir = d;
+        return qb;
+      }),
+      andWhere: vi.fn(() => qb),
+      take: vi.fn((n: number) => {
+        take = n;
+        return qb;
+      }),
+      skip: vi.fn((n: number) => {
+        skip = n;
+        return qb;
+      }),
+      getManyAndCount: vi.fn(async () => {
+        const sorted = [...pedidos].sort((a, b) =>
+          dir === 'DESC'
+            ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            : new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+        const sliced = sorted.slice(skip, skip + take);
+        return [sliced, pedidos.length];
+      }),
+    };
+    return { createQueryBuilder: vi.fn(() => qb), qb };
+  }
+
+  const criarSvc = (repo: any) =>
+    new KitchenService(
+      repo,
+      {
+        assertMember: vi.fn(),
+        eventIdsFor: vi.fn().mockResolvedValue(null),
+        eventColumnFor: vi.fn().mockReturnValue(null),
+      } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+    );
+
+  it('com 25 pedidos received, o mais recente aparece na primeira página', async () => {
+    const pedidos = criarPedidos(25);
+    const repo = criarRepoComPedidos(pedidos);
+    const svc = criarSvc(repo);
+
+    const resultado = await svc.obterPedidos({}, { id: 'u1', role: 'kitchen' });
+
+    expect(resultado.items[0]?.id).toBe('p25');
+    expect(resultado.total).toBe(25);
+  });
+});
