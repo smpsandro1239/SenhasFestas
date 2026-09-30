@@ -63,10 +63,29 @@ segurança — não é substituído pelo socket.
 > falhar, o estado de erro aparece. A recuperação automática (passos 2-3) é o
 > cenário principal; o passo 5 valida o caso de rede intermédia.
 
+## Bloco 4 — A7: ecrã público não expõe financeiro nem notas pessoais
+
+Fix A7: `pedido.total` e `itens.notes` deixaram de ser selecionados nos 3
+endpoints públicos sem auth. O ecrã nunca os renderizava (mostra só nº do
+pedido, tempo decorrido, mesa e estado) — eram dados mortos servidos a
+qualquer pessoa com a URL.
+
+| # | Ação | Esperado | Resultado |
+|---|---|---|---|
+| 1 | Abrir `/publico?event=<id>` num browser **anónimo** (window privado, sem login) | O ecrã carrega os 3 estados (Recebidos / A Preparar / Prontos) normalmente | passou / falhou / não testável |
+| 2 | Na mesma página, DevTools → Network → filtrar `/api/public/pedidos` → ver o **Response** de cada um | Nenhum dos 3 responses contém `total` nem `notes` (nem dentro de `items`) | passou / falhou / não testável |
+| 3 | Confirmar visualmente o ecrã: os cards mostram nº do pedido, tempo, mesa e estado | Continua igual ao antes do fix — nada quebra no ecrã | passou / falhou / não testável |
+| 4 | `curl https://<api>/api/public/pedidos-prontos?event=<id>` (sem cookies, sem token) | `200`, lista de pedidos **sem** `total` e **sem** `notes` | passou / falhou / não testável |
+
+> Nota: o ecrã é público **por definição** (é uma TV). Não se adicionou auth nem
+> token — o que muda é que a URL deixa de revelar quanto cada pessoa gastou e
+> notas do tipo alergias/mesa. `PATCH /api/public/pedidos/:id/entregue` já é
+> autenticado (`AuthGuard('jwt')` + `RolesGuard`) — não faz parte deste bloco.
+
 ## Registo
 
 - Data da execução:
 - Executado por:
 - Ambiente (URL API / UI):
-- Resumo: Bloco 1 — passou __ / falhou __ / não testável __; Bloco 2 — passou __ / falhou __ / não testável __; Bloco 3 — passou __ / falhou __ / não testável __
+- Resumo: Bloco 1 — passou __ / falhou __ / não testável __; Bloco 2 — passou __ / falhou __ / não testável __; Bloco 3 — passou __ / falhou __ / não testável __; Bloco 4 — passou __ / falhou __ / não testável __
 - Notas (URLs, capturas, mensagens de erro inesperadas):

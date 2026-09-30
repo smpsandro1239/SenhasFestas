@@ -7,12 +7,9 @@ import { cn } from '@/lib/cn';
 interface PublicOrder {
   id: string;
   status: 'received' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
-  items: any[];
-  total: number;
   createdAt: string;
   updatedAt?: string;
   tableNumber?: string;
-  source: 'qr' | 'pos';
 }
 
 interface PublicList {

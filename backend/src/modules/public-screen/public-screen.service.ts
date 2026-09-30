@@ -4,12 +4,14 @@ import { Repository, DataSource } from 'typeorm';
 import { OrderEntity, EventUserEntity, EventEntity } from '../../entities';
 import { OrderGateway } from '../../websocket/order.gateway';
 
+// Campos do ecrã público. A7: total e itens.notes removidos — o ecrã nunca os
+// renderiza (mostra só nº do pedido, tempo, mesa, estado) mas servia-os sem
+// auth a qualquer pessoa com a URL. What the TV shows is the contract.
 const ECRAN_PUBLICO_FIELDS = [
   'pedido.id',
   'pedido.status',
   'pedido.tableNumber',
   'pedido.station',
-  'pedido.total',
   'pedido.createdAt',
   'pedido.updatedAt',
 ] as const;
@@ -44,7 +46,7 @@ export class PublicScreenService {
       .createQueryBuilder('pedido')
       .leftJoinAndSelect('pedido.items', 'itens')
       .leftJoin('itens.product', 'produto')
-      .select([...ECRAN_PUBLICO_FIELDS, 'itens.id', 'itens.quantity', 'itens.notes', 'produto.name'])
+      .select([...ECRAN_PUBLICO_FIELDS, 'itens.id', 'itens.quantity', 'produto.name'])
       .where('pedido.eventId = :eventId', { eventId })
       .andWhere('pedido.status = :status', { status: 'ready' })
       .orderBy('pedido.updatedAt', 'DESC')
@@ -57,7 +59,7 @@ export class PublicScreenService {
       .createQueryBuilder('pedido')
       .leftJoinAndSelect('pedido.items', 'itens')
       .leftJoin('itens.product', 'produto')
-      .select([...ECRAN_PUBLICO_FIELDS, 'itens.id', 'itens.quantity', 'itens.notes', 'produto.name'])
+      .select([...ECRAN_PUBLICO_FIELDS, 'itens.id', 'itens.quantity', 'produto.name'])
       .where('pedido.eventId = :eventId', { eventId })
       .andWhere('pedido.status = :status', { status: 'preparing' })
       .orderBy('pedido.createdAt', 'ASC')
@@ -69,7 +71,7 @@ export class PublicScreenService {
       .createQueryBuilder('pedido')
       .leftJoinAndSelect('pedido.items', 'itens')
       .leftJoin('itens.product', 'produto')
-      .select([...ECRAN_PUBLICO_FIELDS, 'itens.id', 'itens.quantity', 'itens.notes', 'produto.name'])
+      .select([...ECRAN_PUBLICO_FIELDS, 'itens.id', 'itens.quantity', 'produto.name'])
       .where('pedido.eventId = :eventId', { eventId })
       .andWhere('pedido.status = :status', { status: 'received' })
       .orderBy('pedido.createdAt', 'ASC')
