@@ -85,6 +85,37 @@ describe('UserService', () => {
     });
   });
 
+  describe('findAll — accessCode não enumerável', () => {
+    it('não inclui accessCode no select da listagem', async () => {
+      mockMembershipService.eventIdsFor.mockResolvedValue(null);
+      mockUserRepository.find.mockResolvedValue([UTILIZADOR_PUBLICO]);
+
+      await service.findAll({ id: 'cashier', role: 'cashier' });
+
+      const select = mockUserRepository.find.mock.calls[0][0].select;
+      expect(select.accessCode).toBeUndefined();
+    });
+
+    it('não procura por prefixo de accessCode quando q é numérico', async () => {
+      mockMembershipService.eventIdsFor.mockResolvedValue(null);
+      mockUserRepository.find.mockResolvedValue([]);
+
+      await service.findAll({ id: 'cashier', role: 'cashier' }, '123');
+
+      const where = mockUserRepository.find.mock.calls[0][0].where;
+      expect(where.some((w: any) => 'accessCode' in w)).toBe(false);
+    });
+
+    it('findByAccessCode devolve o accessCode para o cartão do caixa', async () => {
+      mockUserRepository.findOne.mockResolvedValue(UTILIZADOR_PUBLICO);
+      mockMembershipService.eventIdsFor.mockResolvedValue(null);
+
+      await expect(service.findByAccessCode('123456')).resolves.toEqual(UTILIZADOR_PUBLICO);
+      const select = mockUserRepository.findOne.mock.calls[0][0].select;
+      expect(select.accessCode).toBe(true);
+    });
+  });
+
   describe('findByAccessCode', () => {
     it('devolve o utilizador por código exato quando sem scope', async () => {
       mockUserRepository.findOne.mockResolvedValue(UTILIZADOR_PUBLICO);

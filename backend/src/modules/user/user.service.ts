@@ -5,7 +5,7 @@ import * as bcrypt from 'bcryptjs';
 import { UserEntity, EventUserEntity } from '../../entities';
 import { CreateUserDto, UpdateUserDto } from './dto';
 import { MembershipService } from '../../common/membership.service';
-import { PUBLIC_USER_SELECT, toPublicUser } from '../../common/serializers';
+import { PUBLIC_USER_SELECT, PUBLIC_USER_SELECT_COM_ACCESS_CODE, toPublicUser } from '../../common/serializers';
 import { codigoAcessoUnico } from '../../common/access-code';
 
 const SEM_MEMBROS = '00000000-0000-0000-0000-000000000000';
@@ -37,7 +37,6 @@ export class UserService {
       ? [
           { name: ILike(`%${q}%`) },
           { email: ILike(`%${q}%`) },
-          ...(/^\d+$/.test(q) ? [{ accessCode: ILike(`${q}%`) }] : []),
         ]
       : undefined;
     if (scope === null) {
@@ -89,7 +88,7 @@ export class UserService {
     }
     const user = await this.userRepository.findOne({
       where: { accessCode: code },
-      select: CAMPOS_PUBLICOS as any,
+      select: PUBLIC_USER_SELECT_COM_ACCESS_CODE as any,
     });
     if (!user) {
       throw new NotFoundException('Nenhum cliente encontrado com esse código.');

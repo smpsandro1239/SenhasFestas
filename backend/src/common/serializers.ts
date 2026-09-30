@@ -6,10 +6,14 @@ export const PUBLIC_USER_SELECT = {
   name: true,
   role: true,
   phone: true,
-  accessCode: true,
   isActive: true,
   createdAt: true,
   updatedAt: true,
+} as const;
+
+export const PUBLIC_USER_SELECT_COM_ACCESS_CODE = {
+  ...PUBLIC_USER_SELECT,
+  accessCode: true,
 } as const;
 
 export function toPublicUser<T extends Partial<UserEntity>>(
