@@ -84,21 +84,23 @@ export class EventService {
       );
     }
     if (motivo) {
-      const { affected } = await this.eventRepository.update(
-        { id: event.id, status: 'active' as any },
-        { status: 'closed' as any },
-      );
-      if (affected === 1) {
-        await this.auditService.record({
-          action: 'STATUS',
-          entity: 'event',
-          entityId: event.id,
-          eventId: event.id,
-          actorId: undefined,
-          actorRole: 'system',
-          after: { status: 'closed' },
-          details: { automatico: true, motivo, fechadoEm: hoje.toISOString() },
-        });
+      if (motivo.includes('terminou')) {
+        const { affected } = await this.eventRepository.update(
+          { id: event.id, status: 'active' as any },
+          { status: 'closed' as any },
+        );
+        if (affected === 1) {
+          await this.auditService.record({
+            action: 'STATUS',
+            entity: 'event',
+            entityId: event.id,
+            eventId: event.id,
+            actorId: undefined,
+            actorRole: 'system',
+            after: { status: 'closed' },
+            details: { automatico: true, motivo, fechadoEm: hoje.toISOString() },
+          });
+        }
       }
       throw new ForbiddenException(motivo);
     }

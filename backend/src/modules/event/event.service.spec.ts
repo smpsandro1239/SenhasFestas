@@ -202,6 +202,20 @@ describe('EventService — assertEventOperavel (guard de janela)', () => {
     expect(mockAuditService.record).toHaveBeenCalledTimes(1);
   });
 
+  it('lança para evento futuro SEM fechar (janela futura não é expiração)', async () => {
+    const futuro = {
+      id: 'eventoZ',
+      status: 'active',
+      startDate: new Date('2026-10-02T00:00:00Z'),
+      endDate: new Date('2026-10-04T00:00:00Z'),
+    };
+    await expect(service.assertEventOperavel(futuro as any)).rejects.toThrow(
+      'ainda não começou',
+    );
+    expect(mockEventRepository.update).not.toHaveBeenCalled();
+    expect(mockAuditService.record).not.toHaveBeenCalled();
+  });
+
   it('permite ativo dentro da janela', async () => {
     await expect(service.assertEventOperavel(evento('active') as any)).resolves.toBeUndefined();
     expect(mockEventRepository.update).not.toHaveBeenCalled();
