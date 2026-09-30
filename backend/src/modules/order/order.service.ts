@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource, In } from 'typeorm';
 import { OrderEntity, OrderItemEntity, BalanceEntity, BalanceMovementEntity, ProductEntity, EventEntity, EventUserEntity } from '../../entities';
@@ -53,7 +53,10 @@ export class OrderService {
 
     const savedOrder = await this.dataSource.transaction(async (manager) => {
       const products = dto.items.length
-        ? await manager.findBy(ProductEntity, { id: In(dto.items.map((item) => item.productId)) })
+        ? await manager.find(ProductEntity, {
+            where: { id: In(dto.items.map((item) => item.productId)) },
+            relations: { event: true },
+          })
         : [];
       if (products.length !== dto.items.length) {
         throw new NotFoundException('Um ou mais produtos não encontrados');
@@ -65,6 +68,15 @@ export class OrderService {
         const product = productById.get(item.productId);
         if (!product) {
           throw new NotFoundException(`Produto não encontrado: ${item.productId}`);
+        }
+        if (product.event?.id !== event.id) {
+          throw new BadRequestException(`Produto indisponível neste evento: ${item.productId}`);
+        }
+        if (!product.isActive) {
+          throw new BadRequestException(`Produto indisponível: ${item.productId}`);
+        }
+        if (product.stock !== null && product.stock !== undefined && item.quantity > Number(product.stock)) {
+          throw new BadRequestException(`Stock insuficiente para: ${item.productId}`);
         }
         total = centavos(total + item.quantity * centavos(Number(product.price)));
       }

@@ -77,7 +77,7 @@ describe('OrderService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
       findOne: vi.fn().mockResolvedValue({ id: 'm1' }),
     };
     const manager = {
-      findBy: vi.fn().mockResolvedValue([{ id: 'p1', price: 100 }]),
+      find: vi.fn().mockResolvedValue([{ id: 'p1', price: 100, isActive: true, event: { id: 'evt1' } }]),
       create: vi.fn().mockImplementation((_entity: any, data: any) => data),
       save: vi.fn().mockImplementation((_entity: any, data: any) => Promise.resolve(data)),
     };
@@ -168,7 +168,7 @@ describe('OrderService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
       findOne: vi.fn().mockResolvedValue({ id: 'm1' }),
     };
     const manager = {
-      findBy: vi.fn().mockResolvedValue([{ id: 'p1', price: 100 }]),
+      find: vi.fn().mockResolvedValue([{ id: 'p1', price: 100, isActive: true, event: { id: 'evt1' } }]),
       create: vi.fn().mockImplementation((_entity: any, data: any) => data),
       save: vi.fn().mockImplementation((_entity: any, data: any) => Promise.resolve(data)),
       findOne: vi.fn().mockResolvedValue({ id: 'b1', user: { id: 'u2' }, event: { id: 'evt1' } }),
@@ -322,4 +322,95 @@ describe('OrderService — cancelamento via updateStatus deve reembolsar saldo (
   // cancelled/delivered serem terminais + stale check com lock pessimista
   // (ver common/order-refund.ts). Só um e2e com base real a pode confirmar;
   // por isso não deixamos it.todo a prometer mais do que conseguimos testar.
+});
+
+describe('OrderService — A8: valida produtos ativos, do evento e com stock (RED)', () => {
+  function makeSvc(manager: any) {
+    const eventRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'evt1', status: 'active' }),
+    };
+    const eventUserRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'm1' }),
+    };
+    const dataSource = {
+      transaction: vi.fn().mockImplementation(async (fn: any) => fn(manager)),
+    };
+    return new OrderService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      eventRepository as any,
+      eventUserRepository as any,
+      dataSource as any,
+      { generateOrderQRCode: vi.fn().mockResolvedValue('qr') } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+      { notifyNewOrder: vi.fn().mockResolvedValue(undefined) } as any,
+      { assertEventOperavel: vi.fn() } as any,
+    );
+  }
+
+  function makeManager(products: any[]) {
+    const find = vi.fn().mockResolvedValue(products);
+    return {
+      find,
+      findBy: vi.fn().mockResolvedValue(products),
+      create: vi.fn().mockImplementation((_entity: any, data: any) => data),
+      save: vi.fn().mockImplementation((_entity: any, data: any) => Promise.resolve(data)),
+    };
+  }
+
+  it('rejeita produto de outro evento', async () => {
+    const manager = makeManager([{ id: 'p1', price: 100, isActive: true, event: { id: 'evt2' } }]);
+    const svc = makeSvc(manager);
+
+    await expect(
+      svc.create({ id: 'u1', role: 'client' }, {
+        eventId: 'evt1',
+        items: [{ productId: 'p1', quantity: 1 }],
+        source: 'qr',
+      } as any),
+    ).rejects.toThrow('Produto indisponível neste evento');
+  });
+
+  it('rejeita produto inativo', async () => {
+    const manager = makeManager([{ id: 'p1', price: 100, isActive: false, event: { id: 'evt1' } }]);
+    const svc = makeSvc(manager);
+
+    await expect(
+      svc.create({ id: 'u1', role: 'client' }, {
+        eventId: 'evt1',
+        items: [{ productId: 'p1', quantity: 1 }],
+        source: 'qr',
+      } as any),
+    ).rejects.toThrow('Produto indisponível');
+  });
+
+  it('rejeita quantity acima do stock definido', async () => {
+    const manager = makeManager([{ id: 'p1', price: 100, isActive: true, event: { id: 'evt1' }, stock: 1 }]);
+    const svc = makeSvc(manager);
+
+    await expect(
+      svc.create({ id: 'u1', role: 'client' }, {
+        eventId: 'evt1',
+        items: [{ productId: 'p1', quantity: 5 }],
+        source: 'qr',
+      } as any),
+    ).rejects.toThrow('Stock insuficiente');
+  });
+
+  it('aceita produto válido sem stock definido (regressão)', async () => {
+    const manager = makeManager([{ id: 'p1', price: 100, isActive: true, event: { id: 'evt1' }, stock: null }]);
+    const svc = makeSvc(manager);
+    (svc as any).findOne = vi.fn().mockResolvedValue({ id: 'order1' });
+
+    const result = await svc.create({ id: 'u1', role: 'client' }, {
+      eventId: 'evt1',
+      items: [{ productId: 'p1', quantity: 2 }],
+      source: 'qr',
+    } as any);
+
+    expect(result).toBeDefined();
+  });
 });
