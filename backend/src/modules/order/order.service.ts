@@ -179,6 +179,11 @@ export class OrderService {
     manager: import('typeorm').EntityManager,
     order: OrderEntity,
   ): Promise<void> {
+    // NOTE: "reembolso duplo impossível" (commit a438592) é análise, não teste.
+    // Depende de cancelled/delivered serem terminais e do stale check com lock
+    // em cancelOrder (305-307) e updateStatus (375-377). Se alguém alterar o
+    // mapa de transições ou o stale check, a promessa deixa de valer — escrever
+    // teste de paralelismo (ver todo no order.service.spec.ts).
     if (!order.balanceId || centavos(Number(order.balanceUsed)) <= 0) {
       return;
     }

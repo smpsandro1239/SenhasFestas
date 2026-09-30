@@ -122,4 +122,6 @@ describe('OrderService — cancelamento via updateStatus deve reembolsar saldo (
       expect.objectContaining({ type: MovementType.REFUND, amount: 10, orderId: 'o1' }),
     );
   });
+
+  it.todo('B1-concorrência: duas chamadas updateStatus(cancelled) em paralelo reembolsam apenas uma vez');
 });

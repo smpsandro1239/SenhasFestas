@@ -20,7 +20,7 @@ describe('MembershipService — comportamento atual do event-role', () => {
     service = new MembershipService(mockEventUserRepository as any);
   });
 
-  it('documenta: assertMember ignora o event-role (organizer global passa com role client no evento)', async () => {
+  it('assertMember resolve com qualquer event-role (organizer global passa com role client no evento)', async () => {
     mockEventUserRepository.findOne.mockResolvedValue({
       id: 'm1',
       role: 'client',
