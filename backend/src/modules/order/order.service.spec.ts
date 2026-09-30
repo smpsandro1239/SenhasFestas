@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { OrderService } from './order.service';
 import { EventService } from '../event/event.service';
+import { BalanceMovementEntity, MovementType } from '../../entities';
 
 describe('OrderService — guard de janela operacional', () => {
   const eventService = {
@@ -115,6 +116,10 @@ describe('OrderService — cancelamento via updateStatus deve reembolsar saldo (
 
     expect(balanceSave).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'b1', currentBalance: 15 }),
+    );
+    expect(manager.save).toHaveBeenCalledWith(
+      BalanceMovementEntity,
+      expect.objectContaining({ type: MovementType.REFUND, amount: 10, orderId: 'o1' }),
     );
   });
 });
