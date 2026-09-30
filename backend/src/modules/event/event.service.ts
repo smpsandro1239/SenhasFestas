@@ -75,8 +75,8 @@ export class EventService {
    * fecha-o (idempotente + auditoria) antes de lançar — o auto-close nunca
    * bloqueia por mais do que um UPDATE condicional.
    */
-  async assertEventOperavel(event: EventEntity): Promise<void> {
-    const hoje = new Date();
+  async assertEventOperavel(event: EventEntity, now: Date = new Date()): Promise<void> {
+    const hoje = now;
     const motivo = eventWindowMessage(event, hoje);
     if (event.status !== 'active') {
       throw new ForbiddenException(

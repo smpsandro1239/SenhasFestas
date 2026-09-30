@@ -142,7 +142,7 @@ describe('EventService — autoCloseExpired (janela de datas)', () => {
     expect(mockEventRepository.update).not.toHaveBeenCalled();
   });
 
-  it('fecha com now real (simula "Festa Teste 2026": endDate 07/09 à data atual)', async () => {
+  it('fecha com now real um evento cuja endDate já passou', async () => {
     mockEventRepository.find.mockResolvedValue([eventoAtivo('2026-09-07T00:00:00Z')]);
     mockEventRepository.update.mockResolvedValue({ affected: 1 });
 
@@ -177,23 +177,25 @@ describe('EventService — assertEventOperavel (guard de janela)', () => {
     endDate: new Date(endDate),
   });
 
-  it('lança para draft antes do início da janela', async () => {
-    await expect(service.assertEventOperavel(evento('draft') as any)).rejects.toThrow(
+  const NOW = new Date('2026-09-15T12:00:00Z');
+
+  it('lança para draft', async () => {
+    await expect(service.assertEventOperavel(evento('draft') as any, NOW)).rejects.toThrow(
       'Evento ainda não está ativo',
     );
   });
 
   it('lança para closed', async () => {
-    await expect(service.assertEventOperavel(evento('closed') as any)).rejects.toThrow(
+    await expect(service.assertEventOperavel(evento('closed') as any, NOW)).rejects.toThrow(
       'Evento encerrado',
     );
   });
 
   it('fecha e lança quando a janela terminou (lazy check)', async () => {
     mockEventRepository.update.mockResolvedValue({ affected: 1 });
-    const expirado = evento('active', '2026-09-20T00:00:00Z');
+    const expirado = evento('active', '2026-09-10T00:00:00Z');
     await expect(
-      service.assertEventOperavel(expirado as any),
+      service.assertEventOperavel(expirado as any, NOW),
     ).rejects.toThrow('terminou');
     expect(mockEventRepository.update).toHaveBeenCalledWith(
       { id: 'eventoZ', status: 'active' },
@@ -209,15 +211,17 @@ describe('EventService — assertEventOperavel (guard de janela)', () => {
       startDate: new Date('2026-10-02T00:00:00Z'),
       endDate: new Date('2026-10-04T00:00:00Z'),
     };
-    await expect(service.assertEventOperavel(futuro as any)).rejects.toThrow(
-      'ainda não começou',
-    );
+    await expect(
+      service.assertEventOperavel(futuro as any, new Date('2026-09-30T00:00:00Z')),
+    ).rejects.toThrow('ainda não começou');
     expect(mockEventRepository.update).not.toHaveBeenCalled();
     expect(mockAuditService.record).not.toHaveBeenCalled();
   });
 
   it('permite ativo dentro da janela', async () => {
-    await expect(service.assertEventOperavel(evento('active') as any)).resolves.toBeUndefined();
+    await expect(
+      service.assertEventOperavel(evento('active') as any, NOW),
+    ).resolves.toBeUndefined();
     expect(mockEventRepository.update).not.toHaveBeenCalled();
   });
 });
