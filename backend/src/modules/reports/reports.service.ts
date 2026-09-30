@@ -43,6 +43,13 @@ export class ReportsService {
     if (scope) {
       query.andWhere('orden.' + scope.column, scope.params);
     }
+
+    if (filtros.from) {
+      query.andWhere('orden.createdAt >= :desde', { desde: filtros.from });
+    }
+    if (filtros.to) {
+      query.andWhere('orden.createdAt <= :ate', { ate: filtros.to });
+    }
     return query;
   }
 

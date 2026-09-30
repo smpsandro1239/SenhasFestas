@@ -171,6 +171,7 @@ function RelatoriosPage() {
   const [ordemStatus, setOrdemStatus] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingOrdens, setLoadingOrdens] = useState(false);
+  const [ordemError, setOrdemError] = useState('');
   const [error, setError] = useState('');
   const [totalAnterior, setTotalAnterior] = useState<TotalVendas | null>(null);
   const [ultimoRefresh, setUltimoRefresh] = useState<Date | null>(null);
@@ -234,6 +235,7 @@ function RelatoriosPage() {
   const loadOrdens = useCallback(async () => {
     if (!event) return;
     setLoadingOrdens(true);
+    setOrdemError('');
     try {
       const data = await getReports('ordens', {
         eventId: event.id,
@@ -247,6 +249,7 @@ function RelatoriosPage() {
       setOrdemTotal(Array.isArray(data) ? 0 : data?.total ?? 0);
     } catch {
       setOrdens([]);
+      setOrdemError('Não foi possível carregar as vendas — tenta novamente');
     } finally {
       setLoadingOrdens(false);
     }
@@ -511,7 +514,14 @@ function RelatoriosPage() {
                 )}
               </div>
 
-              {ordens.length === 0 && !loadingOrdens ? (
+              {ordemError ? (
+                <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+                  <p className="text-sm text-red-400">{ordemError}</p>
+                  <Button variant="outline" size="sm" onClick={loadOrdens}>
+                    Tentar novamente
+                  </Button>
+                </div>
+              ) : ordens.length === 0 && !loadingOrdens ? (
                 <EmptyState title="Sem pedidos" description="Nenhum pedido corresponde aos filtros." />
               ) : (
                 <div className="overflow-x-auto">
