@@ -175,6 +175,33 @@ export class OrderService {
     await manager.save(BalanceMovementEntity, movement);
   }
 
+  private async reembolsarSaldoEmTransacao(
+    manager: import('typeorm').EntityManager,
+    order: OrderEntity,
+  ): Promise<void> {
+    if (!order.balanceId || centavos(Number(order.balanceUsed)) <= 0) {
+      return;
+    }
+    const balance = await manager.findOne(BalanceEntity, {
+      where: { id: order.balanceId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!balance) {
+      return;
+    }
+    balance.currentBalance = soma(Number(balance.currentBalance), centavos(Number(order.balanceUsed)));
+    await manager.save(BalanceEntity, balance);
+
+    const refund = manager.create(BalanceMovementEntity, {
+      balance,
+      type: MovementType.REFUND,
+      amount: centavos(Number(order.balanceUsed)),
+      orderId: order.id,
+      description: 'Reembolso por cancelamento',
+    });
+    await manager.save(BalanceMovementEntity, refund);
+  }
+
   async findByEvent(eventId: string, user: any): Promise<{
     items: any[];
     total: number;
@@ -309,25 +336,7 @@ export class OrderService {
       currentOrder.status = 'cancelled';
       const updatedOrder = await manager.save(OrderEntity, currentOrder);
 
-      if (currentOrder.balanceId && currentOrder.balanceUsed > 0) {
-        const balance = await manager.findOne(BalanceEntity, {
-          where: { id: currentOrder.balanceId },
-          lock: { mode: 'pessimistic_write' },
-        });
-        if (balance) {
-          balance.currentBalance = soma(Number(balance.currentBalance), centavos(Number(currentOrder.balanceUsed)));
-          await manager.save(BalanceEntity, balance);
-
-          const refund = manager.create(BalanceMovementEntity, {
-            balance,
-            type: MovementType.REFUND,
-            amount: centavos(Number(currentOrder.balanceUsed)),
-            orderId: updatedOrder.id,
-            description: 'Reembolso por cancelamento',
-          });
-          await manager.save(BalanceMovementEntity, refund);
-        }
-      }
+      await this.reembolsarSaldoEmTransacao(manager, currentOrder);
 
       return updatedOrder;
     });
@@ -376,7 +385,13 @@ export class OrderService {
         throw new ForbiddenException('Pedido mudou de estado, tente novamente');
       }
       currentOrder.status = status as 'received' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
-      return manager.save(OrderEntity, currentOrder);
+      const updated = await manager.save(OrderEntity, currentOrder);
+
+      if (status === 'cancelled') {
+        await this.reembolsarSaldoEmTransacao(manager, currentOrder);
+      }
+
+      return updated;
     });
 
     // Send notification based on new status
