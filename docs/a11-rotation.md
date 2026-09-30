@@ -55,7 +55,53 @@ para o browser.
 
 ---
 
-## Secção 1 — Pré-condições
+## Secção 1 — Inventário verificado (lido na Vercel, só nomes)
+
+Estado real em 2026-09-30, via API da Vercel. **Só nomes — nenhum valor foi
+lido, pedido ou registado.**
+
+**`senhasfestas-api`** (backend) — 4 variáveis, todas `sensitive`, todas só em
+`production`. **Não há `preview` nem `development`** — é por isso que os
+deploys de preview do backend aparecem `CANCELED`.
+
+| Chave | Targets | Tipo |
+|---|---|---|
+| `DATABASE_URL` | production | sensitive |
+| `JWT_SECRET` | production | sensitive |
+| `CRON_SECRET` | production | sensitive |
+| `FRONTEND_URL` | production | sensitive |
+
+**`senhas-festas`** (frontend):
+
+| Chave | Targets | Tipo |
+|---|---|---|
+| `JWT_SECRET` | production | **sensitive** |
+| `JWT_SECRET` | development | **encrypted** |
+| `NEXT_PUBLIC_API_URL` | development, preview, production | encrypted |
+| `NEXT_PUBLIC_WS_URL` | development, preview, production | encrypted |
+
+Três notas que saem disto:
+
+1. **`JWT_SECRET` não existe em `preview` no frontend.** Um PR não pode
+   autenticar-se. Não é segurança, é só ruído de desenvolvimento.
+2. **O mesmo nome tem tipos diferentes** (`sensitive` em produção,
+   `encrypted` em desenvolvimento). Funciona, mas é inconsistente — se
+   algum dia alguém recriar a variável e esquecer o tipo, o efeito é
+   diferente. Alinhar em `encrypted` nos dois, ou em `sensitive` nos dois.
+3. **`CRON_SECRET` é o terceiro segredo exposto.** Está no mesmo ficheiro
+   comprometido e **não estava na lista do utilizador**. Se os bots
+   rasparam o repositório, também rasparam este — e é o que protege os
+   endpoints de cron. **Rodar os três.**
+
+## Secção 1b — O que precisa de ser rodado (a lista real)
+
+| Ordem | Segredo | Onde | Impacto se não rodar |
+|---|---|---|---|
+| 1 | `DATABASE_URL` | `senhasfestas-api` / production | Acesso directo a todos os dados |
+| 2 | `JWT_SECRET` | **os dois** projetos / production | Forjar token `superadmin` |
+| 3 | `CRON_SECRET` | `senhasfestas-api` / production | Disparar endpoints de cron sem autenticação |
+
+## Secção 2 — Pré-condições
 
 1. Confirmar que o ficheiro ainda está versionado:
    ```bash
@@ -66,10 +112,19 @@ para o browser.
    curl -s https://api.github.com/repos/smpsandro1239/SenhasFestas \
      | python -c "import json,sys; print(json.load(sys.stdin)['visibility'])"
    ```
-3. Ter acesso a: consola Vercel (ambos os projetos), consola Neon, e ao
+3. Listar os nomes de env vars dos dois projetos (só nomes, nunca valores):
+   ```bash
+   AUTH=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.env.APPDATA+'/com.vercel.cli/Data/auth.json')).token)")
+   for p in senhasfestas-api senhas-festas; do
+     curl -s -H "Authorization: Bearer $AUTH" \
+       "https://api.vercel.com/v10/projects/$p/env?teamId=team_8hWKarf4sMzjL8Ckbx9wgi8u" \
+     | python -c "import json,sys; [print(e['key'], e.get('target')) for e in json.load(sys.stdin)['envs']]"
+   done
+   ```
+4. Ter acesso a: consola Vercel (ambos os projetos), consola Neon, e ao
    servidor/ambiente onde vive o `.env` local.
 
-## Secção 2 — Escolha da opção de rotação
+## Secção 3 — Escolha da opção de rotação
 
 Depois de gerados os segredos novos, há duas formas de os instalar. A escolha é
 sobre **queda de serviço**, não sobre segurança — a segurança é a mesma nas duas.
@@ -84,15 +139,15 @@ sobre **queda de serviço**, não sobre segurança — a segurança é a mesma n
 **Recomendação: Opção A**, executada fora de um evento. É mais simples e o
 único custo é os operadores fazerem login outra vez.
 
-## Secção 3 — Opção A (recomendada)
+## Secção 4 — Opção A (recomendada)
 
 Executar **fora de um evento**, com a base de dados já rodada.
 
 ```bash
-# 0. Se ainda não rodou o DATABASE_URL, faça isso PRIMEIRO (secção 4).
-# 1. Gerar o segredo novo, fora do repositório.
+# 0. Se ainda não rodou o DATABASE_URL, faça isso PRIMEIRO (secção 5).
+# 1. Gerar os segredos novos, fora do repositório.
 mkdir -p /tmp/sf-rot && chmod 700 /tmp/sf-rot
-openssl rand -hex 32 > /tmp/sf-rot/jwt-novo.txt
+openssl rand -hex 32 > /tmp/sf-rot/jwt-novo.txt   # valor: 64 char hex
 chmod 600 /tmp/sf-rot/jwt-novo.txt
 
 # 2. Subir o valor à Vercel via stdin — NUNCA inline no comando
@@ -102,9 +157,18 @@ cd <repo> && npm install --no-save vercel
 cat /tmp/sf-rot/jwt-novo.txt | node_modules/.bin/vercel.cmd env add JWT_SECRET production --force --yes
 ```
 
-Repetir o passo 2 para **cada** ambiente que usa (production, preview) e para
-os **dois** projetos (`senhasfestas-api` **e** `senhas-festas` — o valor tem de
-ser igual nos dois, senão o middleware rejects todos os cookies).
+Repetir o passo 2 em **cada** alvo e projeto que usa a variável:
+
+| Projecto | Alvo | Novo valor |
+|---|---|---|
+| `senhasfestas-api` | production | o mesmo `jwt-novo.txt` |
+| `senhas-festas` | production | **o mesmo** `jwt-novo.txt` |
+
+O valor tem de ser **igual nos dois**, senão o middleware rejeita todos os
+cookies e toda a gente élogoutada (ver secção 6, falha mais provável).
+
+`CRON_SECRET` é independente e só vive no backend — gerar à parte
+(`openssl rand -hex 32`) e aplicar só em `senhasfestas-api` / production.
 
 ```bash
 # 3. Limpar a cópia plaintext do repositório (não apaga o histórico).
@@ -115,7 +179,7 @@ ser igual nos dois, senão o middleware rejects todos os cookies).
 shred -u /tmp/sf-rot/jwt-novo.txt   # ou rm em Windows
 ```
 
-## Secção 4 — Rotação do `DATABASE_URL` (prioridade máxima)
+## Secção 5 — Rotação do `DATABASE_URL` (prioridade máxima)
 
 Dá acesso directo à base de dados. Fazer primeiro.
 
@@ -128,7 +192,7 @@ Dá acesso directo à base de dados. Fazer primeiro.
 5. Se o acesso não for só leitura, **auditar o histórico**: na consola Neon,
    ver queries/métricas recentes. Não há forma de provar que ninguém usou.
 
-## Secção 5 — Verificação pós-rotação
+## Secção 6 — Verificação pós-rotação
 
 Não declarar sucesso sem os quatro:
 
@@ -136,8 +200,9 @@ Não declarar sucesso sem os quatro:
 # 1. Backend vivo
 curl -s -o /dev/null -w "%{http_code}\n" https://senhasfestas-api.vercel.app/api/health   # 200
 
-# 2. O segredo novo é o que está nos dois projetos (comparar sem imprimir):
-#    comparar o hash do valor guardado com o que a Vercel tem, nunca colar o valor.
+# 2. Os três segredos foram rodados (comparar hashes, nunca colar valores):
+#    para cada um, o valor na Vercel tem de ser diferente do valor antigo.
+#    O antigo está comprometido e não pode ser reutilizado.
 
 # 3. Deploy coerente — SHA do deploy backend = HEAD local do repositório
 ```
@@ -151,7 +216,13 @@ curl -s -o /dev/null -w "%{http_code}\n" https://senhasfestas-api.vercel.app/api
 Falha mais provável: **401 em tudo**. Quase sempre é `JWT_SECRET` diferente
 entre os dois projetos. Confirmar antes de suspectar do código.
 
-## Secção 6 — Fase 3: JWT assimétrico (RS256)
+**Falha silenciosa a vigiar:** se `JWT_SECRET` ficar em falta no frontend,
+`middleware.ts:31-33` devolve `expired: true` e `:61-64` faz
+`NextResponse.next()` — **todas as rotas passam**, sem erro e sem log. O
+sintoma é "as páginas protegidas deixaram de proteger" e ninguém vê nada.
+Testar sempre o passo 3 acima, não só o login.
+
+## Secção 7 — Fase 3: JWT assimétrico (RS256)
 
 Com HS256, quem assina é quem valida — frontend e backend têm de partilhar o
 mesmo segredo, e essa partilha é a origem do problema.

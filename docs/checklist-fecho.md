@@ -19,11 +19,19 @@ do owner (linha 40). Desde o commit `9612b40`.
 
 **O que fazer (ordem importa):**
 
-1. **Rodar `DATABASE_URL` primeiro** (consola Neon → nova password). Dá acesso
+1. **Rodar `DATABASE_URL` primeiro** (consola Neon → role novo). Dá acesso
    directo à base de dados de produção.
-2. **Depois rodar `JWT_SECRET`** nos dois projetos Vercel (`senhasfestas-api` e
+2. **Depois `JWT_SECRET`** nos dois projetos Vercel (`senhasfestas-api` e
    `senhas-festas`, valor igual nos dois).
-3. Correr o runbook: **`docs/a11-rotation.md`**.
+3. **Depois `CRON_SECRET`** — só existe no backend, mas estava no mesmo
+   ficheiro comprometido e **não estava na tua lista original**.
+4. Correr o runbook: **`docs/a11-rotation.md`**.
+
+**Já feito por mim:** o `docs/vercel-deploy.md` foi sanitizado (placeholders em
+vez dos valores, o documento mantém o valor operacional). Isto foi feito
+**antes** da rotação, ao contrário da ordem original — cada hora que os
+segredos ficam no repositório público é exposição real, e sanitizar não
+impede a rotação. **A rotação continua a ser necessária e continua tua.**
 
 **Sobre o A11 original:** o `JWT_SECRET` **deve** estar no frontend — o
 `middleware.ts` valida o cookie `sf_token` no servidor e sem ele as páginas

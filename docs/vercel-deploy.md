@@ -7,6 +7,10 @@
 > A causa do bug "login não sai da página" era o `JWT_SECRET` **diferente** entre
 > backend e frontend — tem de ser **exatamente o mesmo valor em todos os
 > computadores e nos dois projetos Vercel**.
+>
+> **NUNCA escrever valores de segredos neste ficheiro.** Este documento foi
+> commitado com o `JWT_SECRET` e a `DATABASE_URL` em texto claro num repositório
+> público — ver `docs/a11-rotation.md`. Os valores abaixo são placeholders.
 
 ## Visão geral (estado atual — SET/2026)
 
@@ -26,10 +30,12 @@
    - `frontend/.env` (local)
    - Projeto Vercel `senhasfestas-api` → env `JWT_SECRET` (produção/preview/dev)
    - Projeto Vercel `senhas-festas` → env `JWT_SECRET` (produção/preview/dev)
-   - Valor atual (64 char hex):
-     ```
-     7eef4cee5b645eafd7d37a71d190f2ec5cb0d893a376b66e486ac4d6dcda7d3f
-     ```
+   - Valor: `<JWT_SECRET — 64 char hex, guardado fora do repositório>`
+   - **Tem de existir nos DOIS projetos.** O `frontend/src/middleware.ts` valida
+     o cookie `sf_token` no servidor; sem a variável, `verifySessionToken()`
+     devolve `expired: true` e o middleware deixa passar tudo
+     (`middleware.ts:31-33` e `:61-64`). Remover do frontend **desliga a guarda
+     de rotas em silêncio**.
    - Verificação rápida: `GET /api/health` 200; `POST /api/auth/login` devolve token;
      `GET https://senhas-festas-ten.vercel.app/` **com** `Cookie: sf_token=<token>`
      responde 200 (e não 307 para login). Se o `/` der 307 mesmo com cookie válido,
@@ -37,8 +43,9 @@
 
 2. **`DATABASE_URL`** (Neon) no projeto `senhasfestas-api` (Vercel):
    ```
-   postgresql://neondb_owner:npg_KaAMevl41ZTS@ep-little-darkness-aemyw7gu-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+   postgresql://<user>:<password>@<pooler-host>/<db>?sslmode=require&channel_binding=require
    ```
+   Valor real apenas na consola Neon e na Vercel — nunca neste ficheiro.
 
 3. **Variáveis publicas do frontend** (projeto `senhas-festas` na Vercel, todas as envs
    produção/preview/development):
@@ -100,10 +107,10 @@ O CLI da Vercel esconde valores (Secret). Para ler/listar/alojar envs e IDs:
 AUTH=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.env.APPDATA+'/com.vercel.cli/Data/auth.json')).token)")
 # listar envs
 curl -s "https://api.vercel.com/v9/projects/prj_CKMkZSvip1QDlVUAmo7OmLzVdhIE/env?teamId=smpsandro1239s-projects" -H "Authorization: Bearer $AUTH"
-# adicionar env (ex.: JWT_SECRET)
-curl -s -X POST "https://api.vercel.com/v10/projects/prj_CKMkZSvip1QDlVUAmo7OmLzVdhIE/env?teamId=smpsandro1239s-projects" \
+# adicionar env (ex.: JWT_SECRET) — o valor vem de stdin/ficheiro, nunca inline
+printf '%s' "$NOVO_SEGREDO" | curl -s -X POST "https://api.vercel.com/v10/projects/prj_CKMkZSvip1QDlVUAmo7OmLzVdhIE/env?teamId=smpsandro1239s-projects" \
   -H "Authorization: Bearer $AUTH" -H "Content-Type: application/json" \
-  -d '{"key":"JWT_SECRET","value":"7eef4cee...","type":"encrypted","target":["production","preview"]}'
+  -d "{\"key\":\"JWT_SECRET\",\"value\":\"$NOVO_SEGREDO\",\"type\":\"encrypted\",\"target\":[\"production\"]}"
 # apagar env
 curl -s -X DELETE "https://api.vercel.com/v9/projects/<PROJECT_ID>/env/<ENV_ID>?teamId=smpsandro1239s-projects" -H "Authorization: Bearer $AUTH"
 ```
@@ -111,7 +118,7 @@ curl -s -X DELETE "https://api.vercel.com/v9/projects/<PROJECT_ID>/env/<ENV_ID>?
 ## Problemas resolvidos (para não regredirem)
 
 1. **Login "não sai da página"** — `JWT_SECRET` desalinhado entre backend e frontend
-   (backend Vercel usava `7eef4cee...`, frontend local tinha `a9c93c...`). O middleware
+   (o backend Vercel e o frontend local tinham valores diferentes). O middleware
    (`frontend/src/middleware.ts`) valida `sf_token` com o `JWT_SECRET` do **projeto
    frontend Vercel** e redirecionava tudo para `/auth/login`. **Fix:** alinhar valor em
    todos os locais (ver checklist ponto 1). Commit de referência:
