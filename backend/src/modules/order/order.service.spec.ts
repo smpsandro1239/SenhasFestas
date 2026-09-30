@@ -160,6 +160,52 @@ describe('OrderService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
     ).rejects.toThrow('A tua função não permite operações de saldo. Contacta o caixa ou o organizador.');
   });
 
+  it('client não pode consumir saldo de outro utilizador', async () => {
+    const eventRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'evt1', status: 'active' }),
+    };
+    const eventUserRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'm1' }),
+    };
+    const manager = {
+      findBy: vi.fn().mockResolvedValue([{ id: 'p1', price: 100 }]),
+      create: vi.fn().mockImplementation((_entity: any, data: any) => data),
+      save: vi.fn().mockImplementation((_entity: any, data: any) => Promise.resolve(data)),
+      findOne: vi.fn().mockResolvedValue({ id: 'b1', user: { id: 'u2' }, event: { id: 'evt1' } }),
+    };
+    const dataSource = {
+      transaction: vi.fn().mockImplementation(async (fn: any) => fn(manager)),
+    };
+    const svc = new OrderService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      eventRepository as any,
+      eventUserRepository as any,
+      dataSource as any,
+      { generateOrderQRCode: vi.fn().mockResolvedValue('qr') } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+      { notifyNewOrder: vi.fn().mockResolvedValue(undefined) } as any,
+      { assertEventOperavel: vi.fn() } as any,
+    );
+
+    await expect(
+      svc.create(
+        { id: 'u1', role: 'client' },
+        {
+          eventId: 'evt1',
+          items: [{ productId: 'p1', quantity: 1 }],
+          source: 'qr',
+          paymentMethod: 'balance',
+          balanceId: 'b1',
+          balanceUsed: 100,
+        } as any,
+      ),
+    ).rejects.toThrow('Não pode usar o saldo de outro utilizador');
+  });
+
   it('cashier pode cancelar pedido com saldo via updateStatus', async () => {
     const orderRepository = {
       findOne: vi.fn().mockResolvedValue({
