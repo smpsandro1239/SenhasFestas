@@ -4,7 +4,7 @@ import { UserService } from './user.service';
 import { CreateUserDto, UpdateUserDto } from './dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { STAFF_ROLES, MANAGEMENT_ROLES } from '../../common/roles';
+import { FINANCE_ROLES, MANAGEMENT_ROLES } from '../../common/roles';
 import { toPublicUser } from '../../common/serializers';
 
 @Controller('users')
@@ -18,19 +18,19 @@ export class UserController {
   }
 
   @Get()
-  @Roles(...STAFF_ROLES)
+  @Roles(...FINANCE_ROLES)
   async findAll(@Request() req: any, @Query('q') q?: string) {
     return this.userService.findAll(req.user, q);
   }
 
   @Get('by-access-code/:code')
-  @Roles(...STAFF_ROLES)
+  @Roles(...FINANCE_ROLES)
   async findByAccessCode(@Param('code') code: string, @Request() req: any) {
     return this.userService.findByAccessCode(code, req.user);
   }
 
   @Get(':id')
-  @Roles(...STAFF_ROLES)
+  @Roles(...FINANCE_ROLES)
   async findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.userService.findOne(id, req.user);
   }
