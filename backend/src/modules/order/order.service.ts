@@ -8,6 +8,7 @@ import { OrderGateway } from '../../websocket/order.gateway';
 import { NotificationService } from '../../services/notification.service';
 import { MovementType } from '../../entities';
 import { centavos, soma, subtrai } from '../../common/money';
+import { reembolsarSaldoEmTransacao } from '../../common/order-refund';
 import { EventService } from '../event/event.service';
 
 @Injectable()
@@ -175,38 +176,6 @@ export class OrderService {
     await manager.save(BalanceMovementEntity, movement);
   }
 
-  private async reembolsarSaldoEmTransacao(
-    manager: import('typeorm').EntityManager,
-    order: OrderEntity,
-  ): Promise<void> {
-    // NOTE: "reembolso duplo impossível" (commit a438592) é análise, não teste.
-    // Depende de cancelled/delivered serem terminais e do stale check com lock
-    // em cancelOrder (305-307) e updateStatus (375-377). Se alguém alterar o
-    // mapa de transições ou o stale check, a promessa deixa de valer — escrever
-    // teste de paralelismo (ver todo no order.service.spec.ts).
-    if (!order.balanceId || centavos(Number(order.balanceUsed)) <= 0) {
-      return;
-    }
-    const balance = await manager.findOne(BalanceEntity, {
-      where: { id: order.balanceId },
-      lock: { mode: 'pessimistic_write' },
-    });
-    if (!balance) {
-      return;
-    }
-    balance.currentBalance = soma(Number(balance.currentBalance), centavos(Number(order.balanceUsed)));
-    await manager.save(BalanceEntity, balance);
-
-    const refund = manager.create(BalanceMovementEntity, {
-      balance,
-      type: MovementType.REFUND,
-      amount: centavos(Number(order.balanceUsed)),
-      orderId: order.id,
-      description: 'Reembolso por cancelamento',
-    });
-    await manager.save(BalanceMovementEntity, refund);
-  }
-
   async findByEvent(eventId: string, user: any): Promise<{
     items: any[];
     total: number;
@@ -341,7 +310,7 @@ export class OrderService {
       currentOrder.status = 'cancelled';
       const updatedOrder = await manager.save(OrderEntity, currentOrder);
 
-      await this.reembolsarSaldoEmTransacao(manager, currentOrder);
+      await reembolsarSaldoEmTransacao(manager, currentOrder);
 
       return updatedOrder;
     });
@@ -393,7 +362,7 @@ export class OrderService {
       const updated = await manager.save(OrderEntity, currentOrder);
 
       if (status === 'cancelled') {
-        await this.reembolsarSaldoEmTransacao(manager, currentOrder);
+        await reembolsarSaldoEmTransacao(manager, currentOrder);
       }
 
       return updated;
@@ -419,4 +388,4 @@ export class OrderService {
 
     return savedOrder;
   }
-}
+}
