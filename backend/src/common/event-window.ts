@@ -58,6 +58,9 @@ export function eventWindowMessage(event: EventWindowInput, now: Date = new Date
     return `O evento ainda não começou (início a ${toISO(event.startDate)})`;
   }
   if (now.getTime() >= end.getTime()) {
+    // DÍVIDA: event.service.ts filtra `motivo.includes('terminou')` em dois sítios
+    // (autoCloseExpired, assertEventOperavel). Não reformular/traduzir esta
+    // mensagem sem migrar os guards para um estado tipado (eventWindowState).
     return `O evento terminou a ${toISO(event.endDate)} — aumente a data e reabra se necessário`;
   }
   return null;
