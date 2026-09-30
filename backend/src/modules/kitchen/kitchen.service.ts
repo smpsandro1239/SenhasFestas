@@ -3,7 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrderEntity } from '../../entities';
 import { MembershipService } from '../../common/membership.service';
-import { reembolsarSaldoEmTransacao } from '../../common/order-refund';
+import { reembolsarSaldoEmTransacao, temSaldoParaReembolsar } from '../../common/order-refund';
+import { assertPodeMexerEmSaldo } from '../../common/balance-guard';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { KitchenQueryDto } from './dto';
 
@@ -94,6 +95,9 @@ export class KitchenService {
       });
       if (!atual || atual.status !== pedido.status) {
         throw new BadRequestException('Pedido mudou de estado, tente novamente');
+      }
+      if (novoEstado === 'cancelled' && temSaldoParaReembolsar(atual)) {
+        assertPodeMexerEmSaldo(utilizador);
       }
       atual.status = novoEstado;
       const salvo = await manager.save(OrderEntity, atual);

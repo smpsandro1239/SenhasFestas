@@ -7,11 +7,15 @@ import { centavos, soma } from './money';
 // (kitchen.service). Se alguém alterar o mapa de transições ou o stale check,
 // a promessa deixa de valer — só um e2e com base real a confirma (os specs
 // unitários usam mocks e não simulam corrida).
+export function temSaldoParaReembolsar(order: OrderEntity): boolean {
+  return Boolean(order.balanceId) && centavos(Number(order.balanceUsed)) > 0;
+}
+
 export async function reembolsarSaldoEmTransacao(
   manager: import('typeorm').EntityManager,
   order: OrderEntity,
 ): Promise<void> {
-  if (!order.balanceId || centavos(Number(order.balanceUsed)) <= 0) {
+  if (!temSaldoParaReembolsar(order)) {
     return;
   }
   const balance = await manager.findOne(BalanceEntity, {

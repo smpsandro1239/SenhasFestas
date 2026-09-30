@@ -8,7 +8,8 @@ import { OrderGateway } from '../../websocket/order.gateway';
 import { NotificationService } from '../../services/notification.service';
 import { MovementType } from '../../entities';
 import { centavos, soma, subtrai } from '../../common/money';
-import { reembolsarSaldoEmTransacao } from '../../common/order-refund';
+import { reembolsarSaldoEmTransacao, temSaldoParaReembolsar } from '../../common/order-refund';
+import { assertPodeMexerEmSaldo } from '../../common/balance-guard';
 import { EventService } from '../event/event.service';
 
 @Injectable()
@@ -132,6 +133,7 @@ export class OrderService {
     orderId: string,
     eventId: string,
   ): Promise<void> {
+    assertPodeMexerEmSaldo(user);
     const balanceCtx = await manager.findOne(BalanceEntity, {
       where: { id: balanceId },
       relations: { user: true, event: true },
@@ -306,6 +308,9 @@ export class OrderService {
       if (currentOrder.status === 'delivered' || currentOrder.status === 'cancelled') {
         throw new ForbiddenException('Pedido já não pode ser cancelado');
       }
+      if (temSaldoParaReembolsar(currentOrder)) {
+        assertPodeMexerEmSaldo(user);
+      }
 
       currentOrder.status = 'cancelled';
       const updatedOrder = await manager.save(OrderEntity, currentOrder);
@@ -358,10 +363,16 @@ export class OrderService {
       if (!currentOrder || currentOrder.status !== order.status) {
         throw new ForbiddenException('Pedido mudou de estado, tente novamente');
       }
+      if (status === 'cancelled' && temSaldoParaReembolsar(currentOrder)) {
+        assertPodeMexerEmSaldo(user);
+      }
       currentOrder.status = status as 'received' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
       const updated = await manager.save(OrderEntity, currentOrder);
 
       if (status === 'cancelled') {
+        if (temSaldoParaReembolsar(currentOrder)) {
+          assertPodeMexerEmSaldo(user);
+        }
         await reembolsarSaldoEmTransacao(manager, currentOrder);
       }
 

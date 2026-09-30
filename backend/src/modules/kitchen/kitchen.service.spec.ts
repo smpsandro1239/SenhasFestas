@@ -54,3 +54,80 @@ describe('KitchenService — cancelamento via atualizarEstado deve reembolsar sa
   // atualizarEstado(cancelled) em paralelo só podem reembolsar uma vez — mas é
   // análise, não teste (mocks não simulam corrida real). Ver common/order-refund.ts.
 });
+
+describe('KitchenService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
+  const criarSvc = (orderRepository: any) => {
+    const svc = new KitchenService(
+      orderRepository,
+      {
+        assertMember: vi.fn(),
+        eventIdsFor: vi.fn().mockResolvedValue(null),
+        eventColumnFor: vi.fn().mockReturnValue(null),
+      } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+    );
+    return svc;
+  };
+
+  it('bar não pode cancelar pedido com saldo via atualizarEstado', async () => {
+    const orderRepository = {
+      findOne: vi.fn().mockResolvedValue({
+        id: 'o1',
+        status: 'received',
+        event: { id: 'evt1' },
+        balanceId: 'b1',
+        balanceUsed: 10,
+      }),
+      manager: { transaction: null as any },
+    };
+    orderRepository.manager.transaction = vi.fn().mockImplementation(async (fn: any) =>
+      fn({
+        findOne: vi.fn().mockResolvedValue({
+          id: 'o1',
+          status: 'received',
+          balanceId: 'b1',
+          balanceUsed: 10,
+        }),
+        save: vi.fn().mockImplementation((_entity: any, data: any) => Promise.resolve(data)),
+        create: vi.fn().mockImplementation((_entity: any, data: any) => data),
+      }),
+    );
+
+    await expect(
+      criarSvc(orderRepository as any).atualizarEstado('o1', 'cancelled', { id: 'u1', role: 'bar' }),
+    ).rejects.toThrow('A tua função não permite operações de saldo. Contacta o caixa ou o organizador.');
+  });
+
+  it('cashier pode cancelar pedido com saldo via atualizarEstado', async () => {
+    const orderRepository = {
+      findOne: vi.fn().mockResolvedValue({
+        id: 'o1',
+        status: 'received',
+        event: { id: 'evt1' },
+        balanceId: 'b1',
+        balanceUsed: 10,
+      }),
+      manager: { transaction: null as any },
+    };
+    const balanceSave = vi.fn();
+    orderRepository.manager.transaction = vi.fn().mockImplementation(async (fn: any) =>
+      fn({
+        findOne: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 'o1', status: 'received', balanceId: 'b1', balanceUsed: 10 })
+          .mockResolvedValueOnce({ id: 'b1', currentBalance: 5 }),
+        save: vi.fn().mockImplementation((_entity: any, data: any) => {
+          if (data?.currentBalance !== undefined) balanceSave(data);
+          return Promise.resolve(data);
+        }),
+        create: vi.fn().mockImplementation((_entity: any, data: any) => data),
+      }),
+    );
+
+    await criarSvc(orderRepository as any).atualizarEstado('o1', 'cancelled', { id: 'u1', role: 'cashier' });
+
+    expect(balanceSave).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'b1', currentBalance: 15 }),
+    );
+  });
+});

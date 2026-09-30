@@ -68,6 +68,153 @@ describe('OrderService — guard de janela operacional', () => {
   });
 });
 
+describe('OrderService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
+  it('bar não pode consumir saldo ao criar pedido', async () => {
+    const eventRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'evt1', status: 'active' }),
+    };
+    const eventUserRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'm1' }),
+    };
+    const manager = {
+      findBy: vi.fn().mockResolvedValue([{ id: 'p1', price: 100 }]),
+      create: vi.fn().mockImplementation((_entity: any, data: any) => data),
+      save: vi.fn().mockImplementation((_entity: any, data: any) => Promise.resolve(data)),
+    };
+    const dataSource = {
+      transaction: vi.fn().mockImplementation(async (fn: any) => fn(manager)),
+    };
+    const svc = new OrderService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      eventRepository as any,
+      eventUserRepository as any,
+      dataSource as any,
+      { generateOrderQRCode: vi.fn().mockResolvedValue('qr') } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+      { notifyNewOrder: vi.fn().mockResolvedValue(undefined) } as any,
+      { assertEventOperavel: vi.fn() } as any,
+    );
+
+    await expect(
+      svc.create(
+        { id: 'u1', role: 'bar' },
+        {
+          eventId: 'evt1',
+          items: [{ productId: 'p1', quantity: 1 }],
+          source: 'qr',
+          paymentMethod: 'balance',
+          balanceId: 'b1',
+          balanceUsed: 100,
+        } as any,
+      ),
+    ).rejects.toThrow('A tua função não permite operações de saldo. Contacta o caixa ou o organizador.');
+  });
+
+  it('bar não pode cancelar pedido com saldo via updateStatus', async () => {
+    const orderRepository = {
+      findOne: vi.fn().mockResolvedValue({
+        id: 'o1',
+        status: 'received',
+        event: { id: 'evt1' },
+        balanceId: 'b1',
+        balanceUsed: 10,
+      }),
+    };
+    const eventUserRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'm1' }),
+    };
+    const manager = {
+      findOne: vi.fn().mockResolvedValueOnce({
+        id: 'o1',
+        status: 'received',
+        balanceId: 'b1',
+        balanceUsed: 10,
+      }),
+      save: vi.fn().mockImplementation((_entity: any, data: any) => Promise.resolve(data)),
+      create: vi.fn().mockImplementation((_entity: any, data: any) => data),
+    };
+    const dataSource = {
+      transaction: vi.fn().mockImplementation(async (fn: any) => fn(manager)),
+    };
+    const svc = new OrderService(
+      orderRepository as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      eventUserRepository as any,
+      dataSource as any,
+      { generateOrderQRCode: vi.fn() } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+      { notifyNewOrder: vi.fn() } as any,
+      { assertEventOperavel: vi.fn() } as any,
+    );
+
+    await expect(
+      svc.updateStatus('o1', 'cancelled', { id: 'u1', role: 'bar' }),
+    ).rejects.toThrow('A tua função não permite operações de saldo. Contacta o caixa ou o organizador.');
+  });
+
+  it('cashier pode cancelar pedido com saldo via updateStatus', async () => {
+    const orderRepository = {
+      findOne: vi.fn().mockResolvedValue({
+        id: 'o1',
+        status: 'received',
+        event: { id: 'evt1' },
+        balanceId: 'b1',
+        balanceUsed: 10,
+      }),
+    };
+    const balanceSave = vi.fn();
+    const manager = {
+      findOne: vi
+        .fn()
+        .mockResolvedValueOnce({ id: 'o1', status: 'received', balanceId: 'b1', balanceUsed: 10 })
+        .mockResolvedValueOnce({ id: 'b1', currentBalance: 5 }),
+      save: vi.fn().mockImplementation((_entity: any, data: any) => {
+        if (data?.currentBalance !== undefined) balanceSave(data);
+        return Promise.resolve(data);
+      }),
+      create: vi.fn().mockImplementation((_entity: any, data: any) => data),
+    };
+    const dataSource = {
+      transaction: vi.fn().mockImplementation(async (fn: any) => fn(manager)),
+    };
+    const eventUserRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'm1' }),
+    };
+    const svc = new OrderService(
+      orderRepository as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      eventUserRepository as any,
+      dataSource as any,
+      { generateOrderQRCode: vi.fn() } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+      { notifyNewOrder: vi.fn() } as any,
+      { assertEventOperavel: vi.fn() } as any,
+    );
+
+    await svc.updateStatus('o1', 'cancelled', { id: 'u1', role: 'cashier' });
+
+    expect(balanceSave).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'b1', currentBalance: 15 }),
+    );
+    expect(manager.save).toHaveBeenCalledWith(
+      BalanceMovementEntity,
+      expect.objectContaining({ type: MovementType.REFUND, amount: 10, orderId: 'o1' }),
+    );
+  });
+});
+
 describe('OrderService — cancelamento via updateStatus deve reembolsar saldo (B1)', () => {
   it('reembolsa o saldo consumido quando cancela por status (RED)', async () => {
     const orderRepository = {
