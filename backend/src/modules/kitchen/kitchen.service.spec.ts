@@ -49,4 +49,8 @@ describe('KitchenService — cancelamento via atualizarEstado deve reembolsar sa
       expect.objectContaining({ type: MovementType.REFUND, amount: 10, orderId: 'o1' }),
     );
   });
+
+  // NOTE (B1-concorrência): tal como no order.service, chamadas a
+  // atualizarEstado(cancelled) em paralelo só podem reembolsar uma vez — mas é
+  // análise, não teste (mocks não simulam corrida real). Ver common/order-refund.ts.
 });

@@ -123,5 +123,10 @@ describe('OrderService — cancelamento via updateStatus deve reembolsar saldo (
     );
   });
 
-  it.todo('B1-concorrência: duas chamadas updateStatus(cancelled) em paralelo reembolsam apenas uma vez');
+  // NOTE (B1-concorrência): duas chamadas a updateStatus(cancelled) em paralelo
+  // reembolsarem apenas uma vez é análise, não teste — os mocks de vitest não
+  // exercitam corrida real entre transações. A garantia assenta em
+  // cancelled/delivered serem terminais + stale check com lock pessimista
+  // (ver common/order-refund.ts). Só um e2e com base real a pode confirmar;
+  // por isso não deixamos it.todo a prometer mais do que conseguimos testar.
 });

@@ -5,8 +5,8 @@ import { centavos, soma } from './money';
 // Depende de cancelled/delivered serem terminais e do stale check com lock
 // dentro de cancelOrder e updateStatus (order.service) e atualizarEstado
 // (kitchen.service). Se alguém alterar o mapa de transições ou o stale check,
-// a promessa deixa de valer — escrever teste de paralelismo (todo no
-// order.service.spec.ts: B1-concorrência).
+// a promessa deixa de valer — só um e2e com base real a confirma (os specs
+// unitários usam mocks e não simulam corrida).
 export async function reembolsarSaldoEmTransacao(
   manager: import('typeorm').EntityManager,
   order: OrderEntity,
