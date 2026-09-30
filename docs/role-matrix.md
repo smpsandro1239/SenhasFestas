@@ -1,0 +1,150 @@
+# Role Matrix — Decisão 2A: event-role como teto
+
+Estado: **documento de análise, nenhum código alterado**. Objetivo: fixar as
+decisões de produto antes de implementar o 2A. Baseia-se no inventário real dos
+controllers (backend/src) e na entidade `EventUserEntity.role`.
+
+## 1. Como funciona hoje (antes do 2A)
+
+O JWT transporta **apenas a role global** (`user.role`). O `RolesGuard`
+compara essa role com `@Roles(...)` do controller. A `EventUserEntity.role`
+(`event_users.role`) existe na BD mas **não é usada em lado nenhum da
+autorização** — foi isto que o B3 demonstrou.
+
+### Inventário de endpoints → roles exigidas
+
+| Controller | Endpoint | @Roles (hoje) |
+|---|---|---|
+| orders | POST / | ORDER_CREATOR_ROLES (superadmin, organizer, cashier, treasurer, client) |
+| orders | PATCH /:id/status | STAFF_ROLES (tudo menos client) |
+| orders | POST /:id/cancel | FINANCE_ROLES + client |
+| orders | GET /mine, GET / | qualquer autenticado |
+| orders | GET /event/:eventId | STAFF_ROLES |
+| kitchen | GET orders/pedidos/stats, PATCH status | KITCHEN_ROLES (superadmin, organizer, kitchen, bar) |
+| balances | GET /:userId, GET /:userId/history | sem @Roles (guard manual: client só o próprio; FINANCE_ROLES; resto 403) |
+| balances | POST load, reverse, deduct; GET outstanding | FINANCE_ROLES |
+| cash-closure | abrir, fechar, listar, obter, aberta | FINANCE_ROLES |
+| reports | ordens, saldo, total, top-products, series, metodos, movimentos, estatisticas, export.csv | STAFF_ROLES (inclui bar e kitchen!) |
+| events | GET /, GET /:id, GET /:id/settings | sem @Roles (scope por membership) |
+| events | POST /, PATCH /:id, status, settings, members CRUD | MANAGEMENT_ROLES (superadmin, organizer) |
+| events | DELETE /:id | superadmin |
+| catalog | GET (com eventId), GET /:id | sem @Roles (scope por membership) |
+| catalog | categories, POST, PATCH, DELETE | MANAGEMENT_ROLES |
+| users | GET /me | sem @Roles |
+| users | GET /, GET /by-access-code/:code, GET /:id | STAFF_ROLES (inclui bar e kitchen!) |
+| users | POST / | MANAGEMENT_ROLES |
+| users | PATCH /:id, DELETE /:id | superadmin |
+| audit | list, export.csv, findOne | AUDIT_ROLES (superadmin, organizer, treasurer) |
+| public | GET evento, pedidos-prontos, em-preparacao, recebidos, contagem | sem auth (público) |
+| public | PATCH pedidos/:id/entregue | STAFF_ROLES |
+| cron | close-events | CRON_SECRET (sem roles) |
+| products | GET / (client sem eventId), GET /:id/suggestions | sem @Roles |
+
+Nota 1: **STAFF_ROLES = todos menos client** — portanto bar e kitchen acedem
+hoje a `reports/*` e `users/*` (lista de utilizadores e pesquisa por access
+code). Este é um buraco pré-existente independente do 2A (ver Decisão D-2).
+
+## 2. Regra proposta (2A)
+
+> **Num endpoint com scope de evento, a role efetiva é a `event-role`**
+> (o papel que a pessoa tem nesse evento), **exceto se a role global for
+> `superadmin` — que nunca é reduzida** (continua superadmin em todo o lado).
+> Sem event-role (não é membro do evento), o acesso é o de hoje:
+> `assertMember` falha → 403, salvo `superadmin`.
+
+Não há hierarquia entre roles: dentro do evento a `event-role` substitui a
+global por completo. A única exceção é `superadmin` global — cuja global é
+imune a qualquer `event-role` inferior.
+
+Não há elevação "não autorizada": passar a `cashier` num evento *é* o efeito
+pretendido da membership — a equipa do evento decide quem é o quê lá dentro.
+A global serve só para:
+
+- `superadmin` (imune);
+- os casos em que não há `event-role` (→ 403, como hoje);
+- endpoints **sem scope de evento** (`/users`, `/events`, criar evento, etc.)
+  que usam **apenas** a global (o teto só se aplica a operações com scope de
+  evento).
+
+### Tabela de role efetiva (global × event-role)
+
+Legenda: valor = role efetiva **num endpoint de evento**.
+`(sem membership)` = sem event-role → assertMember bloqueia (403).
+
+| global \ event-role | superadmin | organizer | cashier | treasurer | bar | kitchen | client | (sem membership) |
+|---|---|---|---|---|---|---|---|---|
+| **superadmin** | superadmin | superadmin | superadmin | superadmin | superadmin | superadmin | superadmin | superadmin (bypass hoje) |
+| **organizer** | *ver D-1* | organizer | cashier | treasurer | bar | kitchen | client | — |
+| **cashier** | *ver D-1* | organizer | cashier | cashier | bar | kitchen | client | — |
+| **treasurer** | *ver D-1* | organizer | cashier | treasurer | bar | kitchen | client | — |
+| **bar** | *ver D-1* | organizer | cashier | treasurer | bar | bar | client | — |
+| **kitchen** | *ver D-1* | organizer | cashier | treasurer | kitchen | kitchen | client | — |
+| **client** | *ver D-1* | organizer | cashier | treasurer | bar | kitchen | client | — |
+
+A tabela é a regra pura: a coluna é a `event-role` (a linha só importa para
+`superadmin`). Todo o corpo é a event-role — confirma que a regra é única.
+
+### Consequências diretas da regra
+
+- `organizer` global + `event-role: client` → **client**: sem acesso a
+  `users/*` daquele evento, sem `reports/*`, sem `balances` de terceiros.
+  Pode ver os próprios pedidos (`GET /orders/mine`) e carregar o próprio saldo
+  no caixa (ação de cliente).
+- `organizer` global + `event-role: bar` → **bar**: pode KDS (kitchen), NÃO
+  mexe em saldo (guard 1A já em vigor), NÃO vê reports/users.
+- `client` global + `event-role: cashier` → **cashier**: pode usar a câmara QR
+  do caixa (`GET /users/by-access-code/:code`) e criar pedidos. É o efeito
+  pretendido — a membership decide o papel dentro do evento.
+- `superadmin` global + `event-role: client` → continua superadmin em tudo
+  (imunidade).
+
+## 3. Decisões
+
+### D-1. `event-role: superadmin` (default fechado)
+
+`superadmin` só é atribuído no bootstrap (global). `event-role: superadmin` não
+deve existir em produção; se aparecer, é **bug de dados, não caso de desenho**.
+**Decisão (default, sem custo de pergunta):** registar e ignorar — tratar como
+a event-role real que é; como o global superadmin é imune, e os globais
+inferiores não podem criar esse valor, não há caminho de exploração. Não
+mudamos a criação de membros por causa disto.
+
+### D-2. Buraco STAFF_ROLES em `reports/*` e `users/*` — decisão separada do 2A
+
+Hoje bar/kitchen passam em `reports/*` (relatórios financeiros) e `users/*`
+(lista de utilizadores, pesquisa por access code) porque STAFF_ROLES = tudo
+menos client. Isto é **exposição que existe hoje, com ou sem event-role** — não
+é do 2A.
+
+**Decisão (aberta — única pergunta de produto):** restringir estes endpoints a
+FINANCE_ROLES + organizer (criar `VIEWER_ROLES` = superadmin, organizer,
+cashier, treasurer) e retirar bar/kitchen, OU manter o estado atual.
+
+Recomendação: fechar (o padrão do sistema é "quem vê finanças = quem gere
+finanças"; bar/kitchen só precisam do KDS).
+
+### D-3. Onde resolver a event-role (default fechado — decisão de engenharia)
+
+**Consultar `EventUserEntity` no guard/helper a cada request com scope de
+evento.** Dados frescos > token stale. O mapa no JWT seria otimização
+prematura — só se houver medição de lentidão. Não é pergunta de produto.
+
+## 4. O que o 2A NÃO muda
+
+- Guard 1A (FINANCE_ROLES em saldo) — já em produção, mantém-se.
+- Destruição de eventos (só superadmin global).
+- Gestão de utilizadores (só superadmin global).
+- `GET /users/me`, o próprio saldo/histórico do client.
+- Crons, ecrã público.
+
+## 5. Critérios de aceitação (para os testes)
+
+1. `organizer` global, event-role `client` no evento X → 403 em
+   `GET /events/:x/members`, `reports/*`, `users/*` (versionar para X).
+2. `organizer` global, event-role `bar` no evento X → pode KDS; 403 ao
+   consumir/cancelar saldo (1A mantém-se); 403 em reports/users.
+3. `client` global, event-role `cashier` no evento X → pode
+   `by-access-code` e criar ordem; NÃO pode em evento Y (sem membership).
+4. `superadmin` global com event-role `client` → continua superadmin em tudo.
+5. Mesma pessoa em dois eventos com roles diferentes → comporta-se conforme a
+   role de cada evento.
