@@ -3,12 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { MembershipService } from './membership.service';
 
-// TODO(B3): política do papel por evento (EventUserEntity.role) ainda não
-// decidida. Este ficheiro documenta o comportamento ATUAL (event-role ignorado),
-// não uma política desejada. Decisão pendente do utilizador — ver thread de
-// revisão: teto, piso, global vence, hierárquico, só-leitura ou remover da UI.
+// Política 2A (decidida): role efetiva dentro do evento = event-role, exceto
+// superadmin global (imune). A aplicação da política vive no RolesGuard — ver
+// roles.guard.spec.ts. Este ficheiro cobre só o contrato do MembershipService.
 
-describe('MembershipService — comportamento atual do event-role', () => {
+describe('MembershipService — comportamento do event-role', () => {
   const mockEventUserRepository = {
     find: vi.fn(),
     findOne: vi.fn(),
@@ -32,5 +31,26 @@ describe('MembershipService — comportamento atual do event-role', () => {
     ).resolves.toBeUndefined();
   });
 
-  it.todo('B3: IMPORTA teto — organizer global com event-role client deve ser rejeitado');
+  it('roleEfetiva: com eventId usa a event-role do evento', async () => {
+    mockEventUserRepository.findOne.mockResolvedValue({
+      id: 'm1',
+      role: 'cashier',
+      user: { id: 'u1' },
+    });
+
+    await expect(
+      service.roleEfetiva({ id: 'u1', role: 'organizer' }, 'evt1'),
+    ).resolves.toBe('cashier');
+  });
+
+  it('roleEfetiva: superadmin é imune e nunca consulta a BD', async () => {
+    const repo = vi.mocked(mockEventUserRepository);
+
+    await expect(
+      service.roleEfetiva({ id: 'u1', role: 'superadmin' }, 'evt1'),
+    ).resolves.toBe('superadmin');
+
+    expect(repo.findOne).not.toHaveBeenCalled();
+    expect(repo.find).not.toHaveBeenCalled();
+  });
 });
