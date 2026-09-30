@@ -27,6 +27,30 @@ do owner (linha 40). Desde o commit `9612b40`.
    ficheiro comprometido e **não estava na tua lista original**.
 4. Correr o runbook: **`docs/a11-rotation.md`**.
 
+### Fecho da rotação (os dois passos que fecham o ciclo)
+
+Sem estes, a rotação pode deixar o sistema num estado incoerente que só se
+descobre quando algo falha:
+
+1. **Confirmar que o `JWT_SECRET` do frontend é o mesmo valor do backend.**
+   É a falha mais provável e a mais silenciosa: valores diferentes → **401 em
+   tudo**, e a tendência natural é culpar o código. Confirmar por hash, nunca
+   a escrever em lado nenhum. Depois: login real e confirmar que `/caixa`,
+   `/cozinha` e `/pedidos` respondem 200 (não 307).
+2. **Se o `CRON_SECRET` foi rodado, confirmar que o cron continua a funcionar.**
+   O segredo é rotacionado nos dois lados (Vercel + valor esperado) ou o
+   fecho automático de eventos deixa de correr em silêncio:
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}\n" \
+     -H "Authorization: Bearer <novo-segredo-cron>" \
+     https://senhasfestas-api.vercel.app/api/cron/close-events   # 200, nao 403
+   ```
+
+**Porquê o passo 2 importa:** `vercel.json` agenda o cron e a Vercel envia o
+`CRON_SECRET` automaticamente. Se só se muda na Vercel e o valor esperado no
+servidor divergir, o `403` é o único sinal — e só aparece quando um evento
+deveria ter fechado e não fechou.
+
 **Já feito por mim:** o `docs/vercel-deploy.md` foi sanitizado (placeholders em
 vez dos valores, o documento mantém o valor operacional). Isto foi feito
 **antes** da rotação, ao contrário da ordem original — cada hora que os

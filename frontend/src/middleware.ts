@@ -24,12 +24,14 @@ function matchesGate(pathname: string): string | null {
   return null;
 }
 
-async function verifySessionToken(
-  token: string,
-): Promise<{ ok: boolean; role?: string; expired?: boolean }> {
+type VerifyResult = { ok: boolean; role?: string; expired?: boolean; configError?: boolean };
+
+async function verifySessionToken(token: string): Promise<VerifyResult> {
   const secretEnv = process.env.JWT_SECRET;
   if (!secretEnv) {
-    return { ok: false, expired: true };
+    // Erro de configuração, não uma sessão expirada: não houve verificação
+    // nenhuma. Distinguir isto de 'expired' evita fail-open (ver middleware).
+    return { ok: false, configError: true };
   }
   try {
     const { payload } = await jwtVerify(token, new TextEncoder().encode(secretEnv), {
@@ -59,7 +61,19 @@ export async function middleware(request: NextRequest) {
 
   const payload = await verifySessionToken(token);
   if (!payload.ok) {
+    if (payload.configError) {
+      // Fail-closed: sem segredo não há verificação possível, logo não há
+      // autorização. Deixar passar tornaria o aviso invisível (a API continua
+      // a proteger os dados, mas o utilizador vê páginas que parecem abertas).
+      console.error('[middleware] JWT_SECRET ausente — a bloquear rotas protegidas');
+      const erroUrl = new URL('/auth/login', request.url);
+      erroUrl.searchParams.set('error', 'config');
+      erroUrl.searchParams.set('from', pathname);
+      return NextResponse.redirect(erroUrl);
+    }
     if (payload.expired) {
+      // Load-bearing: api.ts faz refresh silencioso do token. Só depois de
+      // falhar o refresh é que o cliente manda para o login.
       return NextResponse.next();
     }
     const loginUrl = new URL('/auth/login', request.url);
