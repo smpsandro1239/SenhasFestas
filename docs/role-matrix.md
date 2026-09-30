@@ -43,6 +43,9 @@ autorização** — foi isto que o B3 demonstrou.
 Nota 1: **STAFF_ROLES = todos menos client** — portanto bar e kitchen acedem
 hoje a `reports/*` e `users/*` (lista de utilizadores e pesquisa por access
 code). Este é um buraco pré-existente independente do 2A (ver Decisão D-2).
+Nota 2: **`superadmin` sem membership no evento X não é bloqueado** —
+`assertMember` faz early return para `superadmin` (bypass); o teto não se
+aplica a esta global em lado nenhum.
 
 ## 2. Regra proposta (2A)
 
@@ -117,11 +120,14 @@ menos client. Isto é **exposição que existe hoje, com ou sem event-role** —
 é do 2A.
 
 **Decisão (aberta — única pergunta de produto):** restringir estes endpoints a
-FINANCE_ROLES + organizer (criar `VIEWER_ROLES` = superadmin, organizer,
-cashier, treasurer) e retirar bar/kitchen, OU manter o estado atual.
+**FINANCE_ROLES** existente (superadmin, organizer, cashier, treasurer) e
+retirar bar/kitchen, OU manter o estado atual. Não criar `VIEWER_ROLES` — teria
+exatamente os mesmos membros que FINANCE_ROLES e criaria duas fontes de verdade
+(é o padrão que originou o B1). Se um dia os conjuntos divergirem, cria-se a
+constante nova com justificação.
 
-Recomendação: fechar (o padrão do sistema é "quem vê finanças = quem gere
-finanças"; bar/kitchen só precisam do KDS).
+Recomendação: usar FINANCE_ROLES (o padrão do sistema é "quem vê finanças =
+quem gere finanças"; bar/kitchen só precisam do KDS).
 
 ### D-3. Onde resolver a event-role (default fechado — decisão de engenharia)
 
@@ -146,5 +152,8 @@ prematura — só se houver medição de lentidão. Não é pergunta de produto.
 3. `client` global, event-role `cashier` no evento X → pode
    `by-access-code` e criar ordem; NÃO pode em evento Y (sem membership).
 4. `superadmin` global com event-role `client` → continua superadmin em tudo.
+4b. `superadmin` global com event-role `bar` → continua superadmin em tudo
+    (confirma que é a global `superadmin` que escapa, não uma event-role
+    específica).
 5. Mesma pessoa em dois eventos com roles diferentes → comporta-se conforme a
    role de cada evento.
