@@ -1,8 +1,9 @@
 # Role Matrix — Decisão 2A: event-role como teto
 
-Estado: **documento de análise, nenhum código alterado**. Objetivo: fixar as
-decisões de produto antes de implementar o 2A. Baseia-se no inventário real dos
-controllers (backend/src) e na entidade `EventUserEntity.role`.
+Estado: **implementado**. Guard 2A em `backend/src/common/guards/roles.guard.ts`
++ `MembershipService.roleEfetiva` (commit `c5459d4`, deploy `f05903f`);
+D-2 restringe `reports/*` e `users/*` a FINANCE_ROLES (commit `2989a23`);
+test kit manual em `docs/test-kit.md` (Bloco 1: 1A, Bloco 2: 2A).
 
 ## 1. Como funciona hoje (antes do 2A)
 
