@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { OrderEntity, OrderItemEntity, BalanceMovementEntity, BalanceEntity } from '../../entities';
 import { MembershipService } from '../../common/membership.service';
+import { sanitizarCelulaCsv } from '../../common/csv';
 import { OrdensQueryDto, SaldoQueryDto, TopProductsQueryDto, TotalQueryDto } from './dto';
 
 const LIMITE_EXPORTACAO = 5000;
@@ -86,7 +87,10 @@ export class ReportsService {
     const escapar = (valor: unknown): string => {
       if (Array.isArray(valor)) {
         valor = valor
-          .map((item) => `${item.quantity}x ${item.product?.name ?? item.productId ?? ''} (${item.subtotal})`)
+          .map((item) => {
+            const nome = sanitizarCelulaCsv(item.product?.name ?? item.productId ?? '');
+            return `${item.quantity}x ${nome} (${item.subtotal})`;
+          })
           .join(' | ');
       }
       const texto =
@@ -95,7 +99,7 @@ export class ReportsService {
           : typeof valor === 'object'
             ? JSON.stringify(valor)
             : String(valor);
-      return `"${texto.replace(/"/g, '""')}"`;
+      return `"${sanitizarCelulaCsv(texto).replace(/"/g, '""')}"`;
     };
     const linhas = items.map((orden) =>
       [

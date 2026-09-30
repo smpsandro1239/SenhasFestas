@@ -4,6 +4,7 @@ import { Repository, SelectQueryBuilder } from 'typeorm';
 import { AuditLogEntity } from '../../entities';
 import { MembershipService, NO_EVENT } from '../../common/membership.service';
 import { snapshot } from '../../common/serializers';
+import { sanitizarCelulaCsv } from '../../common/csv';
 import { AuditQueryDto } from './dto';
 
 export interface AuditRecordInput {
@@ -195,7 +196,7 @@ export class AuditService {
           : typeof valor === 'object'
             ? JSON.stringify(valor)
             : String(valor);
-      return `"${texto.replace(/"/g, '""')}"`;
+      return `"${sanitizarCelulaCsv(texto).replace(/"/g, '""')}"`;
     };
     const linhas = items.map((item) =>
       [
