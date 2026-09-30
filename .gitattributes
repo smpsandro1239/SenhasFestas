@@ -1,0 +1,18 @@
+# Normalização de line endings — o repo tinha CRLF e LF misturados.
+# Tudo o que é texto é normalizado para LF no índice; o checkout é local (Windows).
+* text=auto eol=lf
+
+# Binários — nunca normalizar
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.pdf binary
+*.lockb binary
