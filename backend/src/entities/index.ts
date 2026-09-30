@@ -498,6 +498,11 @@ export class CashClosureEntity {
   @Column({ type: 'timestamp', nullable: true })
   closedAt?: Date;
 
+  // A9: quem fechou. Distinto de openedById (quem abriu) — num fecho por
+  // superadmin os dois são diferentes e ambos ficam para rastreio.
+  @Column({ type: 'uuid', nullable: true })
+  closedById?: string;
+
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   openingBalance: number;
 

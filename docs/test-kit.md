@@ -82,10 +82,35 @@ qualquer pessoa com a URL.
 > notas do tipo alergias/mesa. `PATCH /api/public/pedidos/:id/entregue` já é
 > autenticado (`AuthGuard('jwt')` + `RolesGuard`) — não faz parte deste bloco.
 
+## Bloco 5 — A9: uma caixa aberta por evento, fecho por operador ou superadmin
+
+Fix A9: `abrirCaixa` recusa com 409 se já existir caixa `open` no evento (e um
+partial unique index em `cash_closures (eventId) WHERE status='open'` garante
+isto mesmo em pedidos simultâneos). `fecharCaixa` aceita quem abriu **ou** um
+superadmin; o registo guarda os dois (`openedById` e `closedById`) e o audit
+regista `actorId` = quem fechou, em entradas `CREATE` e `CLOSE`.
+
+| # | Ação | Esperado | Resultado |
+|---|---|---|---|
+| 1 | Login `cashier` → `/caixa` → abrir caixa com saldo inicial 0 | Caixa abre, estado `open`, `openingBalance` 0 | passou / falhou / não testável |
+| 2 | **Sem fechar a caixa**, noutro separador (ou outro operador) → tentar abrir outra caixa no mesmo evento | **409** com a mensagem "Já existe uma caixa aberta neste evento" | passou / falhou / não testável |
+| 3 | Login `cashier` noutra sessão → tentar fechar a caixa de outro operador | **403** "Só o operador que abriu ou um superadmin pode fechar a caixa" | passou / falhou / não testável |
+| 4 | Fechar a caixa como o operador que a abriu → confirmar registo | `status=closed`, `closedById` = o próprio, `closingBalance` preenchido | passou / falhou / não testável |
+| 5 | Abrir nova caixa; logout do cashier; login `superadmin`; fechar essa caixa | **200** — o superadmin fecha mesmo não sendo quem abriu | passou / falhou / não testável |
+| 6 | Em `/admin` → auditoria, filtrar `cash-closure` | Entrada `CLOSE` com `actorId` = superadmin e detalhe `abertoPor` = cashier (os dois IDs diferentes, ambos registados) | passou / falhou / não testável |
+| 7 | Tentar fechar uma caixa já fechada | **409** "Caixa já está fechado" | passou / falhou / não testável |
+
+> Nota: o passo 5 é a razão de a decisão 2 existir — o dinheiro é do evento, não
+> do operador. Se em produção já existissem duas caixas abertas no mesmo evento
+> (duas pessoas a clicar), a migração manteve a **mais recente** como aberta e
+> fechou automaticamente as restantes, com nota nas `notes` e
+> `closingBalance` 0 (que significa "saldo desconhecido", não "caixa vazia").
+> O passo 2 é o que impede isto de acontecer a partir de agora.
+
 ## Registo
 
 - Data da execução:
 - Executado por:
 - Ambiente (URL API / UI):
-- Resumo: Bloco 1 — passou __ / falhou __ / não testável __; Bloco 2 — passou __ / falhou __ / não testável __; Bloco 3 — passou __ / falhou __ / não testável __; Bloco 4 — passou __ / falhou __ / não testável __
+- Resumo: Bloco 1 — passou __ / falhou __ / não testável __; Bloco 2 — passou __ / falhou __ / não testável __; Bloco 3 — passou __ / falhou __ / não testável __; Bloco 4 — passou __ / falhou __ / não testável __; Bloco 5 — passou __ / falhou __ / não testável __
 - Notas (URLs, capturas, mensagens de erro inesperadas):
