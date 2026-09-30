@@ -42,10 +42,7 @@ export class RateLimitMiddleware implements NestMiddleware {
     if (this.redisService.isEnabled) {
       const key = `${RL_IP_PREFIX}${ip}`;
       try {
-        const count = (await this.redisService.incr(key)) ?? 0;
-        if (count === 1) {
-          await this.redisService.expire(key, Math.ceil(this.windowMs / 1000));
-        }
+        const count = (await this.redisService.incrementWithTtl(key, Math.ceil(this.windowMs / 1000))) ?? 0;
         if (count > this.maxRequests) {
           res.status(HttpStatus.TOO_MANY_REQUESTS).json({
             statusCode: HttpStatus.TOO_MANY_REQUESTS,
@@ -105,10 +102,7 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
   private async registarFalhaRedis(chave: string): Promise<void> {
     try {
       const key = `${RL_LOGIN_PREFIX}${chave}`;
-      const count = (await this.redisService.incr(key)) ?? 0;
-      if (count === 1) {
-        await this.redisService.expire(key, Math.ceil(this.windowMs / 1000));
-      }
+      const count = (await this.redisService.incrementWithTtl(key, Math.ceil(this.windowMs / 1000))) ?? 0;
     } catch (error) {
       Logger.warn(`Falha ao registar tentativa de login no Redis: ${(error as Error).message}`);
     }

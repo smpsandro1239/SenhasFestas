@@ -65,6 +65,27 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
+  async incrementWithTtl(key: string, ttlSeconds: number): Promise<number | null> {
+    if (!this.client) {
+      return null;
+    }
+    // INCR + EXPIRE numa única operação Lua — atómico por construção. Sem isto,
+    // um processo que morra entre os dois comandos deixa a chave sem TTL (rate
+    // limit "para sempre"). Nota: a atomicidade é garantida pelo Redis (EVAL não
+    // é interleaved); não é testável com mocks — só com Redis real (B1-concorrência).
+    const script = `
+      local v = redis.call('INCR', KEYS[1])
+      if v == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+      return v
+    `;
+    try {
+      return (await this.client.eval(script, 1, key, ttlSeconds)) as number;
+    } catch (error) {
+      this.logger.warn(`Falha no Redis incrementWithTtl(${key}): ${(error as Error).message}`);
+      return null;
+    }
+  }
+
   async expire(key: string, seconds: number): Promise<void> {
     if (!this.client) {
       return;

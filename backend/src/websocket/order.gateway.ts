@@ -127,11 +127,8 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
 
   private async contarJoin(userId: string): Promise<boolean> {
     const key = `ws:join:${userId}`;
-    const contagem = await this.redisService.incr(key);
+    const contagem = await this.redisService.incrementWithTtl(key, Math.ceil(JOIN_WINDOW_MS / 1000));
     if (contagem !== null) {
-      if (contagem === 1) {
-        await this.redisService.expire(key, Math.ceil(JOIN_WINDOW_MS / 1000));
-      }
       return contagem <= JOIN_LIMIT;
     }
     return this.permitirJoinLocal(userId);
