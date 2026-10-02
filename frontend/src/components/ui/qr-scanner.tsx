@@ -16,6 +16,13 @@ export function QrScanner({ open, onResult, onClose, title = 'Escanear código Q
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState('');
 
+  // O consumidor passa uma função inline (ex.: `code => ...`), que é uma nova
+  // referência a cada render. Se `onResult` estivesse nas deps do efeito, cada
+  // render dispararia getUserMedia de novo e a câmara piscaria. Ler por ref
+  // mantém o efeito dependente apenas de `open`.
+  const onResultRef = useRef(onResult);
+  onResultRef.current = onResult;
+
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -30,19 +37,25 @@ export function QrScanner({ open, onResult, onClose, title = 'Escanear código Q
 
     let frameId = 0;
     let disposed = false;
+    // jsQR é CPU-intensivo (~10ms por frame a 640x480). A 60fps isso satura o
+    // thread principal e faz a UI da página de caixa engasgar enquanto o
+    // scanner está aberto. 10 scans/s é indistinguível ao olho num código QR
+    // estático e liberta ~80% do CPU.
+    const INTERVALO_MS = 100;
+    let ultimaPassagem = 0;
 
-    const scanLoop = () => {
+    const scanLoop = (timestamp: number) => {
+      if (disposed) return;
+      frameId = requestAnimationFrame(scanLoop);
+      if (timestamp - ultimaPassagem < INTERVALO_MS) return;
+      ultimaPassagem = timestamp;
+
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (!video || !canvas || video.readyState < 2) {
-        frameId = requestAnimationFrame(scanLoop);
-        return;
-      }
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        frameId = requestAnimationFrame(scanLoop);
-        return;
-      }
+      if (!video || !canvas || video.readyState < 2) return;
+
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(imageData.data, imageData.width, imageData.height, {
@@ -50,10 +63,9 @@ export function QrScanner({ open, onResult, onClose, title = 'Escanear código Q
       });
       if (code && code.data) {
         stopCamera();
-        onResult(code.data);
+        onResultRef.current(code.data);
         return;
       }
-      frameId = requestAnimationFrame(scanLoop);
     };
 
     (async () => {
@@ -79,7 +91,7 @@ export function QrScanner({ open, onResult, onClose, title = 'Escanear código Q
       cancelAnimationFrame(frameId);
       stopCamera();
     };
-  }, [open, onResult, stopCamera]);
+  }, [open, stopCamera]);
 
   if (!open) return null;
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { Card } from '@/components/ui/card';
@@ -11,10 +12,15 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs } from '@/components/ui/tabs';
 import { Alert } from '@/components/ui/alert';
 import { CashIcon, QrIcon } from '@/components/ui/icons';
-import { QrScanner } from '@/components/ui/qr-scanner';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
 import { getOpenCash, openCash, closeCash, getCashByEvent, getUsers, getUserById, getUserByAccessCode, loadBalance, deductBalance, getBalance, reverseLoad } from '@/lib/api';
+
+// jsQR são 311 KB e só são precisos quando alguém abre a câmara. Sem isto, a
+// rota /caixa carregava-os no First Load JS para 99% dos usos que não escaneiam.
+const QrScanner = dynamic(() => import('@/components/ui/qr-scanner').then((m) => m.QrScanner), {
+  ssr: false,
+});
 
 function formatDateTime(value: string | Date): string {
   const date = typeof value === 'string' ? new Date(value) : value;
