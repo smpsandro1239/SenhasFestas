@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { SignJWT } from 'jose';
-import { middleware } from './middleware';
+import { middleware, config } from './middleware';
 
 const SECRET = 'segredo-de-teste-com-tamanho-suficiente-1234567890';
 const ORIGEM = 'https://app.example';
@@ -146,5 +146,53 @@ describe('middleware — com JWT_SECRET configurado (comportamento actual)', () 
   it('não regista erro de configuração quando o segredo existe', async () => {
     const resposta = await middleware(pedido('/caixa', await assinar('cashier')));
     expect(console.error).not.toHaveBeenCalled();
+  });
+});
+
+// Os testes acima chamam `middleware()` directamente, logo não exercitam o
+// `matcher` — que é o que decide se a função chega a ser invocada. Uma
+// exclusa incorrecta no matcher tornaria /qr-order ou /offline públicos sem
+// que nenhum teste acima falhasse.
+//
+// Reproduz a semântica do Next: o matcher é `/((?!X|Y).*)` e o lookahead é
+// avaliado sobre o pathname SEM a barra inicial. Replica o original para que
+// `sincronizado` falhe se alguém mexer no middleware sem actualizar o teste.
+const LOOKAHEAD =
+  '_next/static|_next/image|favicon.ico|auth(?:/|$)|publico(?:/|$)|api(?:/|$)|' +
+  '.*\\.(?:png|jpg|jpeg|svg|webp|gif|ico|css|js|txt|xml|woff2?|map|json|webmanifest)$';
+
+const PADRAO_NEXT = new RegExp(`^/((?!${LOOKAHEAD}).*)$`);
+
+/** `true` se o pathname corresponde ao matcher, ou seja, o middleware corre. */
+const invocado = (pathname: string) => PADRAO_NEXT.test(pathname);
+
+describe('matcher — exclusão de rotas', () => {
+  it('a cópia local do lookahead está sincronizada com src/middleware.ts', () => {
+    // Se alguém mudar o matcher sem actualizar a cópia, este teste falha.
+    expect(config.matcher).toHaveLength(1);
+    expect(config.matcher[0]).toBe(`/((?!${LOOKAHEAD}).*)`);
+  });
+
+  it('não invoca o middleware nas rotas públicas', () => {
+    for (const rota of ['/auth/login', '/auth/register', '/publico', '/publico/abc', '/api/health']) {
+      expect(invocado(rota), `middleware ainda corre em ${rota}`).toBe(false);
+    }
+  });
+
+  it('invoca o middleware nas rotas protegidas — a segurança depende disto', () => {
+    for (const rota of [
+      '/', '/admin', '/caixa', '/cozinha', '/pos', '/pedidos',
+      '/relatorios', '/saldo', '/perfil', '/qr-order', '/offline',
+    ]) {
+      expect(invocado(rota), `middleware NÃO corre em ${rota} — rota ficou desprotegida`).toBe(true);
+    }
+  });
+
+  it('não confunde prefixos com palavras que começam igual', () => {
+    // "administrador", "autenticado", "publico-alfa" e "apidocs" não são as
+    // rotas públicas: a exclusa tem de respeitar o separador `/` ou o fim.
+    for (const rota of ['/administrador', '/autenticado', '/publico-alfa', '/apidocs', '/autenticacao']) {
+      expect(invocado(rota), `${rota} foi excluída como se fosse rota pública`).toBe(true);
+    }
   });
 });

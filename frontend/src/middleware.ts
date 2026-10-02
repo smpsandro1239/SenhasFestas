@@ -91,6 +91,10 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|webp|gif|ico|css|js|txt|xml|woff2?|map|json|webmanifest)$).*)',
+    // `/auth`, `/publico` e `/api` não precisam do middleware: são públicas por
+    // definição (ver PUBLIC_PATHS). Excluí-las aqui evita instanciar o `jose`
+    // e percorrer o middleware em cada pedido de quem só está a ver o ecrã
+    // público — a rota de maior tráfego, num evento cheio de clientes.
+    '/((?!_next/static|_next/image|favicon.ico|auth(?:/|$)|publico(?:/|$)|api(?:/|$)|.*\\.(?:png|jpg|jpeg|svg|webp|gif|ico|css|js|txt|xml|woff2?|map|json|webmanifest)$).*)',
   ],
 };
