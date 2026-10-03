@@ -1,6 +1,6 @@
 # Runbook — push dos commits de migração (Node 24, PG18, Redis 8)
 
-Quatro commits locais, ainda não pusheados:
+Commits locais desta migração, do mais recente ao mais antigo:
 
 | Commit | O que muda |
 |---|---|
@@ -8,9 +8,14 @@ Quatro commits locais, ainda não pusheados:
 | `f439dae` | `chore(db): subir Postgres 15→18 e Redis 7→8` — tags no CI e no compose, + montagem do volume |
 | `6e24dc9` | `docs: runbook do push + migração local de PG15→18` — só documentação |
 | `ca3d471` | `docs: corrigir contagem de testes frontend (9 → 21)` — só documentação |
+| `50710f5` | `docs: runbook actualizado para quatro commits locais` — só documentação |
 
-Só os dois primeiros mexem em código. Os dois últimos são este documento e a
-correcção da contagem de testes, e não afectam o deploy.
+Só os dois primeiros mexem em código. Os restantes são documentação e não
+afectam o deploy.
+
+> A lista acima está inevitably desactualizada a cada commit `docs:` novo —
+> incluindo este. É por isso que a pré-condição 1.1 não compara contagens:
+> compara SHAs de **código**. Ver 1.1.
 
 Objectivo deste documento: quando disseres **"rotação feita, push agora"**, a
 execução é mecânica e cada passo é verificável. Nada aqui é executado pelo
@@ -27,25 +32,42 @@ agente sem a tua ordem — nem o push, nem a rotação.
 
 Verificar **todas** antes de fazer seja o que for. Se alguma falhar, parar.
 
-### 1.1 Os commits são exactamente estes quatro
+### 1.1 Os commits de código são exactamente estes dois
 
 ```bash
 git log origin/main..HEAD --oneline
 ```
 
-Esperado, do mais recente ao mais antigo:
+A verificação **não** é a contagem de commits — essa regra quebra sempre que se
+acrescenta documentação, e um runbook que obriga a editar-se a si próprio para
+continuar a ser verdade não serve de nada. O que interessa é outra coisa:
+**que não exista nenhum commit de código além dos dois esperados.**
 
-```
-ca3d471 docs: corrigir contagem de testes frontend (9 -> 21)
-6e24dc9 docs: runbook do push + migracao local de PG15-18
-f439dae chore(db): subir Postgres 15-18 e Redis 7-8
-5a98d15 chore(runtime): exigir Node.js 24 LTS
+Commits de **código** (qualquer prefixo que não seja `docs:`) têm de ser
+exactamente:
+
+| SHA | O que muda |
+|---|---|
+| `5a98d15` | `chore(runtime): exigir Node.js 24 LTS` |
+| `f439dae` | `chore(db): subir Postgres 15→18 e Redis 7→8` |
+
+Commits `docs:` adicionais são aceitáveis e não mudam o deploy — podem estar
+lá tantos quantos a documentação precisar.
+
+Para aplicar a regra:
+
+```bash
+# Deve devolver apenas 5a98d15 e f439dae.
+# Se devolver outro SHA, a árvore não é a que este runbook descreve.
+git log origin/main..HEAD --oneline \
+  | grep -v ' docs: ' \
+  | grep -vE '^[0-9a-f]+ chore\(runtime\): exigir Node\.js 24 LTS$'
 ```
 
-Mais ou menos commits significa que a árvore não é a que este runbook descreve —
-reler antes de continuar. Os dois primeiros são só documentação, portanto se
-aparecer outro commit **deles**, o deploy não muda; qualquer outro commit de
-código invalida o que está escrito a seguir.
+Se o comando **não devolver nada**, a árvore está correcta: os únicos commits
+não-documentação são os dois esperados. Se devolver um SHA, parar e reler.
+
+Nota: `chore:` conta como commit de código. Só `docs:` é documental.
 
 ### 1.2 Rotação do `DATABASE_URL` (Neon)
 
