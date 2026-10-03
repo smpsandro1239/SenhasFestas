@@ -1,7 +1,16 @@
+import * as crypto from 'crypto';
 import { ConflictException } from '@nestjs/common';
 
+const MINIMO = 100000;
+const MAXIMO = 1000000;
+
+/**
+ * Código de 6 dígitos, só numéricos. `crypto.randomInt` em vez de
+ * `Math.random`: este não é criptograficamente seguro, e um PRNG previsível
+ * permite a quem observe os códigos gerados inferir os seguintes.
+ */
 export function gerarCodigoAcesso(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(crypto.randomInt(MINIMO, MAXIMO));
 }
 
 export async function codigoAcessoUnico(
