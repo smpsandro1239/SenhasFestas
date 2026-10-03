@@ -314,6 +314,10 @@ export class ReportsService {
       return q.getCount();
     };
 
+    // 'entregues' usa updatedAt (e nao o createdAt por omissao) para bater certo com
+    // o KDS. Sem coluna deliveredAt, updatedAt e o melhor proxy do instante da
+    // entrega. Ver o comentario completo em kitchen.service.ts e o teste
+    // modules/entregues-consistencia.spec.ts.
     const [recebidos, emPreparacao, prontos, entregues] = await Promise.all([
       contagem('received'),
       contagem('preparing'),

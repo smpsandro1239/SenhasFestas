@@ -135,11 +135,29 @@ export class KitchenService {
       return query.getCount();
     };
 
+    // "Entregues hoje" = updatedAt, nao createdAt.
+    //
+    // Nao existe coluna deliveredAt em OrderEntity, so que o instante da entrega
+    // tem de ser aproximado pelo ultimo write. updatedAt e a aproximacao correcta
+    // porque todos os caminhos que escrevem 'delivered' gravam o OrderEntity
+    // nessa transicao e so nessa: kitchen.atualizarEstado, public-screen (o
+    //guest marca como levantado) e order.updateStatus. Um reembolso NAO conta —
+    // reembolsarSaldoEmTransacao grava apenas BalanceEntity e BalanceMovementEntity.
+    //
+    // createdAt mede o nascimento do pedido e subconta sempre o backlog da
+    // madrugada: um pedido das 23h de ontem entregue as 00h30 de hoje pertence a
+    // "hoje" para quem trabalha a noite, mas createdAt esconde-o.
+    //
+    // Limitacao conhecida: order.updateStatus aceita 'delivered' num pedido ja
+    // entregue (o stale check so compara com o estado que o cliente enviou), e
+    // esse save redundante move o updatedAt. Para fechar a margem de forma
+    // exacta e preciso um deliveredAt escrito so na transicao ready->delivered.
+    // Ver o teste de consistencia em modules/entregues-consistencia.spec.ts.
     const [recebidos, emPreparacao, prontos, entregues] = await Promise.all([
       contagem('received'),
       contagem('preparing'),
       contagem('ready'),
-      contagem('delivered', { sql: 'pedido.createdAt >= :hoje', params: { hoje } }),
+      contagem('delivered', { sql: 'pedido.updatedAt >= :hoje', params: { hoje } }),
     ]);
 
     return {
