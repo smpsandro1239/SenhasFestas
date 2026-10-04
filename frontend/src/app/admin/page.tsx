@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert } from '@/components/ui/alert';
-import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon } from '@/components/ui/icons';
+import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon, PencilIcon, TrashIcon } from '@/components/ui/icons';
 import { Dialog } from '@/components/ui/dialog';
 import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances } from '@/lib/api';
 import { downloadTextFile } from '@/lib/download';
@@ -82,6 +82,17 @@ export default function AdminPage() {
   const [productDeleting, setProductDeleting] = useState<any>(null);
   const [productDeleteError, setProductDeleteError] = useState('');
   const [productDeletingBusy, setProductDeletingBusy] = useState(false);
+  const [productEditing, setProductEditing] = useState<any>(null);
+  const [productEditForm, setProductEditForm] = useState({
+    name: '',
+    description: '',
+    price: '',
+    stock: '',
+    availability: 'available',
+    categoryId: '',
+  });
+  const [productEditError, setProductEditError] = useState('');
+  const [productEditBusy, setProductEditBusy] = useState(false);
 
   const tabs = [
     { id: 'eventos', label: 'Eventos', icon: <CalendarIcon className="h-4 w-4" /> },
@@ -216,6 +227,59 @@ export default function AdminPage() {
       setError(err?.message ?? 'Erro ao criar produto');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const abrirEdicaoProduto = (product: any) => {
+    setProductEditError('');
+    setProductEditForm({
+      name: product.name ?? '',
+      description: product.description ?? '',
+      // Number -> string: o input e controlado e um number solto faz o React
+      // avisar sobre value={number}. null vira string vazia, que e o estado
+      // "sem stock" e nao 0.
+      price: product.price != null ? String(product.price) : '',
+      stock: product.stock != null ? String(product.stock) : '',
+      availability: product.availability ?? 'available',
+      categoryId: product.category?.id ?? '',
+    });
+    setProductEditing(product);
+  };
+
+  const handleUpdateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!productEditing || productEditBusy) return;
+    const price = parseFloat(productEditForm.price);
+    if (!productEditForm.name.trim() || isNaN(price) || price < 0) {
+      setProductEditError('Preencha o nome e um preço válido');
+      return;
+    }
+    const stock = productEditForm.stock ? parseFloat(productEditForm.stock) : null;
+    if (stock !== null && (isNaN(stock) || stock < 0)) {
+      setProductEditError('O stock tem de ser um número positivo');
+      return;
+    }
+    setProductEditBusy(true);
+    setProductEditError('');
+    try {
+      await updateProduct(productEditing.id, {
+        name: productEditForm.name.trim(),
+        // null e nao undefined: o JSON.stringify do cliente omite chaves com
+        // undefined, o que chegaria ao backend como "nao mexer". Para o
+        // utilizador conseguir limpar a descricao e o stock tem de ser null.
+        description: productEditForm.description || null,
+        price,
+        availability: productEditForm.availability,
+        stock,
+        categoryId: productEditForm.categoryId || null,
+      });
+      setProductEditing(null);
+      await loadProducts();
+    } catch (err: any) {
+      // o dialog fica aberto para o erro ficar visivel e poder tentar de novo
+      setProductEditError(err?.message ?? 'Erro ao atualizar produto');
+    } finally {
+      setProductEditBusy(false);
     }
   };
 
@@ -956,8 +1020,18 @@ export default function AdminPage() {
                               {product.availability === 'available' ? 'Desativar' : 'Ativar'}
                             </Button>
                             <Button
+                              variant="secondary"
+                              size="sm"
+                              icon={<PencilIcon className="h-4 w-4" />}
+                              onClick={() => abrirEdicaoProduto(product)}
+                              disabled={loading || productDeletingBusy || productEditBusy}
+                            >
+                              Editar
+                            </Button>
+                            <Button
                               variant="ghost"
                               size="sm"
+                              icon={<TrashIcon className="h-4 w-4" />}
                               onClick={() => {
                                 setProductDeleteError('');
                                 setProductDeleting(product);
@@ -1016,6 +1090,106 @@ export default function AdminPage() {
                 </div>
               )}
             </Card>
+
+            <Dialog
+              open={!!productEditing}
+              onClose={() => {
+                if (!productEditBusy) {
+                  setProductEditing(null);
+                  setProductEditError('');
+                }
+              }}
+              title="Editar produto"
+              className="max-w-xl"
+            >
+              <form onSubmit={handleUpdateProduct} className="space-y-4">
+                {productEditError && <Alert variant="error" message={productEditError} />}
+                <Input
+                  label="Nome do produto"
+                  value={productEditForm.name}
+                  onChange={(e) => setProductEditForm({ ...productEditForm, name: e.target.value })}
+                  required
+                />
+                <Textarea
+                  label="Descrição (opcional)"
+                  value={productEditForm.description}
+                  onChange={(e) =>
+                    setProductEditForm({ ...productEditForm, description: e.target.value })
+                  }
+                  rows={3}
+                />
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Preço (€)"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={productEditForm.price}
+                    onChange={(e) => setProductEditForm({ ...productEditForm, price: e.target.value })}
+                    required
+                  />
+                  <Input
+                    label="Stock (opcional)"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={productEditForm.stock}
+                    onChange={(e) => setProductEditForm({ ...productEditForm, stock: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="product-edit-category" className="block text-sm font-medium text-zinc-400">
+                    Categoria
+                  </label>
+                  <select
+                    id="product-edit-category"
+                    value={productEditForm.categoryId}
+                    onChange={(e) =>
+                      setProductEditForm({ ...productEditForm, categoryId: e.target.value })
+                    }
+                    className="w-full bg-surface-solid border border-border rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                  >
+                    <option value="">Sem categoria</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="product-edit-availability" className="block text-sm font-medium text-zinc-400">
+                    Disponibilidade
+                  </label>
+                  <select
+                    id="product-edit-availability"
+                    value={productEditForm.availability}
+                    onChange={(e) =>
+                      setProductEditForm({ ...productEditForm, availability: e.target.value })
+                    }
+                    className="w-full bg-surface-solid border border-border rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                  >
+                    <option value="available">Disponível</option>
+                    <option value="limited">Limitado</option>
+                    <option value="unavailable">Indisponível</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => {
+                      setProductEditing(null);
+                      setProductEditError('');
+                    }}
+                    disabled={productEditBusy}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="submit" loading={productEditBusy}>
+                    Guardar
+                  </Button>
+                </div>
+              </form>
+            </Dialog>
 
             <Dialog
               open={!!productDeleting}
