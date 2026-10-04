@@ -101,6 +101,12 @@ export class CatalogController {
     return this.catalogService.update(id, req.user, dto);
   }
 
+  @Post(':id/duplicate')
+  @Roles(...MANAGEMENT_ROLES)
+  async duplicate(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    return this.catalogService.duplicate(id, req.user);
+  }
+
   @Delete(':id')
   @Roles(...MANAGEMENT_ROLES)
   async remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {

@@ -205,6 +205,61 @@ export class CatalogService {
     return this.productRepository.save(product);
   }
 
+  // "Bifana (cópia)" e "Bifana (cópia 2)" reduzem ambos a "Bifana", para que
+  // duplicar uma cópia não produza "Bifana (cópia) (cópia)".
+  private static readonly SUFIXO_COPIA = /^(.*?)\s*\(cópia(?:\s+\d+)?\)\s*$/;
+
+  async duplicate(id: string, user: UserEntity): Promise<ProductEntity> {
+    const source = await this.findOne(id, user);
+    if (source.event?.id) {
+      await this.membershipService.assertMember(user, source.event.id);
+    }
+
+    const base = (CatalogService.SUFIXO_COPIA.exec(source.name)?.[1] ?? source.name).trim()
+      || source.name;
+
+    const existentes = await this.productRepository.find({
+      where: {
+        ...(source.event?.id ? { event: { id: source.event.id } } : {}),
+        // Like não escapa nada: um nome com % ou _ no meio passaria a
+        // ser wildcard e a contagem de cópias saía errada.
+        name: ILike(`${escaparLike(base)} (cópia%`),
+      },
+    });
+
+    const padrao = new RegExp(`^${escaparRegExp(base)} \\(cópia(?: (\\d+))?\\)$`, 'i');
+    let maior = 0;
+    for (const p of existentes) {
+      const m = padrao.exec(p.name ?? '');
+      if (!m) continue;
+      const n = m[1] ? Number.parseInt(m[1], 10) : 1;
+      if (Number.isFinite(n)) maior = Math.max(maior, n);
+    }
+    // maximo + 1 e nao o primeiro livre: se o admin apagou a cópia 2, a nova
+    // cópia 3 nao reutiliza o número, e o histórico continua legível.
+    const sufixo = maior === 0 ? ' (cópia)' : ` (cópia ${maior + 1})`;
+
+    const copy = this.productRepository.create({
+      name: `${base}${sufixo}`,
+      description: source.description,
+      imageUrl: source.imageUrl,
+      price: source.price,
+      availability: source.availability,
+      // stock a 0 e isActive a false: uma cópia nascia comprável e com o
+      // stock do original. Escondida, o admin decide quando a activate.
+      stock: 0,
+      isActive: false,
+      category: source.category ? ({ id: source.category.id } as any) : undefined,
+      ...(source.event?.id ? { event: { id: source.event.id } as any } : {}),
+      // cópias próprias: se o admin editar os options da cópia, a fonte não
+      // pode mudar por baixo.
+      options: source.options ? { ...source.options } : undefined,
+      modifiers: source.modifiers ? { ...source.modifiers } : undefined,
+      kitchenName: source.kitchenName,
+    });
+    return this.productRepository.save(copy);
+  }
+
   async findCategories(): Promise<CategoryEntity[]> {
     return this.categoryRepository.find({
       where: { isActive: true },
@@ -220,4 +275,14 @@ export class CatalogService {
     await this.productRepository.softDelete(product.id);
     return { deleted: true, softDelete: true };
   }
+}
+// ILIKE trata % e _ como wildcards, e \ como escape. Um nome de produto pode
+// conter qualquer um dos três, e sem escapar o filtro de cópias contaria
+// produtos a mais e saltaria a numeração.
+function escaparLike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => '\\' + c);
+}
+
+function escaparRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

@@ -7,6 +7,7 @@ import { CatalogService } from './catalog.service';
 import { CatalogController } from './catalog.controller';
 import { UpdateProductDto } from './dto';
 import { MANAGEMENT_ROLES } from '../../common/roles';
+import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 
 const mockProductRepository = {
   find: vi.fn(),
@@ -207,6 +208,216 @@ describe('CatalogService', () => {
 
       await expect(service.findOne('p1', {} as any)).rejects.toThrow(
         NotFoundException,
+      );
+    });
+  });
+
+  describe('duplicate — rota só para quem gere o catálogo', () => {
+    const controller = new CatalogController(
+      { duplicate: vi.fn(), softRemove: vi.fn() } as any,
+      { assertMember: vi.fn() } as any,
+    );
+    const CHAMADO = { id: 'p1' };
+
+    beforeEach(() => {
+      controller['catalogService'].duplicate.mockResolvedValue(CHAMADO);
+    });
+
+    it.each(MANAGEMENT_ROLES)('%s chega ao serviço', async (role) => {
+      await expect(
+        controller.duplicate('p1', { user: { id: 'u1', role } } as any),
+      ).resolves.toBe(CHAMADO);
+      expect(controller['catalogService'].duplicate).toHaveBeenCalledWith('p1', {
+        id: 'u1',
+        role,
+      });
+    });
+
+    it('o @Roles da rota e MANAGEMENT_ROLES', () => {
+      // Os testes acima exercitam o metodo. O que impede mesmo um cashier de
+      // duplicar e o decorator, que o RolesGuard le — testar so o metodo
+      // deixaria a protecao por testar.
+      const handler = controller.duplicate;
+      expect(Reflect.getMetadata(ROLES_KEY, handler) ?? []).toEqual(MANAGEMENT_ROLES);
+    });
+  });
+
+  describe('duplicate', () => {
+    const FONTE = {
+      id: 'p1',
+      name: 'Bifana',
+      description: 'queijo e fiambre',
+      imageUrl: 'https://cdn/bifana.jpg',
+      price: 3.5,
+      availability: 'unavailable',
+      stock: 17,
+      isActive: true,
+      category: { id: 'c1', name: 'Sandes' },
+      options: { tamanho: ['P', 'G'] },
+      modifiers: { extras: ['bacon'] },
+      kitchenName: 'Bifana PF',
+      event: { id: 'e1' },
+    };
+
+    beforeEach(() => {
+      mockProductRepository.findOne.mockResolvedValue({ ...FONTE });
+      // find() responde tanto aos nomes ja existentes (para o sufixo) como a
+      // qualquer outra consulta do service.
+      mockProductRepository.find.mockResolvedValue([]);
+      mockProductRepository.create.mockImplementation((dto: any) => ({ id: 'novo', ...dto }));
+      mockProductRepository.save.mockImplementation(async (p: any) => p);
+    });
+
+    it('copia os campos escalares e zera o stock', async () => {
+      await service.duplicate('p1', MEMBRO);
+
+      expect(mockProductRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Bifana (cópia)',
+          description: 'queijo e fiambre',
+          imageUrl: 'https://cdn/bifana.jpg',
+          price: 3.5,
+          // availability copia-se: um duplicado de um produto indisponível é
+          // um duplicado indisponível, e o admin ajusta depois.
+          availability: 'unavailable',
+          stock: 0,
+          // esconder de imediato evita vender um duplicado com stock 0 antes
+          // de o admin o rever.
+          isActive: false,
+        }),
+      );
+    });
+
+    it('copia categoria, evento, options, modifiers e kitchenName', async () => {
+      // A decisão inicial listava 5 campos. Deixar options/modifiers de fora
+      // perderia dados em silencio: a cópia de uma sandes com extras deixaria
+      // de ter extras, e ninguém notava até um pedido sair errado.
+      await service.duplicate('p1', MEMBRO);
+
+      const criado = mockProductRepository.create.mock.calls[0][0];
+      expect(criado.category).toEqual({ id: 'c1' });
+      expect(criado.event).toEqual({ id: 'e1' });
+      expect(criado.options).toEqual({ tamanho: ['P', 'G'] });
+      expect(criado.modifiers).toEqual({ extras: ['bacon'] });
+      expect(criado.kitchenName).toBe('Bifana PF');
+    });
+
+    it('não partilha a referência dos objetos jsonb com a fonte', async () => {
+      await service.duplicate('p1', MEMBRO);
+
+      const criado = mockProductRepository.create.mock.calls[0][0];
+      expect(criado.options).not.toBe(FONTE.options);
+      expect(criado.modifiers).not.toBe(FONTE.modifiers);
+    });
+
+    it('incrementa o sufixo a partir do que já existe', async () => {
+      mockProductRepository.find.mockResolvedValue([
+        { name: 'Bifana (cópia)' },
+        { name: 'Bifana (cópia 2)' },
+      ]);
+
+      await service.duplicate('p1', MEMBRO);
+
+      expect(mockProductRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Bifana (cópia 3)' }),
+      );
+    });
+
+    it('numera a partir de 1 quando ainda não há cópias', async () => {
+      mockProductRepository.find.mockResolvedValue([{ name: 'Bifana (outra)' }]);
+
+      await service.duplicate('p1', MEMBRO);
+
+      expect(mockProductRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Bifana (cópia)' }),
+      );
+    });
+
+    it('duplicar uma cópia não empilha o sufixo', async () => {
+      // "Bifana (cópia)" duplicada tem de dar "Bifana (cópia 2)", não
+      // "Bifana (cópia) (cópia)".
+      mockProductRepository.findOne.mockResolvedValue({ ...FONTE, name: 'Bifana (cópia)' });
+      mockProductRepository.find.mockResolvedValue([{ name: 'Bifana (cópia)' }]);
+
+      await service.duplicate('p1', MEMBRO);
+
+      expect(mockProductRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Bifana (cópia 2)' }),
+      );
+    });
+
+    it('duplicar a cópia 2 não volta ao 2', async () => {
+      mockProductRepository.findOne.mockResolvedValue({ ...FONTE, name: 'Bifana (cópia 2)' });
+      mockProductRepository.find.mockResolvedValue([
+        { name: 'Bifana (cópia)' },
+        { name: 'Bifana (cópia 2)' },
+      ]);
+
+      await service.duplicate('p1', MEMBRO);
+
+      expect(mockProductRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Bifana (cópia 3)' }),
+      );
+    });
+
+    it('procura as cópias dentro do mesmo evento', async () => {
+      await service.duplicate('p1', MEMBRO);
+
+      const [where] = mockProductRepository.find.mock.calls[0];
+      expect(where).toEqual(
+        expect.objectContaining({
+          where: expect.objectContaining({ event: { id: 'e1' } }),
+        }),
+      );
+    });
+
+    it('escapa % e _ do nome no padrão de busca', async () => {
+      // Sem escape, um produto chamado "Bife 50%_off" geraria o padrão
+      // "Bife 50%_off (cópia%", em que o % é wildcard: o ILIKE devolveria
+      // também as cópias de outros produtos e a numeração saltava.
+      mockProductRepository.findOne.mockResolvedValue({ ...FONTE, name: 'Bife 50%_off' });
+
+      await service.duplicate('p1', MEMBRO);
+
+      const op = mockProductRepository.find.mock.calls[0][0].where.name;
+      expect(op._value).toBe('Bife 50\\%\\_off (cópia%');
+    });
+
+    it('o nome da cópia com % escapado sai limpo', async () => {
+      mockProductRepository.findOne.mockResolvedValue({ ...FONTE, name: 'Bife 50%_off' });
+      mockProductRepository.find.mockResolvedValue([{ name: 'Bife 50%_off (cópia)' }]);
+
+      await service.duplicate('p1', MEMBRO);
+
+      expect(mockProductRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Bife 50%_off (cópia 2)' }),
+      );
+    });
+
+    it('não duplica um produto de outro evento', async () => {
+      mockMembershipService.assertMember.mockRejectedValue(new ForbiddenException());
+
+      await expect(service.duplicate('p1', MEMBRO)).rejects.toThrow(ForbiddenException);
+      expect(mockProductRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('não duplica um produto inexistente ou apagado', async () => {
+      mockProductRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.duplicate('p1', MEMBRO)).rejects.toThrow(NotFoundException);
+      expect(mockProductRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('duplica um produto inativo — inativo não é apagado', async () => {
+      mockProductRepository.findOne.mockResolvedValue({ ...FONTE, isActive: false });
+
+      await expect(service.duplicate('p1', MEMBRO)).resolves.toBeDefined();
+      expect(mockProductRepository.save).toHaveBeenCalled();
+    });
+
+    it('devolve o produto gravado', async () => {
+      await expect(service.duplicate('p1', MEMBRO)).resolves.toEqual(
+        expect.objectContaining({ id: 'novo', name: 'Bifana (cópia)' }),
       );
     });
   });
