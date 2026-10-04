@@ -8,3 +8,4 @@ export { StatCard, type StatCardProps } from './stat-card';
 export { Alert, type AlertProps, type AlertVariant } from './alert';
 export { Spinner } from './spinner';
 export { EmptyState } from './empty-state';
+export { Dialog } from './dialog';
