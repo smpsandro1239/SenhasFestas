@@ -243,3 +243,32 @@ export function LockIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function TrashIcon({ className }: IconProps) {
+  return (
+    <svg {...svgProps(className)}>
+      <path d="M4 7h16" />
+      <path d="M10 4.5A1.5 1.5 0 0111.5 3h1A1.5 1.5 0 0114 4.5V7" />
+      <path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
+export function PencilIcon({ className }: IconProps) {
+  return (
+    <svg {...svgProps(className)}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+    </svg>
+  );
+}
+
+export function CopyIcon({ className }: IconProps) {
+  return (
+    <svg {...svgProps(className)}>
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+    </svg>
+  );
+}
