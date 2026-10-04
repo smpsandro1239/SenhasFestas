@@ -10,9 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert } from '@/components/ui/alert';
-import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon, PencilIcon, TrashIcon } from '@/components/ui/icons';
+import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon, PencilIcon, TrashIcon, CopyIcon } from '@/components/ui/icons';
 import { Dialog } from '@/components/ui/dialog';
-import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances } from '@/lib/api';
+import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances } from '@/lib/api';
 import { downloadTextFile } from '@/lib/download';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
@@ -82,6 +82,8 @@ export default function AdminPage() {
   const [productDeleting, setProductDeleting] = useState<any>(null);
   const [productDeleteError, setProductDeleteError] = useState('');
   const [productDeletingBusy, setProductDeletingBusy] = useState(false);
+  // id do produto a ser duplicado, para so o botao dele ficar ocupado
+  const [productDuplicatingId, setProductDuplicatingId] = useState<string | null>(null);
   const [productEditing, setProductEditing] = useState<any>(null);
   const [productEditForm, setProductEditForm] = useState({
     name: '',
@@ -244,6 +246,24 @@ export default function AdminPage() {
       setError(err?.message ?? 'Erro ao atualizar produto');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const duplicarProduto = async (product: any) => {
+    if (productDuplicatingId) return;
+    setProductDuplicatingId(product.id);
+    setError('');
+    try {
+      await duplicateProduct(product.id);
+      // o nome da cópia é calculado no servidor ("(cópia)", "(cópia 2)", ...),
+      // por isso recarregar em vez de acrescentar localmente: um nome
+      // inventado aqui colidiria com a regra de numeração. loadProducts já
+      // traz produtos e categorias.
+      await loadProducts();
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao duplicar produto');
+    } finally {
+      setProductDuplicatingId(null);
     }
   };
 
@@ -1066,6 +1086,16 @@ export default function AdminPage() {
                               disabled={loading || productDeletingBusy || productEditBusy}
                             >
                               Editar
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              icon={<CopyIcon className="h-4 w-4" />}
+                              onClick={() => duplicarProduto(product)}
+                              disabled={loading || !!productDuplicatingId}
+                              aria-label={`Duplicar ${product.name}`}
+                            >
+                              {productDuplicatingId === product.id ? 'Duplicando...' : 'Duplicar'}
                             </Button>
                             <Button
                               variant="ghost"

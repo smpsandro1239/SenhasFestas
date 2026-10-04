@@ -470,6 +470,11 @@ export async function deleteProduct(id: string): Promise<any> {
   return apiRequest(`/products/${id}`, { method: 'DELETE' });
 }
 
+export async function duplicateProduct(id: string): Promise<any> {
+  // a cópia nasce inativa e com stock 0; o backend decide o nome
+  return apiRequest(`/products/${id}/duplicate`, { method: 'POST' });
+}
+
 export async function getEventSettings(eventId: string): Promise<any> {
   return apiRequest(`/events/${eventId}/settings`);
 }
