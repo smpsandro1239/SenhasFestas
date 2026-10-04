@@ -56,6 +56,7 @@ export default function AdminPage() {
     availability: 'available',
     stock: '',
     categoryId: '',
+    kitchenName: '',
   });
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);
@@ -92,6 +93,7 @@ export default function AdminPage() {
     stock: '',
     availability: 'available',
     categoryId: '',
+    kitchenName: '',
   });
   const [productEditError, setProductEditError] = useState('');
   const [productEditBusy, setProductEditBusy] = useState(false);
@@ -223,8 +225,9 @@ export default function AdminPage() {
         availability: productForm.availability,
         stock: productForm.stock ? parseFloat(productForm.stock) : undefined,
         categoryId: productForm.categoryId || undefined,
+        kitchenName: productForm.kitchenName || undefined,
       });
-      setProductForm({ name: '', description: '', price: '', availability: 'available', stock: '', categoryId: '' });
+      setProductForm({ name: '', description: '', price: '', availability: 'available', stock: '', categoryId: '', kitchenName: '' });
       await loadProducts();
     } catch (err: any) {
       setError(err?.message ?? 'Erro ao criar produto');
@@ -279,6 +282,7 @@ export default function AdminPage() {
       stock: product.stock != null ? String(product.stock) : '',
       availability: product.availability ?? 'available',
       categoryId: product.category?.id ?? '',
+      kitchenName: product.kitchenName ?? '',
     });
     setProductEditing(product);
   };
@@ -309,6 +313,9 @@ export default function AdminPage() {
         availability: productEditForm.availability,
         stock,
         categoryId: productEditForm.categoryId || null,
+        // null e nao undefined, pelo mesmo motivo da descricao: e assim que
+        // o produto volta a ter o nome de menu na cozinha.
+        kitchenName: productEditForm.kitchenName || null,
       });
       setProductEditing(null);
       await loadProducts();
@@ -1187,6 +1194,15 @@ export default function AdminPage() {
                   }
                   rows={3}
                 />
+                <Input
+                  label="Nome na cozinha (opcional)"
+                  value={productEditForm.kitchenName}
+                  onChange={(e) =>
+                    setProductEditForm({ ...productEditForm, kitchenName: e.target.value })
+                  }
+                  placeholder="igual ao nome do produto"
+                  hint="É o que o ecrã da cozinha mostra. Vazio usa o nome do produto."
+                />
                 <div className="grid grid-cols-2 gap-4">
                   <Input
                     label="Preço (€)"
@@ -1321,6 +1337,13 @@ export default function AdminPage() {
                   onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
                   rows={3}
                   placeholder="Pão, carne e molho da casa..."
+                />
+                <Input
+                  label="Nome na cozinha (opcional)"
+                  value={productForm.kitchenName}
+                  onChange={(e) => setProductForm({ ...productForm, kitchenName: e.target.value })}
+                  placeholder="igual ao nome do produto"
+                  hint="É o que o ecrã da cozinha mostra. Vazio usa o nome do produto."
                 />
                 <div className="grid grid-cols-2 gap-4">
                   <Input

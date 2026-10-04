@@ -11,6 +11,7 @@ import { Alert } from '@/components/ui/alert';
 import { Spinner } from '@/components/ui/spinner';
 import { ArrowLeftIcon, ChefHatIcon, RefreshIcon, PlayIcon, CheckIcon } from '@/components/ui/icons';
 import { cn } from '@/lib/cn';
+import { kitchenDisplayName } from '@/lib/kitchen-name';
 
 interface Order {
   id: string;
@@ -268,7 +269,7 @@ function CozinhaPageInner() {
                           <span className="flex items-center gap-3">
                             <span className="font-bold text-lg text-brand-light">{item.quantity}x</span>
                             <span className="text-zinc-200 text-base">
-                              {item.name || item.product?.name}
+                              {kitchenDisplayName(item)}
                             </span>
                           </span>
                           {item.notes && (
