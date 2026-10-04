@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
-import { validate } from 'class-validator';
+import { validate, getMetadataStorage } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { In } from 'typeorm';
+import { In, ILike } from 'typeorm';
 import { CatalogService } from './catalog.service';
+import { CatalogController } from './catalog.controller';
 import { UpdateProductDto } from './dto';
+import { MANAGEMENT_ROLES } from '../../common/roles';
 
 const mockProductRepository = {
   find: vi.fn(),
@@ -77,6 +79,118 @@ describe('CatalogService', () => {
         take: 20,
         order: { createdAt: 'DESC' },
       });
+    });
+
+    it('includeInactive traz os inativos junto com os ativos', async () => {
+      // Nao e "so os inativos": includeInactive significa incluir, nao filtrar.
+      // Onde nao ha isActive no where, o TypeORM devolve ambos.
+      mockProductRepository.findAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll(undefined, 1, 20, { includeInactive: true });
+
+      expect(mockProductRepository.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({ where: {} }),
+      );
+    });
+
+    it('includeInactive=false continua a filtrar os inativos', async () => {
+      mockProductRepository.findAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll(undefined, 1, 20, { includeInactive: false });
+
+      expect(mockProductRepository.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { isActive: true } }),
+      );
+    });
+
+    it('includeInactive preserva os outros filtros', async () => {
+      mockProductRepository.findAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll('e1', 1, 20, {
+        includeInactive: true,
+        q: 'bifana',
+        availability: 'unavailable',
+      });
+
+      expect(mockProductRepository.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            event: { id: 'e1' },
+            name: ILike('%bifana%'),
+            availability: 'unavailable',
+          },
+        }),
+      );
+    });
+  });
+
+  // O includeInactive e pedido por query string, e o endpoint e partilhado
+  // por admin, POS e QR. Quem pode desativar um produto (MANAGEMENT_ROLES) e
+  // quem pode ver os inativos; um cashier que mande includeInactive=true nao
+  // pode ficar a ver produtos que nao consegue gerir.
+  describe('includeInactive só é honrado para quem gere o catálogo', () => {
+    const controller = new CatalogController(
+      { findAll: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 }) } as any,
+      { assertMember: vi.fn() } as any,
+    );
+
+    const listaChamada = (role: string, includeInactive?: string) => {
+      controller['catalogService'].findAll = vi
+        .fn()
+        .mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 });
+      return controller
+        .findAll(
+          { page: 1, limit: 20, includeInactive } as any,
+          { user: { id: 'u1', role } } as any,
+        )
+        .then(() => controller['catalogService'].findAll);
+    };
+
+    it.each(MANAGEMENT_ROLES)('%s recebe os inativos quando pede', async (role) => {
+      const spy = await listaChamada(role, 'true');
+      expect(spy).toHaveBeenCalledWith(undefined, 1, 20, expect.objectContaining({ includeInactive: true }));
+    });
+
+    it.each(['cashier', 'treasurer', 'bar', 'kitchen'])(
+      '%s nao recebe os inactivos mesmo que peça',
+      async (role) => {
+        const spy = await listaChamada(role, 'true');
+        expect(spy).toHaveBeenCalledWith(
+          undefined,
+          1,
+          20,
+          expect.objectContaining({ includeInactive: false }),
+        );
+      },
+    );
+
+    it('client nem chega a ver a lista: sai antes, sem eventId', async () => {
+      // o early return de role=client sem eventId. Nao ha lista para filtrar,
+      // logo includeInactive nem chega a ser avaliado.
+      const spy = await listaChamada('client', 'true');
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it("includeInactive='false' conta como nao pedir", async () => {
+      // query strings sao sempre string. Se a controller testasse a
+      // truthiness, 'false' seria truthy e mostraria os inativos.
+      const spy = await listaChamada('superadmin', 'false');
+      expect(spy).toHaveBeenCalledWith(
+        undefined,
+        1,
+        20,
+        expect.objectContaining({ includeInactive: false }),
+      );
+    });
+
+    it('sem o parametro, o default mantem so os ativos', async () => {
+      const spy = await listaChamada('superadmin');
+      expect(spy).toHaveBeenCalledWith(
+        undefined,
+        1,
+        20,
+        expect.objectContaining({ includeInactive: false }),
+      );
     });
   });
 
@@ -416,11 +530,44 @@ describe('CatalogService', () => {
       expect(await validar({ categoryId: 'nao-e-uuid' })).not.toHaveLength(0);
     });
 
-    it('nao aceita chaves fora do DTO', async () => {
-      // forbidNonWhitelisted rejeita estas; o DTO nao as declara, logo
-      // validate() nao as ve. Este teste documenta a lista fechada.
-      const chaves = Object.keys(new UpdateProductDto());
-      expect(chaves).not.toContain('isActive');
+    it('aceita isActive booleano, nos dois sentidos', async () => {
+      expect(await validar({ isActive: false })).toHaveLength(0);
+      expect(await validar({ isActive: true })).toHaveLength(0);
+    });
+
+    it('rejeita isActive que nao seja booleano', async () => {
+      // 'false' como string e o perigo classico: truthy em JS. O DTO tem de
+      // recusar, senao um cliente que mande string desativa o produto.
+      expect(await validar({ isActive: 'false' })).not.toHaveLength(0);
+      expect(await validar({ isActive: 'true' })).not.toHaveLength(0);
+      expect(await validar({ isActive: 1 })).not.toHaveLength(0);
+      expect(await validar({ isActive: 0 })).not.toHaveLength(0);
+    });
+
+    it('a whitelist do DTO tem isActive e mantem os campos anteriores', () => {
+      // A whitelist nao se lê de Object.keys(new UpdateProductDto()) — campos
+      // so com decoradores nao sao propriedades proprias em runtime, e isso
+      // devolve []. Qualquer teste por essa via passa vacuamente. A fonte
+      // verdadeira e a metadata de validacao, que e o que o
+      // forbidNonWhitelisted consulta.
+      const metas = getMetadataStorage().getTargetValidationMetadatas(
+        UpdateProductDto,
+        undefined,
+        true,
+        false,
+      );
+      const props = [...new Set(metas.map((m) => m.propertyName))].sort();
+
+      expect(props).toEqual([
+        'availability',
+        'categoryId',
+        'description',
+        'imageUrl',
+        'isActive',
+        'name',
+        'price',
+        'stock',
+      ]);
     });
   });
 });

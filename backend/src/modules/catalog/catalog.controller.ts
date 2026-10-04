@@ -36,6 +36,7 @@ export class CatalogController {
       q?: string;
       categoryId?: string;
       availability?: string;
+      includeInactive?: string;
     },
     @Request() req: any,
   ) {
@@ -45,10 +46,18 @@ export class CatalogController {
     if (query.eventId && req.user.role !== 'superadmin') {
       await this.membershipService.assertMember(req.user, query.eventId);
     }
+    // Query strings são sempre string: testar a truthiness de 'false' daria
+    // true e abriria os inativos a toda a gente.
+    const pediuInativos = query.includeInactive === 'true';
+    // Só quem tem POST/PATCH/DELETE em /products é que pode desativar um
+    // produto, logo só esses veem os inativos. Um cashier que peça
+    // includeInactive=true continua a ver só os ativos.
+    const includeInactive = pediuInativos && MANAGEMENT_ROLES.includes(req.user.role);
     return this.catalogService.findAll(query.eventId, query.page, query.limit, {
       q: query.q,
       categoryId: query.categoryId,
       availability: query.availability,
+      includeInactive,
     });
   }
 

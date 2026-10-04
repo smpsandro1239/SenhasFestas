@@ -26,9 +26,20 @@ export class CatalogService {
     eventId?: string,
     page = 1,
     limit = 20,
-    filters: { q?: string; categoryId?: string; availability?: string } = {},
+    filters: {
+      q?: string;
+      categoryId?: string;
+      availability?: string;
+      includeInactive?: boolean;
+    } = {},
   ): Promise<{ items: ProductEntity[]; total: number; page: number; limit: number }> {
-    const where: Record<string, unknown> = { isActive: true };
+    // Sem includeInactive ficam so os ativos — este é o default que POS e QR
+    // usam. Quem pede includeInactive recebe ativos e inativos, não só os
+    // inativos.
+    const where: Record<string, unknown> = {};
+    if (!filters.includeInactive) {
+      where.isActive = true;
+    }
     if (eventId) {
       where.event = { id: eventId };
     }
