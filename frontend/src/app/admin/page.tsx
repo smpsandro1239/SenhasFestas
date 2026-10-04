@@ -190,6 +190,7 @@ export default function AdminPage() {
           q: productSearch || undefined,
           categoryId: productCategory || undefined,
           availability: productAvailability || undefined,
+          includeInactive: true,
         }),
         getCategories(),
       ]);
@@ -225,6 +226,22 @@ export default function AdminPage() {
       await loadProducts();
     } catch (err: any) {
       setError(err?.message ?? 'Erro ao criar produto');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleProductActive = async (product: any) => {
+    const next = product.isActive === false;
+    setLoading(true);
+    setError('');
+    try {
+      await updateProduct(product.id, { isActive: next });
+      setProducts((prev) =>
+        prev.map((p) => (p.id === product.id ? { ...p, isActive: next } : p)),
+      );
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao atualizar produto');
     } finally {
       setLoading(false);
     }
@@ -968,7 +985,13 @@ export default function AdminPage() {
                 ) : (
                   <div className="space-y-3">
                     {products.map((product) => (
-                      <Card key={product.id} hover className="bg-surface border-border-hover">
+                      <Card
+                        key={product.id}
+                        hover
+                        // produto inactivo nao aparece no POS nem no QR. A card
+                        // esbatida diz-o sem depender de ler o badge.
+                        className={`bg-surface border-border-hover ${product.isActive === false ? 'opacity-60' : ''}`}
+                      >
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1">
                             <div className="font-semibold text-zinc-100">{product.name}</div>
@@ -995,8 +1018,11 @@ export default function AdminPage() {
                               {product.stock != null && (
                                 <Badge variant="neutral">Stock: {product.stock}</Badge>
                               )}
+                              {product.isActive === false && (
+                                <Badge variant="neutral">Inativo — escondido do POS e QR</Badge>
+                              )}
                             </div>
-                            <div className="mt-2">
+                            <div className="mt-2 flex items-center gap-2 flex-wrap">
                               <select
                                 value={product.category?.id ?? ''}
                                 onChange={(e) => changeProductCategory(product, e.target.value)}
@@ -1008,6 +1034,14 @@ export default function AdminPage() {
                                   <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                               </select>
+                              <Button
+                                variant={product.isActive === false ? 'success' : 'outline'}
+                                size="sm"
+                                onClick={() => toggleProductActive(product)}
+                                disabled={loading}
+                              >
+                                {product.isActive === false ? 'Ativar no catálogo' : 'Desativar no catálogo'}
+                              </Button>
                             </div>
                           </div>
                           <div className="flex flex-col items-stretch gap-2">
@@ -1017,7 +1051,12 @@ export default function AdminPage() {
                               onClick={() => toggleProductAvailability(product)}
                               disabled={loading}
                             >
-                              {product.availability === 'available' ? 'Desativar' : 'Ativar'}
+                              {/* availability, nao isActive. O botao da esquerda
+                                  diz "Desativar no catalogo" e mexe no isActive,
+                                  este mexe so na disponibilidade dentro do mesmo
+                                  evento — dois "Desativar" na mesma card era
+                                  curto-circuito garantido. */}
+                              {product.availability === 'available' ? 'Marcar indisponível' : 'Marcar disponível'}
                             </Button>
                             <Button
                               variant="secondary"

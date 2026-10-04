@@ -311,7 +311,7 @@ export async function exportOrdensCsv(params?: any): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-export async function getProducts(params?: { eventId?: string; page?: number; limit?: number; q?: string; categoryId?: string; availability?: string }): Promise<any> {
+export async function getProducts(params?: { eventId?: string; page?: number; limit?: number; q?: string; categoryId?: string; availability?: string; includeInactive?: boolean }): Promise<any> {
   const qs = new URLSearchParams();
   if (params?.eventId) qs.set('eventId', params.eventId);
   if (params?.page) qs.set('page', String(params.page));
@@ -319,6 +319,9 @@ export async function getProducts(params?: { eventId?: string; page?: number; li
   if (params?.q?.trim()) qs.set('q', params.q.trim());
   if (params?.categoryId) qs.set('categoryId', params.categoryId);
   if (params?.availability) qs.set('availability', params.availability);
+  // so o admin envia. O backend so o honra para MANAGEMENT_ROLES, portanto
+  // mandar daqui e inofensivo para qualquer outro papel.
+  if (params?.includeInactive) qs.set('includeInactive', 'true');
   const query = qs.toString();
   return apiRequest(`/products${query ? `?${query}` : ''}`);
 }
