@@ -180,6 +180,7 @@ export class CatalogService {
       imageUrl: dto.imageUrl,
       price: dto.price,
       availability: dto.availability,
+      kitchenName: dto.kitchenName,
       category: dto.categoryId ? ({ id: dto.categoryId } as any) : undefined,
       stock: dto.stock,
       isActive: true,

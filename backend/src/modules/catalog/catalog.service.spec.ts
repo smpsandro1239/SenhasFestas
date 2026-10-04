@@ -5,7 +5,7 @@ import { plainToInstance } from 'class-transformer';
 import { In, ILike } from 'typeorm';
 import { CatalogService } from './catalog.service';
 import { CatalogController } from './catalog.controller';
-import { UpdateProductDto } from './dto';
+import { CreateProductDto, UpdateProductDto } from './dto';
 import { MANAGEMENT_ROLES } from '../../common/roles';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 
@@ -48,6 +48,16 @@ describe('CatalogService', () => {
   let service: CatalogService;
 
   const MEMBRO = { id: 'membro', role: 'organizer' } as any;
+
+  // O formulario de editar limpa campos mandando null. Se o ValidationPipe
+  // (whitelist + forbidNonWhitelisted) rejeitasse null, limpar a descricao
+  // daria 400 em vez de limpar. Estes testes fixam essa garantia sem base de
+  // dados: validam o DTO directamente.
+  const validar = async (payload: Record<string, unknown>) =>
+    validate(plainToInstance(UpdateProductDto, payload) as object);
+
+  const validarCreate = async (payload: Record<string, unknown>) =>
+    validate(plainToInstance(CreateProductDto, payload) as object);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -436,6 +446,72 @@ describe('CatalogService', () => {
         isActive: true,
       });
     });
+
+    it('passa kitchenName para o produto criado', async () => {
+      // kitchenName é o nome que a cozinha vê, e pode ser diferente do nome de
+      // menu. Sem o pass-through, o campo nunca chegava à base de dados.
+      mockProductRepository.create.mockImplementation((data: any) => data);
+
+      await service.create({} as any, { name: 'Cachorro', price: 5, kitchenName: 'Cachorro PF' } as any);
+
+      expect(mockProductRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ kitchenName: 'Cachorro PF' }),
+      );
+    });
+  });
+
+  describe('kitchenName — o nome que a cozinha lê', () => {
+    it('aceita string em create e em update', async () => {
+      expect(await validarCreate({ name: 'Bifana', price: 3.5, kitchenName: 'Bifana PF' })).toHaveLength(0);
+      expect(await validar({ kitchenName: 'Bifana PF' })).toHaveLength(0);
+    });
+
+    it('null passa em create e em update, porque IsOptional salta null', async () => {
+      // Facto do class-validator, não escolha: @IsOptional() pula a validação
+      // quando o valor é null OU undefined. Por isso o update consegue
+      // limpar mandando null, e não apesar do tipo — o `string | null` no DTO
+      // documenta a intenção em tempo de compilação, e o que deixa o null
+      // passar em runtime é o IsOptional. Criar com null também passa, e é
+      // inofensivo: a coluna é nullable.
+      expect(await validar({ kitchenName: null })).toHaveLength(0);
+      expect(await validarCreate({ name: 'Bifana', price: 3.5, kitchenName: null })).toHaveLength(0);
+    });
+
+    it('rejeita tipos que não são string', async () => {
+      expect(await validar({ kitchenName: 123 })).not.toHaveLength(0);
+      expect(await validar({ kitchenName: {} })).not.toHaveLength(0);
+    });
+
+    it('update aplica o valor novo e limpa com null', async () => {
+      const existente = { id: 'p1', name: 'Bifana', kitchenName: 'Bifana PF' };
+      mockProductRepository.findOne.mockResolvedValue({ ...existente });
+      mockProductRepository.save.mockImplementation(async (d: any) => d);
+
+      await service.update('p1', {} as any, { kitchenName: 'Bifana Especial' } as any);
+      expect(mockProductRepository.save).toHaveBeenLastCalledWith(
+        expect.objectContaining({ kitchenName: 'Bifana Especial' }),
+      );
+
+      mockProductRepository.findOne.mockResolvedValue({ ...existente });
+      await service.update('p1', {} as any, { kitchenName: null } as any);
+      expect(mockProductRepository.save).toHaveBeenLastCalledWith(
+        expect.objectContaining({ kitchenName: null }),
+      );
+    });
+
+    it('update sem kitchenName não mexe no que lá estava', async () => {
+      // O DTO tem de continuar a ser parcial: mexer no preço não pode
+      // apagar o nome da cozinha.
+      const existente = { id: 'p1', name: 'Bifana', kitchenName: 'Bifana PF' };
+      mockProductRepository.findOne.mockResolvedValue({ ...existente });
+      mockProductRepository.save.mockImplementation(async (d: any) => d);
+
+      await service.update('p1', {} as any, { price: 4 } as any);
+
+      expect(mockProductRepository.save).toHaveBeenLastCalledWith(
+        expect.objectContaining({ kitchenName: 'Bifana PF' }),
+      );
+    });
   });
 
   describe('update', () => {
@@ -713,15 +789,9 @@ describe('CatalogService', () => {
     });
   });
 
-  // O formulario de editar limpa campos mandando null. Se o ValidationPipe
-  // (whitelist + forbidNonWhitelisted) rejeitasse null, limpar a descricao
-  // daria 400 em vez de limpar. Estes testes fixam essa garantia sem base de
-  // dados: validam o DTO directamente.
+  // O formulario de editar limpa campos mandando null. Ver os helpers
+  // validar/validarCreate no topo deste describe.
   describe('UpdateProductDto — null limpa, nao invalida', () => {
-    const validar = async (payload: Record<string, unknown>) => {
-      const dto = plainToInstance(UpdateProductDto, payload);
-      return validate(dto as object);
-    };
 
     it('aceita null em description, stock e categoryId', async () => {
       const errors = await validar({ name: 'Bifana', description: null, stock: null, categoryId: null });
@@ -755,7 +825,7 @@ describe('CatalogService', () => {
       expect(await validar({ isActive: 0 })).not.toHaveLength(0);
     });
 
-    it('a whitelist do DTO tem isActive e mantem os campos anteriores', () => {
+    it('a whitelist do DTO tem isActive e kitchenName, e mantem o resto', () => {
       // A whitelist nao se lê de Object.keys(new UpdateProductDto()) — campos
       // so com decoradores nao sao propriedades proprias em runtime, e isso
       // devolve []. Qualquer teste por essa via passa vacuamente. A fonte
@@ -775,6 +845,7 @@ describe('CatalogService', () => {
         'description',
         'imageUrl',
         'isActive',
+        'kitchenName',
         'name',
         'price',
         'stock',

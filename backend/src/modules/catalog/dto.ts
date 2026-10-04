@@ -30,6 +30,12 @@ export class CreateProductDto {
   @IsNumber()
   @IsOptional()
   stock?: number;
+
+  // Nome que a cozinha lê, quando difere do nome de menu. Precisa de @IsString
+  // para não entrar um number e o KDS mostrar "42".
+  @IsString()
+  @IsOptional()
+  kitchenName?: string;
 }
 
 export class UpdateProductDto {
@@ -64,4 +70,10 @@ export class UpdateProductDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  // null limpa: um produto que deixou de ter nome próprio na cozinha volta ao
+  // nome de menu.
+  @IsString()
+  @IsOptional()
+  kitchenName?: string | null;
 }
