@@ -46,6 +46,8 @@ function CaixaPage() {
   const [formData, setFormData] = useState({ valorInicial: '', observacoes: '' });
   const [fechoData, setFechoData] = useState({ totalReal: '', observacoes: '' });
   const [movements, setMovements] = useState<any[]>([]);
+  const [historicoError, setHistoricoError] = useState('');
+  const [historicoLoaded, setHistoricoLoaded] = useState(false);
   const [movementList, setMovementList] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -144,6 +146,7 @@ function CaixaPage() {
     if (!event) return;
     try {
       const list = await getCashByEvent(event.id);
+      setHistoricoError('');
       setMovements(
         list
           .filter((c) => c.status === 'closed')
@@ -163,9 +166,15 @@ function CaixaPage() {
           variant: c.status === 'closed' ? ('success' as const) : ('primary' as const),
         })),
       );
-    } catch {
+    } catch (err: any) {
+      // Antes isto fazia so setMovements([])/setHistory([]) e engolia o erro:
+      // um 403, um 500 ou a rede abaixo ficavam com o mesmo aspecto de um
+      // evento sem caixas, e as duas tabs desenhavam zero pixels sem dizer nada.
+      setHistoricoError(err?.message ?? 'Erro ao carregar o histórico de caixa');
       setMovements([]);
       setHistory([]);
+    } finally {
+      setHistoricoLoaded(true);
     }
   }, [event, user?.name]);
 
@@ -670,45 +679,68 @@ function CaixaPage() {
         )}
 
         {activeTab === 'movimentacoes' && (
-          <Card padding="none" className="overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-surface-hover border-b border-border">
-                    {['Hora', 'Tipo', 'Valor', 'Operador', 'Observação'].map((h) => (
-                      <th key={h} className="px-4 py-3 text-left font-medium text-zinc-400">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {movements.map((m, idx) => (
-                    <tr key={idx} className="border-b border-border last:border-0 hover:bg-surface-hover transition-colors">
-                      <td className="px-4 py-3 text-zinc-400">{m.hora}</td>
-                      <td className="px-4 py-3 font-medium">
-                        <span className={m.tipo === 'Entrada' ? 'text-emerald-400' : 'text-red-400'}>{m.tipo}</span>
-                      </td>
-                      <td className={`px-4 py-3 font-mono font-semibold ${m.tipo === 'Entrada' ? 'text-emerald-400' : 'text-red-400'}`}>{m.valor}</td>
-                      <td className="px-4 py-3 text-zinc-300">{m.operador}</td>
-                      <td className="px-4 py-3 text-zinc-400">{m.obs}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+          <div className="space-y-4">
+            {historicoError ? (
+              <Alert variant="error" message={historicoError} />
+            ) : !historicoLoaded ? (
+              <div className="text-sm text-zinc-400 py-4">A carregar movimentações...</div>
+            ) : movements.length === 0 ? (
+              <div className="text-sm text-zinc-400 py-4">
+                Sem caixas fechadas neste evento. As movimentações aparecem depois do
+                primeiro fecho de caixa.
+              </div>
+            ) : (
+              <Card padding="none" className="overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-surface-hover border-b border-border">
+                        {['Hora', 'Tipo', 'Valor', 'Operador', 'Observação'].map((h) => (
+                          <th key={h} className="px-4 py-3 text-left font-medium text-zinc-400">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {movements.map((m, idx) => (
+                        <tr key={idx} className="border-b border-border last:border-0 hover:bg-surface-hover transition-colors">
+                          <td className="px-4 py-3 text-zinc-400">{m.hora}</td>
+                          <td className="px-4 py-3 font-medium">
+                            <span className={m.tipo === 'Entrada' ? 'text-emerald-400' : 'text-red-400'}>{m.tipo}</span>
+                          </td>
+                          <td className={`px-4 py-3 font-mono font-semibold ${m.tipo === 'Entrada' ? 'text-emerald-400' : 'text-red-400'}`}>{m.valor}</td>
+                          <td className="px-4 py-3 text-zinc-300">{m.operador}</td>
+                          <td className="px-4 py-3 text-zinc-400">{m.obs}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
+          </div>
         )}
 
         {activeTab === 'historico' && (
           <div className="space-y-3 max-w-2xl">
-            {history.map((h) => (
-              <Card key={h.numero} className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold text-zinc-100">Fechamento {h.numero}</div>
-                  <div className="text-sm text-zinc-400 mt-0.5">{h.desc}</div>
-                </div>
-                <Badge variant={h.variant} dot>{h.status}</Badge>
-              </Card>
-            ))}
+            {historicoError ? (
+              <Alert variant="error" message={historicoError} />
+            ) : !historicoLoaded ? (
+              <div className="text-sm text-zinc-400 py-4">A carregar histórico...</div>
+            ) : history.length === 0 ? (
+              <div className="text-sm text-zinc-400 py-4">
+                Ainda não foi aberta nenhuma caixa neste evento.
+              </div>
+            ) : (
+              history.map((h) => (
+                <Card key={h.numero} className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold text-zinc-100">Fechamento {h.numero}</div>
+                    <div className="text-sm text-zinc-400 mt-0.5">{h.desc}</div>
+                  </div>
+                  <Badge variant={h.variant} dot>{h.status}</Badge>
+                </Card>
+              ))
+            )}
           </div>
         )}
       </AppShell>
