@@ -11,7 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert } from '@/components/ui/alert';
 import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon } from '@/components/ui/icons';
-import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances } from '@/lib/api';
+import { Dialog } from '@/components/ui/dialog';
+import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances } from '@/lib/api';
 import { downloadTextFile } from '@/lib/download';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
@@ -78,6 +79,9 @@ export default function AdminPage() {
   const [outstandingBalances, setOutstandingBalances] = useState<any[]>([]);
   const [outstandingLoading, setOutstandingLoading] = useState(false);
   const [outstandingTotal, setOutstandingTotal] = useState(0);
+  const [productDeleting, setProductDeleting] = useState<any>(null);
+  const [productDeleteError, setProductDeleteError] = useState('');
+  const [productDeletingBusy, setProductDeletingBusy] = useState(false);
 
   const tabs = [
     { id: 'eventos', label: 'Eventos', icon: <CalendarIcon className="h-4 w-4" /> },
@@ -212,6 +216,30 @@ export default function AdminPage() {
       setError(err?.message ?? 'Erro ao criar produto');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteProduct = async () => {
+    if (!productDeleting || productDeletingBusy) return;
+    setProductDeletingBusy(true);
+    setProductDeleteError('');
+    try {
+      await deleteProduct(productDeleting.id);
+      setProductDeleting(null);
+      if (products.length === 1 && productPage > 1) {
+        // era o ultimo item desta pagina: recua e deixa o efeito de
+        // [productPage] recarregar. Recarregar aqui e depois recuar faria
+        // duas requisicoes e mostraria a pagina vazia por um instante.
+        setProductPage(productPage - 1);
+      } else {
+        await loadProducts();
+      }
+    } catch (err: any) {
+      // o dialog fica aberto: o utilizador precisa de ver o erro e poder
+      // tentar de novo ou cancelar
+      setProductDeleteError(err?.message ?? 'Erro ao eliminar produto');
+    } finally {
+      setProductDeletingBusy(false);
     }
   };
 
@@ -918,14 +946,27 @@ export default function AdminPage() {
                               </select>
                             </div>
                           </div>
-                          <Button
-                            variant={product.availability === 'available' ? 'danger' : 'success'}
-                            size="sm"
-                            onClick={() => toggleProductAvailability(product)}
-                            disabled={loading}
-                          >
-                            {product.availability === 'available' ? 'Desativar' : 'Ativar'}
-                          </Button>
+                          <div className="flex flex-col items-stretch gap-2">
+                            <Button
+                              variant={product.availability === 'available' ? 'danger' : 'success'}
+                              size="sm"
+                              onClick={() => toggleProductAvailability(product)}
+                              disabled={loading}
+                            >
+                              {product.availability === 'available' ? 'Desativar' : 'Ativar'}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setProductDeleteError('');
+                                setProductDeleting(product);
+                              }}
+                              disabled={loading || productDeletingBusy}
+                            >
+                              Eliminar
+                            </Button>
+                          </div>
                         </div>
                       </Card>
                     ))}
@@ -975,6 +1016,51 @@ export default function AdminPage() {
                 </div>
               )}
             </Card>
+
+            <Dialog
+              open={!!productDeleting}
+              onClose={() => {
+                // enquanto o request esta a correr o dialog nao fecha: assim o
+                // erro fica visivel e nao ha duplo envio
+                if (!productDeletingBusy) {
+                  setProductDeleting(null);
+                  setProductDeleteError('');
+                }
+              }}
+              title="Eliminar produto?"
+              description={
+                productDeleting
+                  ? `${productDeleting.name} deixa de aparecer no catálogo, no POS e no QR. Os pedidos já feitos mantêm o registo.`
+                  : undefined
+              }
+              footer={
+                <>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => {
+                      setProductDeleting(null);
+                      setProductDeleteError('');
+                    }}
+                    disabled={productDeletingBusy}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    variant="danger"
+                    type="button"
+                    onClick={handleDeleteProduct}
+                    loading={productDeletingBusy}
+                  >
+                    Eliminar
+                  </Button>
+                </>
+              }
+            >
+              {productDeleteError && (
+                <Alert variant="error" message={productDeleteError} />
+              )}
+            </Dialog>
 
             <Card>
               <h2 className="text-xl font-bold text-zinc-50 mb-4">Criar Produto</h2>
