@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { validate } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
 import { In } from 'typeorm';
 import { CatalogService } from './catalog.service';
+import { UpdateProductDto } from './dto';
 
 const mockProductRepository = {
   find: vi.fn(),
@@ -141,6 +144,26 @@ describe('CatalogService', () => {
       const result = await service.update('p1', {} as any, { categoryId: null } as any);
 
       expect(result.category).toBeNull();
+    });
+
+    it('clears a scalar field when the dto sends null', async () => {
+      // E o que o formulario de editar depende: para o utilizador limpar a
+      // descricao ou o stock, o cliente tem de mandar null. O Object.assign
+      // copia o null tal e qual, e o JSON.stringify do cliente omite chaves
+      // com undefined — ou seja, omitir a chave e o que significa "nao mexer".
+      const existing = { id: 'p1', name: 'Bifana', description: 'Pao e carne', stock: 10 };
+      mockProductRepository.findOne.mockResolvedValue(existing);
+      mockProductRepository.save.mockImplementation(async (data: any) => data);
+
+      const result = await service.update(
+        'p1',
+        {} as any,
+        { description: null, stock: null } as any,
+      );
+
+      expect(result.description).toBeNull();
+      expect(result.stock).toBeNull();
+      expect(result.name).toBe('Bifana');
     });
 
     it('throws NotFoundException when product to update is missing', async () => {
@@ -362,6 +385,42 @@ describe('CatalogService', () => {
         service.findSuggestions(MEMBRO, undefined, 'produtoY', 4),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(mockMembershipService.assertMember).toHaveBeenCalledWith(MEMBRO, 'eventoY');
+    });
+  });
+
+  // O formulario de editar limpa campos mandando null. Se o ValidationPipe
+  // (whitelist + forbidNonWhitelisted) rejeitasse null, limpar a descricao
+  // daria 400 em vez de limpar. Estes testes fixam essa garantia sem base de
+  // dados: validam o DTO directamente.
+  describe('UpdateProductDto — null limpa, nao invalida', () => {
+    const validar = async (payload: Record<string, unknown>) => {
+      const dto = plainToInstance(UpdateProductDto, payload);
+      return validate(dto as object);
+    };
+
+    it('aceita null em description, stock e categoryId', async () => {
+      const errors = await validar({ name: 'Bifana', description: null, stock: null, categoryId: null });
+      expect(errors).toHaveLength(0);
+    });
+
+    it('aceita null sozinho, sem os outros campos', async () => {
+      expect(await validar({ description: null })).toHaveLength(0);
+      expect(await validar({ stock: null })).toHaveLength(0);
+    });
+
+    it('continua a rejeitar tipos invalidos', async () => {
+      // Se IsOptional passasse a aceitar tudo, estes limites desapareceriam
+      // tambem. E o que garante que null nao enfraqueceu o DTO.
+      expect(await validar({ name: 123 })).not.toHaveLength(0);
+      expect(await validar({ price: 'abc' })).not.toHaveLength(0);
+      expect(await validar({ categoryId: 'nao-e-uuid' })).not.toHaveLength(0);
+    });
+
+    it('nao aceita chaves fora do DTO', async () => {
+      // forbidNonWhitelisted rejeita estas; o DTO nao as declara, logo
+      // validate() nao as ve. Este teste documenta a lista fechada.
+      const chaves = Object.keys(new UpdateProductDto());
+      expect(chaves).not.toContain('isActive');
     });
   });
 });
