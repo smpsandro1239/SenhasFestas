@@ -1760,42 +1760,34 @@ export default function AdminPage() {
           </div>
         )}
 
-        {eventDeleting && (
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="event-delete-title"
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
-          >
-            <div className="w-full sm:max-w-md bg-surface-solid border border-border rounded-t-3xl sm:rounded-3xl p-6 animate-slide-up">
-              <div className="flex items-start justify-between mb-4">
-                <h2 id="event-delete-title" className="text-xl font-bold text-zinc-50">
-                  Eliminar Evento?
-                </h2>
-                <button
-                  onClick={() => setEventDeleting(null)}
-                  aria-label="Fechar diálogo"
-                  className="p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-surface"
-                >
-                  <CloseIcon className="h-4 w-4" />
-                </button>
-              </div>
-              <p className="text-zinc-400 text-sm mb-6">
+        <Dialog
+          open={!!eventDeleting}
+          onClose={() => {
+            // com o pedido a correr o dialog nao fecha, para o erro ficar
+            // visivel e nao haver duplo envio
+            if (!loading) setEventDeleting(null);
+          }}
+          title="Eliminar Evento?"
+          description={
+            eventDeleting ? (
+              <>
                 Esta ação elimina o evento{' '}
                 <span className="text-zinc-200 font-medium">{eventDeleting.name}</span>. Só é
                 possível se não tiver pedidos em curso nem caixa aberto.
-              </p>
-              <div className="flex items-center gap-3">
-                <Button variant="danger" type="button" onClick={handleDeleteEvent} loading={loading}>
-                  {loading ? 'A eliminar...' : 'Sim, eliminar'}
-                </Button>
-                <Button variant="outline" type="button" onClick={() => setEventDeleting(null)}>
-                  Cancelar
-                </Button>
-              </div>
+              </>
+            ) : undefined
+          }
+          footer={
+            <div className="flex items-center gap-3">
+              <Button variant="danger" type="button" onClick={handleDeleteEvent} loading={loading}>
+                {loading ? 'A eliminar...' : 'Sim, eliminar'}
+              </Button>
+              <Button variant="outline" type="button" onClick={() => setEventDeleting(null)}>
+                Cancelar
+              </Button>
             </div>
-          </div>
-        )}
+          }
+        />
 
         {auditDetail && (
           <div
