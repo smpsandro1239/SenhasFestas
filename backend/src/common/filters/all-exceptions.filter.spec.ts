@@ -32,17 +32,26 @@ function criarHost() {
   return { host, status, json };
 }
 
+/**
+ * QueryFailedError<T extends Error> exige que o driverError seja mesmo um
+ * Error. Um object literal com 'code' não é atribuível, e um { message: x }
+ * também não, por falta de 'name'. Fabrica-se um Error a sério e pendura-se o
+ * código, que é a forma como o driver Postgres o devolve na prática.
+ */
+const driverError = (props: { code?: string; constraint?: string; detail?: string }) =>
+  Object.assign(new Error(props.detail ?? 'erro de driver'), props);
+
 const erroUnique = (constraint?: string) =>
   new QueryFailedError(
     'INSERT INTO "users" ...',
     [],
-    {
+    driverError({
       code: '23505',
       constraint,
       detail: constraint
         ? `Key (${constraint.slice(constraint.indexOf('=') + 1)})=(x) already exists.`
         : 'Key (email)=(x@y.z) already exists.',
-    },
+    }),
   );
 
 describe('AllExceptionsFilter — violacao de unicidade', () => {
@@ -93,7 +102,7 @@ describe('AllExceptionsFilter — 23505 e so o 23505', () => {
   });
 
   const queryFailed = (code: string) =>
-    new QueryFailedError('INSERT ...', [], { code });
+    new QueryFailedError('INSERT ...', [], driverError({ code }));
 
   it('23503 (violacao de foreign key) continua a ser 500', () => {
     // Uma FK violada e bug de integridade, nao input invalido. Deve subir para
@@ -120,7 +129,7 @@ describe('AllExceptionsFilter — 23505 e so o 23505', () => {
     // um driverError totalmente ausente rebenta na construcao. O caso que
     // interessa e um driverError sem 'code'.
     const { host, status } = criarHost();
-    const semCodigo = new QueryFailedError('INSERT ...', [], { message: 'sem code' });
+    const semCodigo = new QueryFailedError('INSERT ...', [], driverError({}));
     expect(() => filter.catch(semCodigo, host)).not.toThrow();
     expect(status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
   });

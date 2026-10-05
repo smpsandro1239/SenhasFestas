@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import * as crypto from 'crypto';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { ConflictException } from '@nestjs/common';
 
 // O namespace ESM de 'crypto' é read-only, por isso `vi.spyOn(crypto,
@@ -11,7 +11,13 @@ vi.mock('crypto', async (importOriginal) => {
   return { ...real, default: real, randomInt: vi.fn(real.randomInt) };
 });
 
-const randomInt = vi.mocked(crypto.randomInt);
+// crypto.randomInt é sobrecarregado: uma versão sync que devolve number e
+// duas versões com callback que devolvem void. O vi.mocked infere a partir da
+// última sobrecarga, ou seja a de callback, e mockReturnValue(123456) passava
+// a pedir um void. Fixa-se a sobrecarga que o código sob teste usa.
+const randomInt = vi.mocked(crypto.randomInt) as unknown as Mock<
+  (min: number, max: number) => number
+>;
 
 import { gerarCodigoAcesso, codigoAcessoUnico } from './access-code';
 

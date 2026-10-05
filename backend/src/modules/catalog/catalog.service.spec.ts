@@ -223,21 +223,25 @@ describe('CatalogService', () => {
   });
 
   describe('duplicate — rota só para quem gere o catálogo', () => {
+    // A referência ao mock fica numa variavel com o tipo Mock. Passar por
+    // controller['catalogService'].duplicate dava o tipo do metodo real, e
+    // mockResolvedValue nao existe num metodo.
+    const dupMock = vi.fn();
     const controller = new CatalogController(
-      { duplicate: vi.fn(), softRemove: vi.fn() } as any,
+      { duplicate: dupMock, softRemove: vi.fn() } as any,
       { assertMember: vi.fn() } as any,
     );
     const CHAMADO = { id: 'p1' };
 
     beforeEach(() => {
-      controller['catalogService'].duplicate.mockResolvedValue(CHAMADO);
+      dupMock.mockResolvedValue(CHAMADO);
     });
 
     it.each(MANAGEMENT_ROLES)('%s chega ao serviço', async (role) => {
       await expect(
         controller.duplicate('p1', { user: { id: 'u1', role } } as any),
       ).resolves.toBe(CHAMADO);
-      expect(controller['catalogService'].duplicate).toHaveBeenCalledWith('p1', {
+      expect(dupMock).toHaveBeenCalledWith('p1', {
         id: 'u1',
         role,
       });
