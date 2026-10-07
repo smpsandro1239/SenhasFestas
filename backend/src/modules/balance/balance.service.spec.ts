@@ -175,5 +175,74 @@ describe('BalanceService — guard de janela operacional', () => {
 
       expect(orderGateway.emitOrderUpdate).not.toHaveBeenCalled();
     });
+
+    it('rejeita estorno cross-event: membro só de outro evento → 403', async () => {
+      const movimento = {
+        id: 'mov1',
+        reversed: false,
+        amount: 10,
+        type: 'load',
+        balance: { id: 'b1', user: { id: 'u1' }, event: { id: 'evtA' } },
+      };
+      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) => {
+        const manager = {
+          findOne: vi.fn().mockImplementation((entity: any, opts: any) => {
+            const name = entity?.name;
+            if (name === 'BalanceMovementEntity' && opts?.where?.id === 'mov1') {
+              return Promise.resolve(movimento);
+            }
+            // Membro só de evtB, não de evtA do movimento
+            if (name === 'EventUserEntity') {
+              return Promise.resolve(null);
+            }
+            return Promise.resolve(null);
+          }),
+          save: vi.fn().mockImplementation((_e, entity) => Promise.resolve(entity)),
+          create: vi.fn().mockImplementation((_e, data) => data),
+        };
+        return fn(manager);
+      });
+
+      await expect(
+        balanceService.reverseLoad('u1', 'mov1', { id: 'staff', role: 'cashier' }, {} as any),
+      ).rejects.toThrow('Não pertence a este evento');
+    });
+
+    it('permite estorno cross-event a superadmin (bypass)', async () => {
+      const movimento = {
+        id: 'mov1',
+        reversed: false,
+        amount: 10,
+        type: 'load',
+        balance: { id: 'b1', user: { id: 'u1' }, event: { id: 'evtA' } },
+      };
+      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) => {
+        const manager = {
+          findOne: vi.fn().mockImplementation((entity: any, opts: any) => {
+            const name = entity?.name;
+            if (name === 'BalanceMovementEntity' && opts?.where?.id === 'mov1') {
+              return Promise.resolve(movimento);
+            }
+            if (name === 'BalanceEntity' && opts?.where?.id === 'b1') {
+              return Promise.resolve({ id: 'b1', currentBalance: 100 });
+            }
+            return Promise.resolve(null);
+          }),
+          save: vi.fn().mockImplementation((_e, entity) => Promise.resolve(entity)),
+          create: vi.fn().mockImplementation((_e, data) => data),
+        };
+        return fn(manager);
+      });
+
+      const resultado = await balanceService.reverseLoad(
+        'u1',
+        'mov1',
+        { id: 'root', role: 'superadmin' },
+        {} as any,
+      );
+
+      expect(resultado.reversedMovementId).toBe('mov1');
+      expect(resultado.eventId).toBe('evtA');
+    });
   });
 });
