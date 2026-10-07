@@ -10,9 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert } from '@/components/ui/alert';
-import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon, PencilIcon, TrashIcon, CopyIcon } from '@/components/ui/icons';
+import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon, PencilIcon, TrashIcon, CopyIcon, WalletIcon } from '@/components/ui/icons';
 import { Dialog } from '@/components/ui/dialog';
-import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances } from '@/lib/api';
+import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances, getReports } from '@/lib/api';
 import { downloadTextFile } from '@/lib/download';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
@@ -80,6 +80,14 @@ export default function AdminPage() {
   const [outstandingBalances, setOutstandingBalances] = useState<any[]>([]);
   const [outstandingLoading, setOutstandingLoading] = useState(false);
   const [outstandingTotal, setOutstandingTotal] = useState(0);
+  const [balancesEventId, setBalancesEventId] = useState('');
+  const [balancesType, setBalancesType] = useState('');
+  const [balancesFrom, setBalancesFrom] = useState('');
+  const [balancesTo, setBalancesTo] = useState('');
+  const [balancesQuery, setBalancesQuery] = useState('');
+  const [balancesData, setBalancesData] = useState<any>(null);
+  const [balancesLoading, setBalancesLoading] = useState(false);
+  const [balancesError, setBalancesError] = useState('');
   const [productDeleting, setProductDeleting] = useState<any>(null);
   const [productDeleteError, setProductDeleteError] = useState('');
   const [productDeletingBusy, setProductDeletingBusy] = useState(false);
@@ -102,6 +110,7 @@ export default function AdminPage() {
     { id: 'eventos', label: 'Eventos', icon: <CalendarIcon className="h-4 w-4" /> },
     { id: 'produtos', label: 'Produtos', icon: <ClipboardIcon className="h-4 w-4" /> },
     { id: 'utilizadores', label: 'Utilizadores', icon: <UserIcon className="h-4 w-4" /> },
+    { id: 'saldos', label: 'Saldos', icon: <WalletIcon className="h-4 w-4" /> },
     { id: 'configuracao', label: 'Configuração', icon: <SettingsIcon className="h-4 w-4" /> },
     { id: 'auditoria', label: 'Auditoria', icon: <ShieldCheckIcon className="h-4 w-4" /> },
   ];
@@ -469,8 +478,15 @@ export default function AdminPage() {
     if (activeTab === 'produtos') loadProducts();
     if (activeTab === 'auditoria') loadAudit();
     if (activeTab === 'configuracao') loadEvents();
+    if (activeTab === 'saldos') loadEvents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, loadAudit, loadProducts]);
+
+  // Carrega ao escolher evento; filtros (tipo, datas, q) só aplicam no "Atualizar".
+  useEffect(() => {
+    if (activeTab === 'saldos' && balancesEventId) loadBalances();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [balancesEventId, activeTab]);
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -534,6 +550,30 @@ export default function AdminPage() {
       setOutstandingLoading(false);
     }
   };
+
+  const loadBalances = useCallback(async () => {
+    if (!balancesEventId) {
+      setBalancesData(null);
+      setBalancesError('');
+      return;
+    }
+    setBalancesLoading(true);
+    setBalancesError('');
+    try {
+      const params: Record<string, string> = { eventId: balancesEventId };
+      if (balancesType) params.type = balancesType;
+      if (balancesFrom) params.from = `${balancesFrom}T00:00:00`;
+      if (balancesTo) params.to = `${balancesTo}T23:59:59`;
+      if (balancesQuery.trim()) params.q = balancesQuery.trim();
+      const data = await getReports('balances', params);
+      setBalancesData(data ?? null);
+    } catch (err: any) {
+      setBalancesData(null);
+      setBalancesError(err?.message ?? 'Erro ao carregar saldos');
+    } finally {
+      setBalancesLoading(false);
+    }
+  }, [balancesEventId, balancesType, balancesFrom, balancesTo, balancesQuery]);
 
   const openEditEvent = (event: any) => {
     setEventEditing(event);
@@ -942,6 +982,151 @@ export default function AdminPage() {
                 )}
               </div>
             </Card>
+          </div>
+        )}
+
+        {activeTab === 'saldos' && (
+          <div className="space-y-6">
+            <Card>
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div>
+                  <h2 className="text-xl font-bold text-zinc-50 mb-2">Saldos por cliente</h2>
+                  <p className="text-zinc-400 text-sm">
+                    Carregamentos e consumos do evento, por cliente. Os valores líquidos já
+                    descontam estornos (cancel) e reembolsos (refund).
+                  </p>
+                </div>
+                <Button variant="secondary" size="sm" onClick={loadBalances} disabled={balancesLoading || !balancesEventId}>
+                  Atualizar
+                </Button>
+              </div>
+
+              <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                <select
+                  value={balancesEventId}
+                  onChange={(e) => setBalancesEventId(e.target.value)}
+                  aria-label="Filtrar por evento"
+                  className="bg-surface-solid border border-border rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                >
+                  <option value="">Selecionar evento...</option>
+                  {events.map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      {ev.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={balancesType}
+                  onChange={(e) => setBalancesType(e.target.value)}
+                  aria-label="Filtrar por tipo de movimento"
+                  className="bg-surface-solid border border-border rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                >
+                  <option value="">Todos os tipos</option>
+                  <option value="load">Carregamentos</option>
+                  <option value="consume">Consumos</option>
+                  <option value="cancel">Estornos</option>
+                  <option value="refund">Reembolsos</option>
+                </select>
+                <input
+                  type="date"
+                  value={balancesFrom}
+                  onChange={(e) => setBalancesFrom(e.target.value)}
+                  aria-label="Data inicial"
+                  className="bg-surface-solid border border-border rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                />
+                <input
+                  type="date"
+                  value={balancesTo}
+                  onChange={(e) => setBalancesTo(e.target.value)}
+                  aria-label="Data final"
+                  className="bg-surface-solid border border-border rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                />
+                <input
+                  type="search"
+                  value={balancesQuery}
+                  onChange={(e) => setBalancesQuery(e.target.value)}
+                  placeholder="Nome, email ou telefone"
+                  aria-label="Pesquisar cliente"
+                  className="bg-surface-solid border border-border rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                />
+              </div>
+
+              {balancesError && <Alert variant="error" message={balancesError} className="mb-4" />}
+            </Card>
+
+            {!balancesEventId ? (
+              <Card>
+                <div className="text-sm text-zinc-400 py-2">
+                  Selecione um evento para ver os saldos por cliente.
+                </div>
+              </Card>
+            ) : balancesLoading && !balancesData ? (
+              <Card>
+                <div className="text-sm text-zinc-400 py-2">A carregar saldos...</div>
+              </Card>
+            ) : balancesData ? (
+              <>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Carregado (líquido)', value: balancesData.totals?.loadedNet, sub: `bruto €${Number(balancesData.totals?.loadedGross ?? 0).toFixed(2)}` },
+                    { label: 'Consumido (líquido)', value: balancesData.totals?.consumedNet, sub: `bruto €${Number(balancesData.totals?.consumedGross ?? 0).toFixed(2)}` },
+                    { label: 'A favor dos clientes', value: Number(balancesData.totals?.loadedNet ?? 0) - Number(balancesData.totals?.consumedNet ?? 0), sub: 'líquido carregado - consumido' },
+                    { label: 'Movimentos', value: balancesData.movementCount, sub: `${balancesData.items?.length ?? 0} cliente(s)` },
+                  ].map((stat) => (
+                    <Card key={stat.label} padding="sm">
+                      <div className="text-xs text-zinc-400 mb-1">{stat.label}</div>
+                      <div className="text-lg font-bold text-zinc-50 font-mono">
+                        {stat.label === 'Movimentos' ? stat.value : `€${Number(stat.value ?? 0).toFixed(2)}`}
+                      </div>
+                      <div className="text-xs text-zinc-500 mt-0.5">{stat.sub}</div>
+                    </Card>
+                  ))}
+                </div>
+
+                <Card padding="none" className="overflow-hidden">
+                  {(balancesData.items ?? []).length === 0 ? (
+                    <div className="text-sm text-zinc-400 py-4 px-4">
+                      Sem movimentos de saldo para este evento com os filtros atuais.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-surface-hover border-b border-border">
+                            {['Cliente', 'Carregado (bruto / líquido)', 'Consumido (bruto / líquido)', 'Movimentos'].map((h) => (
+                              <th key={h} className="px-4 py-3 text-left font-medium text-zinc-400">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(balancesData.items ?? []).map((item: any) => (
+                            <tr key={item.userId} className="border-b border-border last:border-0 hover:bg-surface-hover transition-colors">
+                              <td className="px-4 py-3">
+                                <div className="font-medium text-zinc-100">{item.name ?? 'Cliente'}</div>
+                                {(item.email || item.phone) && (
+                                  <div className="text-xs text-zinc-500">{item.email ?? item.phone}</div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 font-mono">
+                                <span className="text-emerald-400">€{Number(item.loadedGross ?? 0).toFixed(2)}</span>
+                                <span className="text-zinc-500"> / </span>
+                                <span className="text-zinc-200">€{Number(item.loadedNet ?? 0).toFixed(2)}</span>
+                              </td>
+                              <td className="px-4 py-3 font-mono">
+                                <span className="text-amber-300">€{Number(item.consumedGross ?? 0).toFixed(2)}</span>
+                                <span className="text-zinc-500"> / </span>
+                                <span className="text-zinc-200">€{Number(item.consumedNet ?? 0).toFixed(2)}</span>
+                              </td>
+                              <td className="px-4 py-3 text-zinc-300">{item.movementCount ?? 0}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+              </>
+            ) : null}
           </div>
         )}
 
