@@ -140,3 +140,15 @@ O que **não** funcionou nesta ronda final: decidir sozinho como tratar dinheiro
 real sem ver os dados. A fronteira do "investigação antes de codar" é: quando
 a correção envolve **decidir sobre dados existentes**, o agente tem de parar e
 perguntar. A migração A9 devia ter falhado em vez de fechar caixas com `0`.
+
+## 7. Dívida registada
+
+- **`25b1aa7` tem churn de line endings** em 3 ficheiros
+  (`order-refund.ts`, `kitchen.service.ts`, `order.service.ts`):
+  `git show --stat` mostra 417/415 mas o diff real é ~6/4
+  (`git show --stat --ignore-cr-at-eol 25b1aa7`). Renormalizar quando
+  algum destes ficheiros for voltar a tocar — não tentar reescrever o
+  histórico.
+- **`.gitattributes` com `text=auto eol=lf` não está a ser respeitado**
+  nesses 3 ficheiros — provavelmente porque são pré-`.gitattributes`.
+  Verificar quando forem renormalizados.
