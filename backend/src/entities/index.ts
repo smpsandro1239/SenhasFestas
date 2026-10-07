@@ -238,6 +238,10 @@ export class BalanceEntity {
   @Column({ type: 'timestamp', nullable: true })
   extendedUntil?: Date | null;
 
+  // Última vez que o cliente foi avisado sobre o fim do prazo (ação do staff).
+  @Column({ type: 'timestamp', nullable: true })
+  notifiedAt?: Date | null;
+
   // Soft-delete: 30 dias após o arquivamento, escondido das consultas padrão.
   @DeleteDateColumn()
   deletedAt?: Date | null;

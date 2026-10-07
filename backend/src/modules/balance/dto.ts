@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsPositive, IsString, IsUUID } from 'class-validator';
+import { IsDateString, IsNumber, IsOptional, IsPositive, IsString, IsUUID } from 'class-validator';
 
 export class LoadBalanceDto {
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -31,4 +31,17 @@ export class ReverseLoadDto {
   @IsPositive()
   @IsOptional()
   amount?: number;
+}
+
+export class ExtendBalanceDto {
+  @IsUUID()
+  eventId: string;
+
+  @IsDateString()
+  until: string;
+}
+
+export class BalanceEventDto {
+  @IsUUID()
+  eventId: string;
 }

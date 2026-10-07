@@ -38,6 +38,9 @@ const SUFIXOS: Array<[string, string]> = [
   ['/status', 'STATUS'],
   ['/members', 'MEMBER'],
   ['/settings', 'SETTINGS'],
+  ['/extend', 'EXTEND'],
+  ['/unarchive', 'UNARCHIVE'],
+  ['/notified', 'NOTIFIED'],
   ['/login', 'LOGIN'],
   ['/logout', 'LOGOUT'],
 ];

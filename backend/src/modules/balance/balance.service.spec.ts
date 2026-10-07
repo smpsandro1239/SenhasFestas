@@ -402,4 +402,139 @@ describe('BalanceService — guard de janela operacional', () => {
       expect(guardados[1].deletedAt).toBeInstanceOf(Date);
     });
   });
+
+  describe('extensão, desarquivamento e notificação (Parte 3)', () => {
+    const evento = { id: 'evt1', endDate: '2026-10-10', balanceGraceDays: 3 };
+
+    function serviceCom(balanceRepository: any) {
+      return new BalanceService(
+        balanceRepository,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        { transaction: vi.fn() } as any,
+        eventService,
+      );
+    }
+
+    function repoCom(balance: any) {
+      return {
+        findOne: vi.fn().mockResolvedValue(balance),
+        save: vi.fn().mockImplementation((entity: any) => Promise.resolve(entity)),
+      };
+    }
+
+    it('extendBalance grava extendedUntil e revive saldo arquivado', async () => {
+      const repo = repoCom({
+        id: 'b1',
+        currentBalance: 10,
+        archivedAt: new Date('2026-10-14T05:00:00Z'),
+        extendedUntil: null,
+        notifiedAt: null,
+        user: { id: 'u1' },
+        event: evento,
+      });
+      const service = serviceCom(repo);
+
+      const res = await service.extendBalance('u1', { eventId: 'evt1', until: '2099-01-01' });
+
+      expect(repo.save).toHaveBeenCalledTimes(1);
+      const guardado = repo.save.mock.calls[0][0];
+      expect(guardado.extendedUntil.toISOString()).toBe('2099-01-01T00:00:00.000Z');
+      expect(guardado.archivedAt).toBeNull();
+      expect(res.deadline).toBe('2099-01-01T00:00:00.000Z');
+    });
+
+    it('extendBalance RECUSA data no passado → 400', async () => {
+      const repo = repoCom({
+        id: 'b1',
+        archivedAt: null,
+        user: { id: 'u1' },
+        event: evento,
+      });
+      const service = serviceCom(repo);
+
+      await expect(
+        service.extendBalance('u1', { eventId: 'evt1', until: '2020-01-01' }),
+      ).rejects.toThrow('Data de extensão tem de ser futura');
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('unarchiveBalance limpa archivedAt', async () => {
+      const repo = repoCom({
+        id: 'b1',
+        currentBalance: 10,
+        archivedAt: new Date('2026-10-14T05:00:00Z'),
+        extendedUntil: null,
+        notifiedAt: null,
+        user: { id: 'u1' },
+        event: evento,
+      });
+      const service = serviceCom(repo);
+
+      const res = await service.unarchiveBalance('u1', 'evt1');
+
+      const guardado = repo.save.mock.calls[0][0];
+      expect(guardado.archivedAt).toBeNull();
+      expect(res.archivedAt).toBeNull();
+    });
+
+    it('markNotified grava notifiedAt', async () => {
+      const repo = repoCom({
+        id: 'b1',
+        currentBalance: 10,
+        archivedAt: null,
+        extendedUntil: null,
+        notifiedAt: null,
+        user: { id: 'u1' },
+        event: evento,
+      });
+      const service = serviceCom(repo);
+
+      const res = await service.markNotified('u1', 'evt1');
+
+      const guardado = repo.save.mock.calls[0][0];
+      expect(guardado.notifiedAt).toBeInstanceOf(Date);
+      expect(res.notifiedAt).toBeInstanceOf(Date);
+    });
+
+    it('operações de saldo inexistente → 404', async () => {
+      const repo = repoCom(null);
+      const service = serviceCom(repo);
+
+      await expect(
+        service.extendBalance('u1', { eventId: 'evt1', until: '2099-01-01' }),
+      ).rejects.toThrow('Saldo não encontrado');
+    });
+
+    it('getBalance expõe deadline e archivedAt (aviso do cliente)', async () => {
+      const balanceRepository = {
+        findOne: vi.fn().mockResolvedValue({
+          id: 'b1',
+          currentBalance: 25,
+          archivedAt: null,
+          extendedUntil: null,
+          user: { id: 'u1' },
+          event: evento,
+        }),
+      };
+      const movementRepository = { find: vi.fn().mockResolvedValue([]) };
+      const service = new BalanceService(
+        balanceRepository as any,
+        {} as any,
+        movementRepository as any,
+        {} as any,
+        {} as any,
+        { transaction: vi.fn() } as any,
+        eventService,
+      );
+
+      const res = await service.getBalance('u1', 'evt1');
+
+      expect(res.deadline).toBe('2026-10-14T05:00:00.000Z');
+      expect(res.archivedAt).toBeNull();
+      expect(res.balance).toBe(25);
+    });
+  });
 });

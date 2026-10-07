@@ -1,8 +1,8 @@
-﻿import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
+﻿import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource, MoreThan, IsNull, LessThan } from 'typeorm';
 import { BalanceEntity, UserEntity, BalanceMovementEntity, EventEntity, EventUserEntity, MovementType } from '../../entities';
-import { LoadBalanceDto, DeductBalanceDto, ReverseLoadDto } from './dto';
+import { LoadBalanceDto, DeductBalanceDto, ReverseLoadDto, ExtendBalanceDto } from './dto';
 import { toPublicUser } from '../../common/serializers';
 import { centavos, soma, subtrai } from '../../common/money';
 import { assertSaldoUtilizavel, saldoDeadlineUtc } from '../../common/balance-guard';
@@ -10,6 +10,15 @@ import { EventService } from '../event/event.service';
 
 const DIA_MS = 86_400_000;
 const SOFT_DELETE_APOS_DIAS = 30;
+
+export interface SaldoEstado {
+  userId: string;
+  eventId?: string;
+  archivedAt: Date | null;
+  extendedUntil: Date | null;
+  notifiedAt: Date | null;
+  deadline: string | null;
+}
 
 @Injectable()
 export class BalanceService {
@@ -43,6 +52,7 @@ export class BalanceService {
       where: eventId
         ? ({ user: { id: userId }, event: { id: eventId } } as any)
         : ({ user: { id: userId } } as any),
+      relations: { event: true },
     });
   }
 
@@ -328,6 +338,67 @@ export class BalanceService {
     return { arquivados, removidos };
   }
 
+  private async carregarSaldoEvento(userId: string, eventId: string): Promise<BalanceEntity> {
+    const balance = await this.balanceRepository.findOne({
+      where: { user: { id: userId }, event: { id: eventId } } as any,
+      relations: { event: true, user: true },
+    });
+    if (!balance) {
+      throw new NotFoundException('Saldo não encontrado');
+    }
+    return balance;
+  }
+
+  private resumoSaldo(userId: string, balance: BalanceEntity) {
+    const deadline = saldoDeadlineUtc(balance.event, balance.extendedUntil);
+    return {
+      userId,
+      eventId: balance.event?.id,
+      archivedAt: balance.archivedAt ?? null,
+      extendedUntil: balance.extendedUntil ?? null,
+      notifiedAt: balance.notifiedAt ?? null,
+      deadline: deadline ? deadline.toISOString() : null,
+    };
+  }
+
+  async extendBalance(
+    userId: string,
+    dto: ExtendBalanceDto,
+  ): Promise<SaldoEstado> {
+    const balance = await this.carregarSaldoEvento(userId, dto.eventId);
+    const until = new Date(dto.until);
+    if (Number.isNaN(until.getTime()) || until.getTime() <= Date.now()) {
+      throw new BadRequestException('Data de extensão tem de ser futura');
+    }
+    balance.extendedUntil = until;
+    if (balance.archivedAt) {
+      // Extensão para o futuro revive um saldo já arquivado.
+      balance.archivedAt = null;
+    }
+    const saved = await this.balanceRepository.save(balance);
+    return this.resumoSaldo(userId, saved);
+  }
+
+  async unarchiveBalance(
+    userId: string,
+    eventId: string,
+  ): Promise<SaldoEstado> {
+    const balance = await this.carregarSaldoEvento(userId, eventId);
+    balance.archivedAt = null;
+    const saved = await this.balanceRepository.save(balance);
+    return this.resumoSaldo(userId, saved);
+  }
+
+  async markNotified(
+    userId: string,
+    eventId: string,
+  ): Promise<SaldoEstado> {
+    const balance = await this.carregarSaldoEvento(userId, eventId);
+    balance.notifiedAt = new Date();
+    const saved = await this.balanceRepository.save(balance);
+    return this.resumoSaldo(userId, saved);
+  }
+
   async getBalanceHistory(
     userId: string,
     eventId?: string,
@@ -370,16 +441,29 @@ export class BalanceService {
   async getBalance(
     userId: string,
     eventId?: string,
-  ): Promise<{ id: string | null; balance: number; movements: BalanceMovementEntity[] }> {
+  ): Promise<{
+    id: string | null;
+    balance: number;
+    movements: BalanceMovementEntity[];
+    deadline: string | null;
+    archivedAt: Date | null;
+  }> {
     const balance = await this.findBalance(userId, eventId);
     if (!balance) {
-      return { id: null, balance: 0, movements: [] };
+      return { id: null, balance: 0, movements: [], deadline: null, archivedAt: null };
     }
     const movements = await this.movementRepository.find({
       where: { balance: { id: balance.id } as any },
       order: { createdAt: 'DESC' },
       take: 20,
     });
-    return { id: balance.id, balance: Number(balance.currentBalance), movements };
+    const deadline = saldoDeadlineUtc(balance.event, balance.extendedUntil);
+    return {
+      id: balance.id,
+      balance: Number(balance.currentBalance),
+      movements,
+      deadline: deadline ? deadline.toISOString() : null,
+      archivedAt: balance.archivedAt ?? null,
+    };
   }
 }

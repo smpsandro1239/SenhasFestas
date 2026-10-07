@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Post, Body, Query, UseGuards, Request, ForbiddenException, ParseUUIDPipe } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { BalanceService } from './balance.service';
-import { LoadBalanceDto, DeductBalanceDto, ReverseLoadDto } from './dto';
+import { LoadBalanceDto, DeductBalanceDto, ReverseLoadDto, ExtendBalanceDto, BalanceEventDto } from './dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { FINANCE_ROLES } from '../../common/roles';
@@ -81,6 +81,48 @@ export class BalanceController {
       await this.balanceService.assertMemberEvent(req.user.id, eventId);
     }
     return this.balanceService.getBalanceHistory(userId, eventId);
+  }
+
+  @Post(':userId/extend')
+  @Roles(...FINANCE_ROLES)
+  async extend(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() dto: ExtendBalanceDto,
+    @Request() req: any,
+  ) {
+    if (req.user.role !== 'superadmin') {
+      await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
+    }
+    this.assertStaffEventScope(req.user, dto.eventId);
+    return this.balanceService.extendBalance(userId, dto);
+  }
+
+  @Post(':userId/unarchive')
+  @Roles(...FINANCE_ROLES)
+  async unarchive(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() dto: BalanceEventDto,
+    @Request() req: any,
+  ) {
+    if (req.user.role !== 'superadmin') {
+      await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
+    }
+    this.assertStaffEventScope(req.user, dto.eventId);
+    return this.balanceService.unarchiveBalance(userId, dto.eventId);
+  }
+
+  @Post(':userId/notified')
+  @Roles(...FINANCE_ROLES)
+  async notified(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() dto: BalanceEventDto,
+    @Request() req: any,
+  ) {
+    if (req.user.role !== 'superadmin') {
+      await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
+    }
+    this.assertStaffEventScope(req.user, dto.eventId);
+    return this.balanceService.markNotified(userId, dto.eventId);
   }
 
   @Get('event/:eventId/outstanding')
