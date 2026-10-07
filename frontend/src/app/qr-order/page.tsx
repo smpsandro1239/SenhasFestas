@@ -7,10 +7,13 @@ import { cn } from '@/lib/cn';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
-import { MinusIcon, PlusIcon, QrIcon, ArrowLeftIcon, CheckIcon } from '@/components/ui/icons';
+import { MinusIcon, PlusIcon, QrIcon, CameraIcon, ArrowLeftIcon, CheckIcon } from '@/components/ui/icons';
+import { QrScanner } from '@/components/ui/qr-scanner';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
-import { getProducts, getBalance, createOrder, getProductSuggestions } from '@/lib/api';
+import { getProducts, getBalance, createOrder, getProductSuggestions, getEventByCode } from '@/lib/api';
+import { normalizarShortCode } from '@/lib/entrar';
+import { parseQrMesa } from '@/lib/mesa-qr';
 import type { Product, CartItem } from '@/lib/types';
 import { groupProducts } from '@/lib/group-products';
 import { getOrderTotal } from '@/lib/order-total';
@@ -26,7 +29,29 @@ export default function QROrderPageWrapper() {
 function QROrderPage() {
   const searchParams = useSearchParams();
   const { event, loading: eventLoading, error: eventError } = useCurrentEvent();
-  const eventId = searchParams.get('event') ?? event?.id ?? '';
+  const [codigoEvento, setCodigoEvento] = useState<string | null>(null);
+  const urlCode = searchParams.get('code') ?? '';
+
+  useEffect(() => {
+    const codigo = normalizarShortCode(urlCode);
+    if (!codigo) {
+      setCodigoEvento(null);
+      return;
+    }
+    let ativo = true;
+    getEventByCode(codigo)
+      .then((ev) => {
+        if (ativo) setCodigoEvento(ev?.id ?? null);
+      })
+      .catch(() => {
+        if (ativo) setCodigoEvento(null);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [urlCode]);
+
+  const eventId = searchParams.get('event') ?? codigoEvento ?? event?.id ?? '';
   const initialTableNumber = searchParams.get('mesa') ?? searchParams.get('table') ?? '';
   const [tableNumber, setTableNumber] = useState(initialTableNumber);
   const [showTableModal, setShowTableModal] = useState(!initialTableNumber);
@@ -45,7 +70,35 @@ function QROrderPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [suggestions, setSuggestions] = useState<Product[]>([]);
   const [lastCartId, setLastCartId] = useState<string | null>(null);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanError, setScanError] = useState('');
   const router = useRouter();
+
+  const tratarScan = useCallback(
+    async (texto: string) => {
+      setScanError('');
+      setShowScanner(false);
+      const qr = parseQrMesa(texto);
+      if (!qr) {
+        setScanError('QR não reconhecido. Usa o QR da tua mesa ou o do evento.');
+        return;
+      }
+      try {
+        const ev = await getEventByCode(normalizarShortCode(qr.shortCode));
+        if (!ev) {
+          setScanError('Evento não encontrado para este QR.');
+          return;
+        }
+        setTableNumber(qr.numero ?? '');
+        setShowTableModal(false);
+        const mesa = qr.numero ? `&table=${encodeURIComponent(qr.numero)}` : '';
+        router.replace(`/qr-order?event=${ev.id}${mesa}`);
+      } catch {
+        setScanError('Não foi possível identificar o evento deste QR.');
+      }
+    },
+    [router],
+  );
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -189,7 +242,7 @@ function QROrderPage() {
           </div>
 
           {/* Info bar */}
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="mt-3 grid grid-cols-3 gap-2">
             <button
               type="button"
               onClick={() => {
@@ -215,12 +268,36 @@ function QROrderPage() {
                 </div>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowScanner(true)}
+              aria-label="Escanear QR da mesa"
+              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-border hover:bg-surface-hover transition-colors"
+            >
+              <CameraIcon className="h-4 w-4 text-brand" />
+              <div className="flex-1">
+                <div className="text-[10px] text-zinc-400">Ler</div>
+                <div className="text-sm font-semibold text-zinc-100">Scan</div>
+              </div>
+            </button>
           </div>
         </div>
       </header>
 
+      <QrScanner
+        open={showScanner}
+        onResult={tratarScan}
+        onClose={() => setShowScanner(false)}
+        title="Escaneia o QR da tua mesa"
+      />
+
 {/* Products */}
       <main className="max-w-lg mx-auto px-4 py-6 pb-32">
+        {scanError && (
+          <div className="mb-4">
+            <Alert variant="error" message={scanError} />
+          </div>
+        )}
         {event?.status === 'closed' ? (
           <div className="rounded-2xl border border-zinc-800 bg-surface p-8 text-center">
             <h2 className="text-2xl font-bold text-zinc-50 mb-2">Evento encerrado</h2>
@@ -253,7 +330,7 @@ function QROrderPage() {
             ) : !eventId && eventError ? (
               <Alert variant="error" message={eventError} />
             ) : !eventId ? (
-              <Alert variant="info" message="Evento não identificado. Peça o código QR da sua mesa para fazer pedidos." />
+              <Alert variant="info" message="Evento não identificado. Toca em Scan e escaneia o QR da tua mesa." />
             ) : error ? (
               <Alert variant="error" message={error} />
             ) : products.length === 0 ? (

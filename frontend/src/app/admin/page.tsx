@@ -16,6 +16,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { deveAvisarSessao, marcarAvisoSessao } from '@/lib/saldo-aviso';
 import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances, getReports, extendBalance, unarchiveBalance, markBalanceNotified } from '@/lib/api';
 import { downloadTextFile } from '@/lib/download';
+import { montarUrlMesa } from '@/lib/mesa-qr';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
   superadmin: 'brand',
@@ -77,7 +78,11 @@ export default function AdminPage() {
   const [qrEvento, setQrEvento] = useState<any>(null);
   const [linkQr, setLinkQr] = useState('');
   const [copiadoQr, setCopiadoQr] = useState(false);
+  const [linkMesaQr, setLinkMesaQr] = useState('');
+  const [mesaQrNumero, setMesaQrNumero] = useState('');
+  const [copiadoMesaQr, setCopiadoMesaQr] = useState(false);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+  const mesaQrCanvasRef = useRef<HTMLCanvasElement>(null);
   const copiaTimerRef = useRef<number | null>(null);
   const [eventEditing, setEventEditing] = useState<any>(null);
   const [eventEditForm, setEventEditForm] = useState({ name: '', location: '', startDate: '', endDate: '' });
@@ -692,6 +697,9 @@ export default function AdminPage() {
     if (copiaTimerRef.current) window.clearTimeout(copiaTimerRef.current);
     setCopiadoQr(false);
     setLinkQr(`${window.location.origin}/entrar/${evento.shortCode}`);
+    setMesaQrNumero('');
+    setLinkMesaQr('');
+    setCopiadoMesaQr(false);
     setQrEvento(evento);
   };
 
@@ -710,6 +718,32 @@ export default function AdminPage() {
     } catch {
       setCopiadoQr(false);
     }
+  };
+
+  const gerarQrMesa = () => {
+    const numero = mesaQrNumero.trim();
+    if (!qrEvento?.shortCode || !numero) return;
+    setLinkMesaQr(montarUrlMesa(window.location.origin, qrEvento.shortCode, numero));
+  };
+
+  const copiarLinkMesaQr = async () => {
+    try {
+      await navigator.clipboard.writeText(linkMesaQr);
+      setCopiadoMesaQr(true);
+      if (copiaTimerRef.current) window.clearTimeout(copiaTimerRef.current);
+      copiaTimerRef.current = window.setTimeout(() => setCopiadoMesaQr(false), 1500);
+    } catch {
+      setCopiadoMesaQr(false);
+    }
+  };
+
+  const descarregarMesaQr = () => {
+    const canvas = mesaQrCanvasRef.current;
+    if (!canvas || !qrEvento) return;
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = `mesa-${qrEvento.shortCode}-${mesaQrNumero.trim()}.png`;
+    a.click();
   };
 
   const descarregarQr = () => {
@@ -868,6 +902,39 @@ export default function AdminPage() {
                     <Button size="sm" variant="outline" onClick={descarregarQr}>
                       Descarregar PNG
                     </Button>
+                  </div>
+
+                  <div className="mt-6 border-t border-border pt-5">
+                    <h3 className="text-sm font-bold text-zinc-100 mb-1">QR por mesa</h3>
+                    <p className="text-xs text-zinc-400 mb-3">
+                      Gera um QR individual que, ao ser escaneado, entra direto na mesa sem digitar o número.
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        value={mesaQrNumero}
+                        onChange={(e) => setMesaQrNumero(e.target.value)}
+                        placeholder="Nº da mesa, ex: 12"
+                        inputMode="numeric"
+                        className="flex-1"
+                      />
+                      <Button onClick={gerarQrMesa}>Gerar</Button>
+                    </div>
+                    {linkMesaQr && (
+                      <div className="mt-4 flex flex-col items-center gap-3">
+                        <div className="rounded-2xl bg-white p-4">
+                          <QRCodeCanvas ref={mesaQrCanvasRef} value={linkMesaQr} size={160} level="M" />
+                        </div>
+                        <p className="text-xs text-zinc-400 break-all text-center">{linkMesaQr}</p>
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          <Button size="sm" variant="outline" onClick={copiarLinkMesaQr}>
+                            {copiadoMesaQr ? 'Copiado!' : 'Copiar link'}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={descarregarMesaQr}>
+                            Descarregar PNG
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}

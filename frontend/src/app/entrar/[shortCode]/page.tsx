@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { AuthLayout } from '@/components/layout/auth-layout';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -15,12 +15,30 @@ import { normalizarShortCode, podeTrocarEvento } from '@/lib/entrar';
 type Evento = { id: string; name: string; shortCode: string };
 type Estado = 'carregando' | 'ok' | 'nao-encontrado';
 
-export default function EntrarPage() {
+export default function EntrarPageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <EntrarPage />
+    </Suspense>
+  );
+}
+
+function EntrarPage() {
   const params = useParams<{ shortCode: string }>();
   const codigoParam = typeof params?.shortCode === 'string' ? params.shortCode : '';
   const codigo = normalizarShortCode(codigoParam);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading: authLoading, register } = useAuth();
+
+  const mesaParam = searchParams.get('table') ?? '';
+  const destinoQr = useCallback(
+    (eventoId: string) => {
+      const mesa = mesaParam ? `&table=${encodeURIComponent(mesaParam)}` : '';
+      return `/qr-order?event=${eventoId}${mesa}`;
+    },
+    [mesaParam],
+  );
 
   const [estado, setEstado] = useState<Estado>('carregando');
   const [evento, setEvento] = useState<Evento | null>(null);
@@ -67,7 +85,7 @@ export default function EntrarPage() {
         const lista: any[] = Array.isArray(eventos) ? eventos : [];
         if (!ativo) return;
         if (lista.some((e) => e.id === evento.id)) {
-          router.replace(`/qr-order?event=${evento.id}`);
+          router.replace(destinoQr(evento.id));
           return;
         }
         setMembro(false);
@@ -90,7 +108,7 @@ export default function EntrarPage() {
     return () => {
       ativo = false;
     };
-  }, [authLoading, user, estado, evento, router]);
+  }, [authLoading, user, estado, evento, router, destinoQr]);
 
   const entrarNoEvento = async (replace: boolean) => {
     if (!evento) return;
@@ -98,7 +116,7 @@ export default function EntrarPage() {
     setErro('');
     try {
       await enterEvent(codigo, replace);
-      router.push(`/qr-order?event=${evento.id}`);
+      router.push(destinoQr(evento.id));
     } catch (e: any) {
       setErro(e?.message ?? 'Erro ao entrar no evento');
       setAcao(false);
@@ -115,7 +133,7 @@ export default function EntrarPage() {
     setRegistando(true);
     try {
       await register({ name, email, phone: phone || undefined, password, eventCode: codigo });
-      if (evento) router.push(`/qr-order?event=${evento.id}`);
+      if (evento) router.push(destinoQr(evento.id));
     } catch (err: any) {
       setErroRegisto(err?.message ?? 'Erro no registo');
       setRegistando(false);
@@ -232,7 +250,9 @@ export default function EntrarPage() {
             <p className="text-zinc-400">
               Já tem conta?{' '}
               <Link
-                href={`/auth/login?from=${encodeURIComponent('/entrar/' + codigoParam)}`}
+                href={`/auth/login?from=${encodeURIComponent(
+                  `/entrar/${codigoParam}${mesaParam ? `?table=${encodeURIComponent(mesaParam)}` : ''}`,
+                )}`}
                 className="text-brand-light hover:text-zinc-200 font-medium transition-colors"
               >
                 Iniciar sessão
