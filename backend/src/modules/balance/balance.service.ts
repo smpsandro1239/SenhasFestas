@@ -1,11 +1,15 @@
 ﻿import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { Repository, DataSource, MoreThan } from 'typeorm';
+import { Repository, DataSource, MoreThan, IsNull, LessThan } from 'typeorm';
 import { BalanceEntity, UserEntity, BalanceMovementEntity, EventEntity, EventUserEntity, MovementType } from '../../entities';
 import { LoadBalanceDto, DeductBalanceDto, ReverseLoadDto } from './dto';
 import { toPublicUser } from '../../common/serializers';
 import { centavos, soma, subtrai } from '../../common/money';
+import { assertSaldoUtilizavel, saldoDeadlineUtc } from '../../common/balance-guard';
 import { EventService } from '../event/event.service';
+
+const DIA_MS = 86_400_000;
+const SOFT_DELETE_APOS_DIAS = 30;
 
 @Injectable()
 export class BalanceService {
@@ -167,6 +171,11 @@ export class BalanceService {
   ): Promise<BalanceEntity> {
     try {
       return await this.dataSource.transaction(async (manager) => {
+        let event: EventEntity | undefined;
+        if (dto.eventId) {
+          event = await manager.findOne(EventEntity, { where: { id: dto.eventId } }) ?? undefined;
+        }
+
         let balance = await manager.findOne(BalanceEntity, {
           where: dto.eventId
             ? ({ user: { id: userId }, event: { id: dto.eventId } } as any)
@@ -174,18 +183,24 @@ export class BalanceService {
           lock: { mode: 'pessimistic_write' },
         });
 
+        if (balance) {
+          // Arquivado não aceita novos carregamentos (senão o dinheiro fica preso
+          // até um estorno manual).
+          assertSaldoUtilizavel({
+            archivedAt: balance.archivedAt,
+            extendedUntil: balance.extendedUntil,
+            event,
+          });
+        }
+
         if (!balance) {
           const userEntity = await manager.findOne(UserEntity, { where: { id: userId } });
           if (!userEntity) {
             throw new NotFoundException('Utilizador não encontrado');
           }
 
-          let event: EventEntity | undefined;
-          if (dto.eventId) {
-            event = await manager.findOne(EventEntity, { where: { id: dto.eventId } });
-            if (!event) {
-              throw new NotFoundException('Evento não encontrado');
-            }
+          if (dto.eventId && !event) {
+            throw new NotFoundException('Evento não encontrado');
           }
 
           balance = manager.create(BalanceEntity, {
@@ -239,6 +254,13 @@ export class BalanceService {
         throw new NotFoundException('Saldo não encontrado para este cliente/evento');
       }
 
+      const evento = await manager.findOne(EventEntity, { where: { id: dto.eventId } });
+      assertSaldoUtilizavel({
+        archivedAt: balance.archivedAt,
+        extendedUntil: balance.extendedUntil,
+        event: evento,
+      });
+
       const montante = centavos(Number(dto.amount));
       if (montante <= 0) {
         throw new ForbiddenException('Valor de desconto inválido');
@@ -267,6 +289,43 @@ export class BalanceService {
     });
 
     return resultado;
+  }
+
+  /**
+   * Arquivamento automático (cron + lazy):
+   * - saldos com saldo > 0 cujo prazo venceu e ainda não arquivados → archivedAt;
+   * - saldos arquivados há 30+ dias → soft-delete (deletedAt), reversível.
+   */
+  async archiveExpiredBalances(
+    now: Date = new Date(),
+  ): Promise<{ arquivados: number; removidos: number }> {
+    const softDeleteLimite = new Date(now.getTime() - SOFT_DELETE_APOS_DIAS * DIA_MS);
+    const candidatos = await this.balanceRepository.find({
+      where: [
+        { archivedAt: IsNull(), currentBalance: MoreThan(0) as any },
+        { archivedAt: LessThan(softDeleteLimite) },
+      ],
+      relations: { event: true },
+    });
+
+    let arquivados = 0;
+    let removidos = 0;
+    for (const saldo of candidatos) {
+      if (!saldo.archivedAt) {
+        const deadline = saldoDeadlineUtc(saldo.event, saldo.extendedUntil);
+        if (deadline && now.getTime() > deadline.getTime()) {
+          saldo.archivedAt = now;
+          await this.balanceRepository.save(saldo);
+          arquivados += 1;
+        }
+        continue;
+      }
+      saldo.deletedAt = now;
+      await this.balanceRepository.save(saldo);
+      removidos += 1;
+    }
+
+    return { arquivados, removidos };
   }
 
   async getBalanceHistory(

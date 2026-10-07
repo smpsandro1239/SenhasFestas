@@ -9,7 +9,7 @@ import { NotificationService } from '../../services/notification.service';
 import { MovementType } from '../../entities';
 import { centavos, soma, subtrai } from '../../common/money';
 import { reembolsarSaldoEmTransacao, temSaldoParaReembolsar } from '../../common/order-refund';
-import { assertPodeMexerEmSaldo } from '../../common/balance-guard';
+import { assertPodeMexerEmSaldo, assertSaldoUtilizavel } from '../../common/balance-guard';
 import { EventService } from '../event/event.service';
 
 @Injectable()
@@ -168,6 +168,11 @@ export class OrderService {
     if (!balance) {
       throw new NotFoundException('Saldo não encontrado');
     }
+    assertSaldoUtilizavel({
+      archivedAt: balance.archivedAt,
+      extendedUntil: balance.extendedUntil,
+      event: balanceCtx.event,
+    });
     if (centavos(Number(balance.currentBalance)) < centavos(amount)) {
       throw new ForbiddenException('Saldo insuficiente');
     }

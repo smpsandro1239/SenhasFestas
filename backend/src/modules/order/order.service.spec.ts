@@ -206,6 +206,58 @@ describe('OrderService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
     ).rejects.toThrow('Não pode usar o saldo de outro utilizador');
   });
 
+  it('pedido com saldo arquivado → 409 Saldo indisponível', async () => {
+    const eventRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'evt1', status: 'active' }),
+    };
+    const eventUserRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'm1' }),
+    };
+    const manager = {
+      find: vi.fn().mockResolvedValue([{ id: 'p1', price: 100, isActive: true, event: { id: 'evt1' } }]),
+      create: vi.fn().mockImplementation((_entity: any, data: any) => data),
+      save: vi.fn().mockImplementation((_entity: any, data: any) => Promise.resolve(data)),
+      findOne: vi.fn().mockResolvedValue({
+        id: 'b1',
+        currentBalance: 100,
+        archivedAt: new Date('2026-10-02T10:00:00Z'),
+        user: { id: 'u1' },
+        event: { id: 'evt1', endDate: '2026-09-01', balanceGraceDays: 3 },
+      }),
+    };
+    const dataSource = {
+      transaction: vi.fn().mockImplementation(async (fn: any) => fn(manager)),
+    };
+    const svc = new OrderService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      eventRepository as any,
+      eventUserRepository as any,
+      dataSource as any,
+      { generateOrderQRCode: vi.fn().mockResolvedValue('qr') } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+      { notifyNewOrder: vi.fn().mockResolvedValue(undefined) } as any,
+      { assertEventOperavel: vi.fn() } as any,
+    );
+
+    await expect(
+      svc.create(
+        { id: 'u1', role: 'client' },
+        {
+          eventId: 'evt1',
+          items: [{ productId: 'p1', quantity: 1 }],
+          source: 'qr',
+          paymentMethod: 'balance',
+          balanceId: 'b1',
+          balanceUsed: 100,
+        } as any,
+      ),
+    ).rejects.toThrow('Saldo indisponível desde');
+  });
+
   it('cashier pode cancelar pedido com saldo via updateStatus', async () => {
     const orderRepository = {
       findOne: vi.fn().mockResolvedValue({

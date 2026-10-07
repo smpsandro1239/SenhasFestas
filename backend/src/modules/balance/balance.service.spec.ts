@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, ConflictException } from '@nestjs/common';
 import { BalanceService } from './balance.service';
 import { EventService } from '../event/event.service';
 
@@ -243,6 +243,163 @@ describe('BalanceService — guard de janela operacional', () => {
 
       expect(resultado.reversedMovementId).toBe('mov1');
       expect(resultado.eventId).toBe('evtA');
+    });
+  });
+
+  describe('arquivamento de saldo (Parte 2)', () => {
+    const eventoExpirado = { id: 'evt1', endDate: '2026-09-01', balanceGraceDays: 3 };
+
+    function managerComSaldo(balance: any) {
+      return {
+        findOne: vi.fn().mockImplementation((entity: any, opts: any) => {
+          const name = entity?.name;
+          if (name === 'BalanceMovementEntity' && opts?.where?.id === 'mov1') {
+            return Promise.resolve({
+              id: 'mov1',
+              reversed: false,
+              amount: 10,
+              type: 'load',
+              balance: { id: balance.id, user: { id: 'u1' }, event: eventoExpirado },
+            });
+          }
+          if (name === 'BalanceEntity') return Promise.resolve(balance);
+          if (name === 'EventEntity') return Promise.resolve(balance.event ?? null);
+          if (name === 'EventUserEntity') return Promise.resolve({ id: 'm1' });
+          return Promise.resolve(null);
+        }),
+        save: vi.fn().mockImplementation((_e: any, entity: any) => Promise.resolve(entity)),
+        create: vi.fn().mockImplementation((_e: any, data: any) => data),
+      };
+    }
+
+    function serviceCom(balanceRepository: any) {
+      return new BalanceService(
+        balanceRepository,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        { transaction: vi.fn() } as any,
+        eventService,
+      );
+    }
+
+    it('deductBalance RECUSA consumo de saldo arquivado → 409', async () => {
+      const balance = {
+        id: 'b1',
+        currentBalance: 50,
+        archivedAt: new Date('2026-10-02T10:00:00Z'),
+        event: eventoExpirado,
+      };
+      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) =>
+        fn(managerComSaldo(balance)),
+      );
+
+      await expect(
+        balanceService.deductBalance('u1', { amount: 10, eventId: 'evt1' } as any, { id: 'staff' }),
+      ).rejects.toThrow('Saldo indisponível desde');
+    });
+
+    it('deductBalance RECUSA consumo quando o prazo venceu, mesmo sem archivedAt (lazy)', async () => {
+      const balance = { id: 'b1', currentBalance: 50, archivedAt: null, event: eventoExpirado };
+      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) =>
+        fn(managerComSaldo(balance)),
+      );
+
+      await expect(
+        balanceService.deductBalance('u1', { amount: 10, eventId: 'evt1' } as any, { id: 'staff' }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('deductBalance PERMITE consumo quando extendedUntil adia o fim do prazo', async () => {
+      const balance = {
+        id: 'b1',
+        currentBalance: 50,
+        archivedAt: null,
+        extendedUntil: new Date('2099-01-01T00:00:00Z'),
+        event: eventoExpirado,
+      };
+      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) =>
+        fn(managerComSaldo(balance)),
+      );
+
+      const resultado = await balanceService.deductBalance(
+        'u1',
+        { amount: 10, eventId: 'evt1' } as any,
+        { id: 'staff' },
+      );
+
+      expect(resultado.currentBalance).toBe(40);
+    });
+
+    it('loadBalance RECUSA carregar saldo arquivado → 409 (evita dinheiro preso)', async () => {
+      const balance = {
+        id: 'b1',
+        currentBalance: 50,
+        archivedAt: new Date('2026-10-02T10:00:00Z'),
+        event: eventoExpirado,
+      };
+      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) =>
+        fn(managerComSaldo(balance)),
+      );
+
+      await expect(
+        balanceService.loadBalance('u1', { amount: 10, eventId: 'evt1' } as any, { id: 'staff' }),
+      ).rejects.toThrow('Saldo indisponível desde');
+    });
+
+    it('reverseLoad CONTINUA PERMITIDO com saldo arquivado (estorno é sempre possível)', async () => {
+      const balance = {
+        id: 'b1',
+        currentBalance: 100,
+        archivedAt: new Date('2026-10-02T10:00:00Z'),
+        event: eventoExpirado,
+      };
+      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) =>
+        fn(managerComSaldo(balance)),
+      );
+
+      const resultado = await balanceService.reverseLoad('u1', 'mov1', { id: 'root', role: 'superadmin' }, {} as any);
+
+      expect(resultado.reversedMovementId).toBe('mov1');
+      expect(resultado.balance.currentBalance).toBe(90);
+    });
+
+    it('archiveExpiredBalances arquiva vencidos, ignora os vigentes e soft-deleta os arquivados há 30+ dias', async () => {
+      const vencido = {
+        id: 'b1',
+        currentBalance: 10,
+        archivedAt: null,
+        deletedAt: null,
+        event: eventoExpirado,
+      };
+      const vigente = {
+        id: 'b2',
+        currentBalance: 20,
+        archivedAt: null,
+        deletedAt: null,
+        event: { id: 'evt2', endDate: '2099-12-31', balanceGraceDays: 3 },
+      };
+      const antigo = {
+        id: 'b3',
+        currentBalance: 5,
+        archivedAt: new Date('2026-08-01T10:00:00Z'),
+        deletedAt: null,
+        event: eventoExpirado,
+      };
+      const balanceRepository = {
+        find: vi.fn().mockResolvedValue([vencido, vigente, antigo]),
+        save: vi.fn().mockImplementation((entity: any) => Promise.resolve(entity)),
+      };
+      const service = serviceCom(balanceRepository);
+
+      const resultado = await service.archiveExpiredBalances();
+
+      expect(resultado).toEqual({ arquivados: 1, removidos: 1 });
+      const guardados = balanceRepository.save.mock.calls.map((c: any[]) => c[0]);
+      expect(guardados.map((b: any) => b.id)).toEqual(['b1', 'b3']);
+      expect(guardados[0].archivedAt).toBeInstanceOf(Date);
+      expect(guardados[1].deletedAt).toBeInstanceOf(Date);
     });
   });
 });

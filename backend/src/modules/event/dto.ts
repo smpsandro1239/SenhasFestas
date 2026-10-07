@@ -30,6 +30,13 @@ export class CreateEventDto {
   @IsString()
   @IsOptional()
   organization?: string;
+
+  // Dias após o fim da janela operacional em que os saldos ficam inutilizáveis.
+  @IsNumber()
+  @Min(0)
+  @Max(60)
+  @IsOptional()
+  balanceGraceDays?: number;
 }
 
 export class UpdateEventDto {
@@ -56,6 +63,12 @@ export class UpdateEventDto {
   @IsString()
   @IsOptional()
   organization?: string;
+
+  @IsNumber()
+  @Min(0)
+  @Max(60)
+  @IsOptional()
+  balanceGraceDays?: number;
 }
 
 export class UpdateEventStatusDto {

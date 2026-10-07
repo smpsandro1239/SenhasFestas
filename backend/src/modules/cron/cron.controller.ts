@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Headers, ForbiddenException, Logger } from '@nestjs/common';
 import { EventService } from '../event/event.service';
+import { BalanceService } from '../balance/balance.service';
 
 const CRON_SECRET_ENV = 'CRON_SECRET';
 
@@ -12,7 +13,10 @@ const CRON_SECRET_ENV = 'CRON_SECRET';
 export class CronController {
   private readonly logger = new Logger(CronController.name);
 
-  constructor(private readonly eventService: EventService) {}
+  constructor(
+    private readonly eventService: EventService,
+    private readonly balanceService: BalanceService,
+  ) {}
 
   @Get('close-events')
   async closeEvents(
@@ -31,6 +35,27 @@ export class CronController {
     @Headers('x-cron-secret') secret?: string,
   ): Promise<{ fechados: number }> {
     return this.closeEvents(authorization, secret);
+  }
+
+  @Get('archive-balances')
+  async archiveBalances(
+    @Headers('authorization') authorization?: string,
+    @Headers('x-cron-secret') secret?: string,
+  ): Promise<{ arquivados: number; removidos: number }> {
+    this.assertAutorizado(authorization, secret);
+    const resultado = await this.balanceService.archiveExpiredBalances();
+    this.logger.log(
+      `Cron archive-balances executado: ${resultado.arquivados} arquivado(s), ${resultado.removidos} removido(s)`,
+    );
+    return resultado;
+  }
+
+  @Post('archive-balances')
+  async archiveBalancesPost(
+    @Headers('authorization') authorization?: string,
+    @Headers('x-cron-secret') secret?: string,
+  ): Promise<{ arquivados: number; removidos: number }> {
+    return this.archiveBalances(authorization, secret);
   }
 
   private assertAutorizado(authorization?: string, secret?: string): void {

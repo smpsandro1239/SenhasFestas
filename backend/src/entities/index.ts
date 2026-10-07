@@ -66,8 +66,16 @@ export class EventEntity {
   @Column({ type: 'timestamp' })
   startDate: Date;
 
-  @Column({ type: 'timestamp' })
+  @Column({
+    type: 'timestamp',
+    nullable: true,
+  })
   endDate: Date;
+
+  // Dias após o fim da janela operacional em que os saldos do evento ficam
+  // inutilizáveis (arquivamento automático).
+  @Column({ type: 'int', default: 3 })
+  balanceGraceDays: number;
 
   @Column({ nullable: true })
   location?: string;
@@ -221,6 +229,18 @@ export class BalanceEntity {
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   currentBalance: number;
+
+  // Arquivamento (interpretação C): saldo inutilizável mas visível e reversível.
+  @Column({ type: 'timestamp', nullable: true })
+  archivedAt?: Date | null;
+
+  // Extensão manual do prazo pelo organizador (tem prioridade sobre o cálculo).
+  @Column({ type: 'timestamp', nullable: true })
+  extendedUntil?: Date | null;
+
+  // Soft-delete: 30 dias após o arquivamento, escondido das consultas padrão.
+  @DeleteDateColumn()
+  deletedAt?: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;
