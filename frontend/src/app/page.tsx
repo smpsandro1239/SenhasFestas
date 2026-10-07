@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/layout/page-header';
 import { StatCard } from '@/components/ui/stat-card';
 import { Card } from '@/components/ui/card';
 import { Alert } from '@/components/ui/alert';
+import { SaldoAviso } from '@/components/saldo-aviso';
 import {
   ClipboardIcon,
   ChefHatIcon,
@@ -159,6 +160,8 @@ function HomeContent() {
             <Alert variant="warning" message={error} />
           </div>
         )}
+
+        {!isStaff && <SaldoAviso />}
 
         {/* Stats grid (apenas staff) */}
         {isStaff && (

@@ -12,6 +12,7 @@ import { cn } from '@/lib/cn';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
 import { getBalance, loadBalance, getMe } from '@/lib/api';
+import { SaldoAviso } from '@/components/saldo-aviso';
 import { QRCodeSVG } from 'qrcode.react';
 
 const QUICK_AMOUNTS = [5, 10, 20, 50];
@@ -97,6 +98,7 @@ function BalancePage() {
         icon={<WalletIcon className="h-5 w-5" />}
       />
       <div className="mx-auto w-full max-w-md space-y-6">
+      {!isStaff && <SaldoAviso />}
       <div className="flex items-center gap-3">
         <div className="p-2.5 rounded-xl brand-chip">
           <WalletIcon className="h-5 w-5" />
