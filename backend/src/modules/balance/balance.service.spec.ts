@@ -538,3 +538,73 @@ describe('BalanceService — guard de janela operacional', () => {
     });
   });
 });
+
+describe('BalanceService — lista de saldos pendentes com estado de arquivo/aviso', () => {
+  const evento = { id: 'evt1', endDate: '2026-10-10', balanceGraceDays: 3 };
+  const eventService = {} as any;
+
+  const build = (saldos: any[]) => {
+    const balanceRepository = { find: vi.fn().mockResolvedValue(saldos) };
+    const eventRepository = { findOne: vi.fn().mockResolvedValue(evento) };
+    const service = new BalanceService(
+      balanceRepository as any,
+      {} as any,
+      {} as any,
+      eventRepository as any,
+      {} as any,
+      { transaction: vi.fn() } as any,
+      eventService,
+    );
+    return service;
+  };
+
+  it('devolve archivedAt, notifiedAt e deadline por cliente', async () => {
+    const service = build([
+      {
+        currentBalance: 12.5,
+        archivedAt: new Date('2026-09-01T10:00:00Z'),
+        notifiedAt: new Date('2026-10-01T09:00:00Z'),
+        extendedUntil: null,
+        user: { id: 'u1', name: 'Ana', email: 'ana@x.pt' },
+      },
+      {
+        currentBalance: 5,
+        archivedAt: null,
+        notifiedAt: null,
+        extendedUntil: new Date('2026-11-01T00:00:00Z'),
+        user: { id: 'u2', name: 'Bruno' },
+      },
+    ]);
+
+    const res = await service.listSaldosPendentes('evt1', { role: 'superadmin' });
+
+    expect(res[0]).toMatchObject({
+      userId: 'u1',
+      name: 'Ana',
+      email: 'ana@x.pt',
+      balance: 12.5,
+      archivedAt: '2026-09-01T10:00:00.000Z',
+      notifiedAt: '2026-10-01T09:00:00.000Z',
+      deadline: '2026-10-14T05:00:00.000Z',
+    });
+    expect(res[1].archivedAt).toBeNull();
+    expect(res[1].notifiedAt).toBeNull();
+    expect(res[1].deadline).toBe('2026-11-01T00:00:00.000Z');
+  });
+
+  it('evento inexistente → NotFound', async () => {
+    const eventRepository = { findOne: vi.fn().mockResolvedValue(null) };
+    const service = new BalanceService(
+      {} as any,
+      {} as any,
+      {} as any,
+      eventRepository as any,
+      {} as any,
+      { transaction: vi.fn() } as any,
+      eventService,
+    );
+    await expect(
+      service.listSaldosPendentes('nao-existe', { role: 'superadmin' }),
+    ).rejects.toThrow('Evento não encontrado');
+  });
+});

@@ -417,7 +417,17 @@ export class BalanceService {
   async listSaldosPendentes(
     eventId: string,
     utilizador: any,
-  ): Promise<{ userId: string; name: string; email?: string; balance: number }[]> {
+  ): Promise<
+    {
+      userId: string;
+      name: string;
+      email?: string;
+      balance: number;
+      archivedAt: string | null;
+      notifiedAt: string | null;
+      deadline: string | null;
+    }[]
+  > {
     const evento = await this.eventRepository.findOne({ where: { id: eventId } });
     if (!evento) {
       throw new NotFoundException('Evento não encontrado');
@@ -430,12 +440,18 @@ export class BalanceService {
       relations: { user: true },
       order: { currentBalance: 'DESC' },
     });
-    return saldos.map((saldo) => ({
-      userId: saldo.user?.id,
-      name: saldo.user?.name ?? 'Cliente',
-      email: saldo.user?.email,
-      balance: Number(saldo.currentBalance),
-    }));
+    return saldos.map((saldo) => {
+      const deadline = saldoDeadlineUtc(evento, saldo.extendedUntil);
+      return {
+        userId: saldo.user?.id,
+        name: saldo.user?.name ?? 'Cliente',
+        email: saldo.user?.email,
+        balance: Number(saldo.currentBalance),
+        archivedAt: saldo.archivedAt ? saldo.archivedAt.toISOString() : null,
+        notifiedAt: saldo.notifiedAt ? saldo.notifiedAt.toISOString() : null,
+        deadline: deadline ? deadline.toISOString() : null,
+      };
+    });
   }
 
   async getBalance(
