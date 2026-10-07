@@ -275,6 +275,27 @@ export async function getOutstandingBalances(eventId: string): Promise<any> {
   return apiRequest(`/balances/event/${eventId}/outstanding`);
 }
 
+export async function extendBalance(userId: string, body: { eventId: string; until: string }): Promise<any> {
+  return apiRequest(`/balances/${userId}/extend`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function unarchiveBalance(userId: string, eventId: string): Promise<any> {
+  return apiRequest(`/balances/${userId}/unarchive`, {
+    method: 'POST',
+    body: JSON.stringify({ eventId }),
+  });
+}
+
+export async function markBalanceNotified(userId: string, eventId: string): Promise<any> {
+  return apiRequest(`/balances/${userId}/notified`, {
+    method: 'POST',
+    body: JSON.stringify({ eventId }),
+  });
+}
+
 export async function getKitchenOrders(query?: string): Promise<any> {
   return apiRequest(`/kitchen/pedidos${query ? `?${query}` : ''}`);
 }

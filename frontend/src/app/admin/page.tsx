@@ -14,7 +14,7 @@ import { Alert } from '@/components/ui/alert';
 import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon, PencilIcon, TrashIcon, CopyIcon, WalletIcon } from '@/components/ui/icons';
 import { Dialog } from '@/components/ui/dialog';
 import { deveAvisarSessao, marcarAvisoSessao } from '@/lib/saldo-aviso';
-import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances, getReports } from '@/lib/api';
+import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances, getReports, extendBalance, unarchiveBalance, markBalanceNotified } from '@/lib/api';
 import { downloadTextFile } from '@/lib/download';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
@@ -87,6 +87,7 @@ export default function AdminPage() {
   const [outstandingBalances, setOutstandingBalances] = useState<any[]>([]);
   const [outstandingLoading, setOutstandingLoading] = useState(false);
   const [outstandingTotal, setOutstandingTotal] = useState(0);
+  const [balanceActionUserId, setBalanceActionUserId] = useState('');
   const [expiring, setExpiring] = useState<any>(null);
   const [expiringLoading, setExpiringLoading] = useState(false);
   const [expiringError, setExpiringError] = useState('');
@@ -584,6 +585,33 @@ export default function AdminPage() {
     }
   };
 
+  const runBalanceAction = async (userId: string, acao: () => Promise<any>) => {
+    if (!outstandingEventId) return;
+    setBalanceActionUserId(userId);
+    setError('');
+    try {
+      await acao();
+      await loadOutstanding(outstandingEventId);
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro na operação de saldo');
+    } finally {
+      setBalanceActionUserId('');
+    }
+  };
+
+  const handleExtend = (userId: string) => {
+    const until = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    return runBalanceAction(userId, () =>
+      extendBalance(userId, { eventId: outstandingEventId, until }),
+    );
+  };
+
+  const handleUnarchive = (userId: string) =>
+    runBalanceAction(userId, () => unarchiveBalance(userId, outstandingEventId));
+
+  const handleNotified = (userId: string) =>
+    runBalanceAction(userId, () => markBalanceNotified(userId, outstandingEventId));
+
   const loadBalances = useCallback(async () => {
     if (!balancesEventId) {
       setBalancesData(null);
@@ -929,12 +957,63 @@ export default function AdminPage() {
                           </Badge>
                         </div>
                         <div className="space-y-2 pt-2 max-h-72 overflow-y-auto">
-                          {outstandingBalances.map((s: any) => (
-                            <Card key={s.userId} padding="sm" className="flex items-center justify-between bg-surface">
-                              <span className="text-sm text-zinc-200">{s.name}</span>
-                              <Badge variant="success">€{Number(s.balance).toFixed(2)}</Badge>
-                            </Card>
-                          ))}
+                          {outstandingBalances.map((s: any) => {
+                            const busy = balanceActionUserId === s.userId;
+                            return (
+                              <Card key={s.userId} padding="sm" className="flex items-center justify-between gap-3 bg-surface">
+                                <div className="min-w-0">
+                                  <span className="text-sm text-zinc-200">{s.name}</span>
+                                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                    {s.archivedAt ? (
+                                      <Badge variant="danger">Arquivado</Badge>
+                                    ) : null}
+                                    {s.notifiedAt ? (
+                                      <Badge variant="info">
+                                        Avisado {new Date(s.notifiedAt).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' })}
+                                      </Badge>
+                                    ) : null}
+                                    {s.deadline ? (
+                                      <span className="text-xs text-zinc-500">
+                                        expira em {new Date(s.deadline).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="success">€{Number(s.balance).toFixed(2)}</Badge>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    loading={busy}
+                                    disabled={busy}
+                                    onClick={() => handleExtend(s.userId)}
+                                  >
+                                    Estender +7d
+                                  </Button>
+                                  {s.archivedAt ? (
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      loading={busy}
+                                      disabled={busy}
+                                      onClick={() => handleUnarchive(s.userId)}
+                                    >
+                                      Desarquivar
+                                    </Button>
+                                  ) : null}
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    loading={busy}
+                                    disabled={busy}
+                                    onClick={() => handleNotified(s.userId)}
+                                  >
+                                    Marcar avisado
+                                  </Button>
+                                </div>
+                              </Card>
+                            );
+                          })}
                         </div>
                       </>
                     )}
