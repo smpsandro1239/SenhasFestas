@@ -87,6 +87,116 @@ function makeService(mocks: {
   );
 }
 
+describe('ReportsService — Parte 3: expiring-balances', () => {
+  function balanceRepoCom(rows: any[]) {
+    return {
+      createQueryBuilder: vi.fn().mockReturnValue({
+        leftJoinAndSelect: vi.fn().mockReturnThis(),
+        leftJoin: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        andWhere: vi.fn().mockReturnThis(),
+        getMany: vi.fn().mockResolvedValue(rows),
+      } as any),
+    };
+  }
+
+  const agora = new Date('2026-10-07T12:00:00.000Z');
+
+  const linhas = [
+    {
+      id: 'b1',
+      currentBalance: 20,
+      archivedAt: null,
+      extendedUntil: null,
+      user: { id: 'u1', name: 'Ana' },
+      event: { id: 'evt1', name: 'Festa A', endDate: '2026-10-10', balanceGraceDays: 3 },
+    },
+    {
+      id: 'b2',
+      currentBalance: 35,
+      archivedAt: null,
+      extendedUntil: null,
+      user: { id: 'u2', name: 'Rui' },
+      event: { id: 'evt2', name: 'Festa B', endDate: '2026-10-09', balanceGraceDays: 3 },
+    },
+    {
+      id: 'b3',
+      currentBalance: 10,
+      archivedAt: null,
+      extendedUntil: null,
+      user: { id: 'u3', name: 'Sara' },
+      event: { id: 'evt1', name: 'Festa A', endDate: '2026-10-10', balanceGraceDays: 3 },
+    },
+    {
+      id: 'b4',
+      currentBalance: 99,
+      archivedAt: new Date('2026-10-14T05:00:00Z'),
+      extendedUntil: null,
+      user: { id: 'u4', name: 'Zé' },
+      event: { id: 'evt1', name: 'Festa A', endDate: '2026-10-10', balanceGraceDays: 3 },
+    },
+    {
+      id: 'b5',
+      currentBalance: 50,
+      archivedAt: null,
+      extendedUntil: null,
+      user: { id: 'u5', name: 'Longe' },
+      event: { id: 'evt3', name: 'Festa Longe', endDate: '2027-01-01', balanceGraceDays: 3 },
+    },
+    {
+      id: 'b6',
+      currentBalance: 60,
+      archivedAt: null,
+      extendedUntil: null,
+      user: { id: 'u6', name: 'Passado' },
+      event: { id: 'evt4', name: 'Festa Passada', endDate: '2026-06-01', balanceGraceDays: 3 },
+    },
+  ];
+
+  function svcCom(rows: any[]) {
+    return makeService({ balanceRepository: balanceRepoCom(rows) });
+  }
+
+  it('agrupa por evento, exclui arquivados/vencidos/fora do prazo e ordena pelo prazo', async () => {
+    const res = await svcCom(linhas).obterSaldosAExpirar(
+      { dias: 7 },
+      { id: 'admin', role: 'superadmin' },
+      agora,
+    );
+
+    expect(res.eventos.map((e: any) => e.eventId)).toEqual(['evt2', 'evt1']);
+    expect(res.eventos[1].clientes).toBe(2);
+    expect(res.eventos[1].total).toBe(30);
+    expect(res.eventos[0].total).toBe(35);
+    expect(res.eventos[1].deadline).toBe('2026-10-14T05:00:00.000Z');
+    expect(res.totalClientes).toBe(3);
+    expect(res.total).toBe(65);
+  });
+
+  it('respeita limiteEventos (max 5 por omissão)', async () => {
+    const res = await svcCom(linhas).obterSaldosAExpirar(
+      { dias: 7, limiteEventos: 1 },
+      { id: 'admin', role: 'superadmin' },
+      agora,
+    );
+
+    expect(res.eventos).toHaveLength(1);
+    expect(res.eventos[0].eventId).toBe('evt2');
+  });
+
+  it('só devolve eventos dentro da janela de dias', async () => {
+    const res = await svcCom(linhas).obterSaldosAExpirar(
+      { dias: 6 },
+      { id: 'admin', role: 'superadmin' },
+      agora,
+    );
+
+    // prazos: evt2 2026-10-13T05:00Z (<= agora+6d = 10-13T12:00Z ✓),
+    //         evt1 2026-10-14T05:00Z (> 10-13T12:00Z ✗)
+    expect(res.eventos.map((e: any) => e.eventId)).toEqual(['evt2']);
+  });
+});
+
 describe('ReportsService — Fila B: balances', () => {
   it('retorna totais com loadedNet/consumedNet calculados a partir de cancel/refund', async () => {
     const movementRepo = {

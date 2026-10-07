@@ -2,7 +2,7 @@ import { Controller, Get, Query, UseGuards, Request, Res } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport';
 import { Response } from 'express';
 import { ReportsService } from './reports.service';
-import { OrdensQueryDto, SaldoQueryDto, TopProductsQueryDto, TotalQueryDto, BalancesQueryDto } from './dto';
+import { OrdensQueryDto, SaldoQueryDto, TopProductsQueryDto, TotalQueryDto, BalancesQueryDto, ExpirandoQueryDto } from './dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { FINANCE_ROLES } from '../../common/roles';
@@ -73,5 +73,11 @@ export class ReportsController {
   @Roles(...FINANCE_ROLES)
   async balances(@Query() filters: BalancesQueryDto, @Request() req: any) {
     return this.reportsService.obterBalancesPorEvento(filters, req.user);
+  }
+
+  @Get('expiring-balances')
+  @Roles(...FINANCE_ROLES)
+  async expiringBalances(@Query() filters: ExpirandoQueryDto, @Request() req: any) {
+    return this.reportsService.obterSaldosAExpirar(filters, req.user);
   }
 }

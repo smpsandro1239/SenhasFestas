@@ -95,3 +95,23 @@ export class BalancesQueryDto {
   @MaxLength(100)
   q?: string;
 }
+
+export class ExpirandoQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(60)
+  dias: number = 7;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  limiteEventos: number = 5;
+
+  @IsUUID()
+  @IsOptional()
+  eventId?: string;
+}

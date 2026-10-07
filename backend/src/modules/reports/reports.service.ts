@@ -4,9 +4,11 @@ import { Repository, SelectQueryBuilder } from 'typeorm';
 import { OrderEntity, OrderItemEntity, BalanceMovementEntity, BalanceEntity } from '../../entities';
 import { MembershipService } from '../../common/membership.service';
 import { sanitizarCelulaCsv } from '../../common/csv';
+import { saldoDeadlineUtc } from '../../common/balance-guard';
 import { OrdensQueryDto, SaldoQueryDto, TopProductsQueryDto, TotalQueryDto } from './dto';
 
 const LIMITE_EXPORTACAO = 5000;
+const DIA_MS = 86_400_000;
 
 @Injectable()
 export class ReportsService {
@@ -423,6 +425,100 @@ export class ReportsService {
     if (loadedNet < 0) loadedNet = 0;
     if (consumedNet < 0) consumedNet = 0;
     return { eventId: filters?.eventId, items, totals: { loadedGross, loadedNet, consumedGross, consumedNet }, movementCount: countMov };
+  }
+
+  /**
+   * Saldos com prazo a vencer dentro de `dias`, agrupados por evento
+   * (secção/popup "Saldos a expirar"). O prazo não é calculável em SQL
+   * (fuso Europe/Lisbon) — a filtragem final é feita em memória.
+   */
+  async obterSaldosAExpirar(
+    filters: { dias?: number; limiteEventos?: number; eventId?: string } | undefined,
+    utilizador: any,
+    now: Date = new Date(),
+  ) {
+    const dias =
+      Number.isFinite(filters?.dias) && (filters as any).dias >= 1
+        ? Math.min((filters as any).dias, 60)
+        : 7;
+    const limiteEventos =
+      Number.isFinite(filters?.limiteEventos) && (filters as any).limiteEventos >= 1
+        ? Math.min((filters as any).limiteEventos, 20)
+        : 5;
+
+    const eventIds = await this.membershipService.eventIdsFor(utilizador);
+    const scope = this.membershipService.eventColumnFor(eventIds, filters?.eventId);
+
+    // Prazo futuro implica endDate >= agora - (grace máx. 60d + 1d da janela),
+    // a menos que exista extensão manual.
+    const cutoff = new Date(now.getTime() - 62 * DIA_MS);
+    const query = this.balanceRepository
+      .createQueryBuilder('saldo')
+      .leftJoinAndSelect('saldo.event', 'evento')
+      .leftJoinAndSelect('saldo.user', 'usuario')
+      .where('saldo.archivedAt IS NULL')
+      .andWhere('saldo.currentBalance > 0')
+      .andWhere('(evento.endDate IS NULL OR evento.endDate >= :cutoff OR saldo.extendedUntil >= :agora)', {
+        cutoff,
+        agora: now,
+      });
+    if (scope) {
+      if (String(scope.column).includes('IN')) {
+        query.andWhere('saldo.eventId IN (:...scopeEventIds)', scope.params);
+      } else {
+        query.andWhere('saldo.' + scope.column, scope.params);
+      }
+    }
+    const rows = await query.getMany();
+
+    const fim = now.getTime() + dias * DIA_MS;
+    const porEvento = new Map<string, any>();
+    for (const saldo of rows) {
+      if (saldo.archivedAt || Number(saldo.currentBalance) <= 0 || !saldo.event?.id) {
+        continue;
+      }
+      const deadline = saldoDeadlineUtc(saldo.event, saldo.extendedUntil);
+      if (!deadline) {
+        continue;
+      }
+      const t = deadline.getTime();
+      if (t < now.getTime() || t > fim) {
+        continue;
+      }
+      let item = porEvento.get(saldo.event.id);
+      if (!item) {
+        item = {
+          eventId: saldo.event.id,
+          nome: saldo.event.name,
+          endDate: saldo.event.endDate,
+          deadline: deadline.toISOString(),
+          diasRestantes: Math.max(0, Math.ceil((t - now.getTime()) / DIA_MS)),
+          clientes: 0,
+          total: 0,
+          _usuarios: new Set<string>(),
+        };
+        porEvento.set(saldo.event.id, item);
+      }
+      const userId = saldo.user?.id;
+      if (userId && !item._usuarios.has(userId)) {
+        item._usuarios.add(userId);
+        item.clientes += 1;
+      }
+      item.total += Number(saldo.currentBalance) || 0;
+    }
+
+    const eventos = Array.from(porEvento.values())
+      .map(({ _usuarios, ...item }) => ({ ...item, total: Math.round(item.total * 100) / 100 }))
+      .sort((a, b) => a.deadline.localeCompare(b.deadline))
+      .slice(0, limiteEventos);
+
+    return {
+      dias,
+      agora: now.toISOString(),
+      eventos,
+      totalClientes: eventos.reduce((s, e) => s + e.clientes, 0),
+      total: Math.round(eventos.reduce((s, e) => s + e.total, 0) * 100) / 100,
+    };
   }
 
 }
