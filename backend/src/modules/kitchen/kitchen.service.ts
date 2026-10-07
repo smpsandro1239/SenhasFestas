@@ -103,7 +103,7 @@ export class KitchenService {
       const salvo = await manager.save(OrderEntity, atual);
 
       if (novoEstado === 'cancelled') {
-        await reembolsarSaldoEmTransacao(manager, atual);
+        await reembolsarSaldoEmTransacao(manager, atual, utilizador?.id);
       }
 
       return salvo;

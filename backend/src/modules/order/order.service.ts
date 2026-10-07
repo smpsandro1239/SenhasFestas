@@ -327,7 +327,7 @@ export class OrderService {
       currentOrder.status = 'cancelled';
       const updatedOrder = await manager.save(OrderEntity, currentOrder);
 
-      await reembolsarSaldoEmTransacao(manager, currentOrder);
+      await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
 
       return updatedOrder;
     });
@@ -385,7 +385,7 @@ export class OrderService {
         if (temSaldoParaReembolsar(currentOrder)) {
           assertPodeMexerEmSaldo(user);
         }
-        await reembolsarSaldoEmTransacao(manager, currentOrder);
+        await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
       }
 
       return updated;
@@ -411,4 +411,4 @@ export class OrderService {
 
     return savedOrder;
   }
-}
+}

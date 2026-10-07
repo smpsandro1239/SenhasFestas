@@ -14,6 +14,7 @@ export function temSaldoParaReembolsar(order: OrderEntity): boolean {
 export async function reembolsarSaldoEmTransacao(
   manager: import('typeorm').EntityManager,
   order: OrderEntity,
+  actorId?: string,
 ): Promise<void> {
   if (!temSaldoParaReembolsar(order)) {
     return;
@@ -34,6 +35,7 @@ export async function reembolsarSaldoEmTransacao(
     amount: centavos(Number(order.balanceUsed)),
     orderId: order.id,
     description: 'Reembolso por cancelamento',
+    createdById: actorId,
   });
   await manager.save(BalanceMovementEntity, refund);
 }
