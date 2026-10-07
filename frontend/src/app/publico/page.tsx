@@ -63,6 +63,7 @@ function PublicoPage() {
   });
   const [error, setError] = useState('');
   const [eventSubtitle, setEventSubtitle] = useState<string | null>(null);
+  const [saldoPrazo, setSaldoPrazo] = useState<string | null>(null);
 
   useEffect(() => {
     if (!eventId) return;
@@ -82,6 +83,16 @@ function PublicoPage() {
             })
           : '';
         setEventSubtitle(start ? `${e.name} • ${start}` : e.name);
+        if (e.endDate) {
+          const toleranciaDias = typeof e.balanceGraceDays === 'number' ? e.balanceGraceDays : 3;
+          const fim = new Date(e.endDate);
+          fim.setDate(fim.getDate() + toleranciaDias);
+          setSaldoPrazo(
+            fim.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+          );
+        } else {
+          setSaldoPrazo(null);
+        }
       })
       .catch(() => undefined);
   }, [eventId]);
@@ -259,11 +270,14 @@ function PublicoPage() {
         )}
 
         {/* Footer */}
-        <footer className="shrink-0 border-t border-border px-[5vw] py-[2vh] flex items-center justify-between text-[clamp(0.9rem,1.75vw,1.4rem)] text-zinc-400">
+        <footer className="shrink-0 border-t border-border px-[5vw] py-[2vh] flex items-center justify-between gap-4 text-[clamp(0.9rem,1.75vw,1.4rem)] text-zinc-400">
           <span className="flex items-center gap-3">
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
             Atualização automática em tempo real
           </span>
+          {saldoPrazo && (
+            <span className="text-amber-300 font-medium">Saldo válido até {saldoPrazo}</span>
+          )}
           <span>{totalActive} pedidos ativos</span>
         </footer>
       </main>

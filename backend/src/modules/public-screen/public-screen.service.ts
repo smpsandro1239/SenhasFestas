@@ -33,7 +33,7 @@ export class PublicScreenService {
   async obterEventoPublico(eventId: string): Promise<Partial<EventEntity>> {
     const evento = await this.eventRepository.findOne({
       where: { id: eventId },
-      select: { id: true, name: true, location: true, startDate: true, endDate: true },
+      select: { id: true, name: true, location: true, startDate: true, endDate: true, balanceGraceDays: true },
     });
     if (!evento) {
       throw new NotFoundException('Evento não encontrado');
