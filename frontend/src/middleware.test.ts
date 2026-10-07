@@ -159,6 +159,7 @@ describe('middleware — com JWT_SECRET configurado (comportamento actual)', () 
 // `sincronizado` falhe se alguém mexer no middleware sem actualizar o teste.
 const LOOKAHEAD =
   '_next/static|_next/image|favicon.ico|auth(?:/|$)|publico(?:/|$)|api(?:/|$)|' +
+  'entrar(?:/|$)|' +
   '.*\\.(?:png|jpg|jpeg|svg|webp|gif|ico|css|js|txt|xml|woff2?|map|json|webmanifest)$';
 
 const PADRAO_NEXT = new RegExp(`^/((?!${LOOKAHEAD}).*)$`);
@@ -174,7 +175,7 @@ describe('matcher — exclusão de rotas', () => {
   });
 
   it('não invoca o middleware nas rotas públicas', () => {
-    for (const rota of ['/auth/login', '/auth/register', '/publico', '/publico/abc', '/api/health']) {
+    for (const rota of ['/auth/login', '/auth/register', '/publico', '/publico/abc', '/api/health', '/entrar/magusto-2026']) {
       expect(invocado(rota), `middleware ainda corre em ${rota}`).toBe(false);
     }
   });
@@ -191,7 +192,7 @@ describe('matcher — exclusão de rotas', () => {
   it('não confunde prefixos com palavras que começam igual', () => {
     // "administrador", "autenticado", "publico-alfa" e "apidocs" não são as
     // rotas públicas: a exclusa tem de respeitar o separador `/` ou o fim.
-    for (const rota of ['/administrador', '/autenticado', '/publico-alfa', '/apidocs', '/autenticacao']) {
+    for (const rota of ['/administrador', '/autenticado', '/publico-alfa', '/apidocs', '/autenticacao', '/entrada']) {
       expect(invocado(rota), `${rota} foi excluída como se fosse rota pública`).toBe(true);
     }
   });

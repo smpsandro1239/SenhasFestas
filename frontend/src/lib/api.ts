@@ -201,6 +201,13 @@ export async function register(data: any): Promise<any> {
   });
 }
 
+export async function enterEvent(eventCode: string, replace = false): Promise<any> {
+  return apiRequest('/auth/enter-event', {
+    method: 'POST',
+    body: JSON.stringify({ eventCode, replace }),
+  });
+}
+
 export async function logout(): Promise<void> {
   try {
     await apiRequest('/auth/logout', {
@@ -368,6 +375,10 @@ export async function removeEventMember(eventId: string, userId: string): Promis
 
 export async function getEvents(): Promise<any> {
   return apiRequest('/events');
+}
+
+export async function getEventByCode(shortCode: string): Promise<any> {
+  return apiRequest(`/events/by-code/${encodeURIComponent(shortCode)}`);
 }
 
 export async function createEvent(data: any): Promise<any> {

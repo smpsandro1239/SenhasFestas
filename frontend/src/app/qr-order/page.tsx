@@ -34,7 +34,9 @@ function QROrderPage() {
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [balance, setBalance] = useState<{ id?: string; balance?: number } | null>(null);
+  const [balance, setBalance] = useState<
+    { id?: string; balance?: number; archivedAt?: string | null } | null
+  >(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [placing, setPlacing] = useState(false);
@@ -121,6 +123,8 @@ function QROrderPage() {
   const getCartTotal = () => getOrderTotal(cart);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const usableBalance = Math.min(balance?.balance ?? 0, getCartTotal());
+  const semSaldo =
+    balance !== null && ((balance.balance ?? 0) <= 0 || Boolean(balance.archivedAt));
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) {
@@ -224,6 +228,17 @@ function QROrderPage() {
               Este evento já terminou e não aceita mais pedidos. Se tiver saldo por gastar,
               fale com o caixa para devolver o valor.
             </p>
+          </div>
+        ) : semSaldo ? (
+          <div className="rounded-2xl border border-zinc-800 bg-surface p-8 text-center space-y-4">
+            <h2 className="text-2xl font-bold text-zinc-50">Sem saldo para pedir</h2>
+            <Alert
+              variant="info"
+              message="Precisas de carregar saldo antes de pedir. Vai ao caixa."
+            />
+            <Button size="lg" className="w-full" onClick={() => router.push('/saldo')}>
+              Ver saldo
+            </Button>
           </div>
         ) : (
           <div className="space-y-6">
@@ -371,7 +386,7 @@ function QROrderPage() {
       </div>
 
       {/* Table modal */}
-      {showTableModal && (
+      {showTableModal && !semSaldo && (
         <div
           role="dialog"
           aria-modal="true"

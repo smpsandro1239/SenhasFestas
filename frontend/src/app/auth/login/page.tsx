@@ -27,7 +27,12 @@ export default function LoginPage() {
 
     try {
       const user = await login(email, password);
-      router.push(homeForRole(user?.role));
+      const from = new URLSearchParams(window.location.search).get('from');
+      if (from && /^\/[^\/]/.test(from)) {
+        router.push(from);
+      } else {
+        router.push(homeForRole(user?.role));
+      }
     } catch (err: any) {
       setError(err.message || 'Erro no login');
     } finally {

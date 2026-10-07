@@ -25,6 +25,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   token: string | null;
+  loading: boolean;
   login: (email: string, password: string) => Promise<User>;
   register: (data: any) => Promise<User>;
   logout: () => void;
@@ -38,6 +39,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,9 +52,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         const path = window.location.pathname;
         const isPublicPath =
-          path.startsWith('/publico') || path.startsWith('/auth') || path.startsWith('/api');
+          path.startsWith('/publico') ||
+          path.startsWith('/auth') ||
+          path.startsWith('/api') ||
+          path.startsWith('/entrar');
         destroySession(!isPublicPath);
       }
+      setLoading(false);
     })();
 
     const refreshInterval = setInterval(() => {
@@ -93,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         token,
+        loading,
         login,
         register,
         logout,
