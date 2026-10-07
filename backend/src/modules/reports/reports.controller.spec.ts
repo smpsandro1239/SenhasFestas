@@ -24,6 +24,7 @@ describe('D-2 — reports/users restritos a FINANCE_ROLES', () => {
     'metodosPagamento',
     'resumoMovimentos',
     'estatisticas',
+    'balances',
   ];
 
   it.each(endpointsReports)('reports/%s usa FINANCE_ROLES (não STAFF_ROLES)', (method) => {
@@ -52,5 +53,15 @@ describe('D-2 — reports/users restritos a FINANCE_ROLES', () => {
     expect(create).toEqual(['superadmin', 'organizer']);
     expect(update).toEqual(['superadmin']);
     expect(remove).toEqual(['superadmin']);
+  });
+});
+
+describe('ReportsController — Fila B: balances', () => {
+  it('tem roles FINANCE_ROLES em balances', () => {
+    expect(rolesDe(ReportsController, 'balances')).toEqual(FINANCE_ROLES);
+  });
+
+  it('reports/balances não usa STAFF_ROLES', () => {
+    expect(rolesDe(ReportsController, 'balances')).not.toEqual(STAFF_ROLES);
   });
 });
