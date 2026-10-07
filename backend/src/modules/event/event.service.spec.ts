@@ -16,6 +16,7 @@ const mockEventUserRepository = {
   save: vi.fn(),
   find: vi.fn(),
   delete: vi.fn(),
+  remove: vi.fn(),
 };
 
 const mockOrderRepository = {
@@ -24,6 +25,12 @@ const mockOrderRepository = {
 
 const mockCashClosureRepository = {
   count: vi.fn(),
+};
+
+const mockBalanceRepository = {
+  findOne: vi.fn(),
+  find: vi.fn(),
+  remove: vi.fn(),
 };
 
 const mockAuditService = {
@@ -44,6 +51,7 @@ describe('EventService — atribuição de funções (membership)', () => {
       mockOrderRepository as any,
       mockCashClosureRepository as any,
       mockAuditService as any,
+      mockBalanceRepository as any,
     );
     mockEventRepository.findOne.mockResolvedValue({ id: 'eventoX' });
     mockEventUserRepository.findOne
@@ -93,6 +101,7 @@ describe('EventService — autoCloseExpired (janela de datas)', () => {
       mockOrderRepository as any,
       mockCashClosureRepository as any,
       mockAuditService as any,
+      mockBalanceRepository as any,
     );
   });
 
@@ -167,6 +176,7 @@ describe('EventService — assertEventOperavel (guard de janela)', () => {
       mockOrderRepository as any,
       mockCashClosureRepository as any,
       mockAuditService as any,
+      mockBalanceRepository as any,
     );
   });
 
@@ -237,6 +247,7 @@ describe('EventService — updateStatus: não reabrir com data passada', () => {
       mockOrderRepository as any,
       mockCashClosureRepository as any,
       mockAuditService as any,
+      mockBalanceRepository as any,
     );
   });
 
@@ -268,6 +279,7 @@ describe('EventService — shortCode do evento', () => {
       mockOrderRepository as any,
       mockCashClosureRepository as any,
       mockAuditService as any,
+      mockBalanceRepository as any,
     );
     mockEventRepository.find.mockResolvedValue([]);
     mockEventRepository.create.mockImplementation((data: any) => data);
@@ -388,5 +400,92 @@ describe('EventService — shortCode do evento', () => {
     expect(mockEventRepository.findOne).toHaveBeenCalledWith({
       where: { shortCode: 'magusto-2026' },
     });
+  });
+
+});
+
+describe('EventService — entrar no evento (eventCode)', () => {
+  let service: EventService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    service = new EventService(
+      mockEventRepository as any,
+      mockEventUserRepository as any,
+      mockOrderRepository as any,
+      mockCashClosureRepository as any,
+      mockAuditService as any,
+      mockBalanceRepository as any,
+    );
+    mockEventRepository.findOne.mockResolvedValue({
+      id: 'evt2',
+      name: 'Festa',
+      shortCode: 'festa',
+    });
+    mockEventUserRepository.findOne.mockResolvedValue(null);
+    mockEventUserRepository.create.mockImplementation((data: any) => data);
+    mockEventUserRepository.save.mockImplementation(async (data: any) => ({
+      id: 'eu-novo',
+      ...data,
+    }));
+    mockEventUserRepository.find.mockResolvedValue([]);
+    mockBalanceRepository.findOne.mockResolvedValue(null);
+    mockEventUserRepository.remove.mockResolvedValue(undefined);
+  });
+
+  it('sem replace cria o vínculo e devolve {eventId, eventName, replaces: 0}', async () => {
+    const r = await service.entrar('user1', 'festa', false);
+
+    expect(r).toEqual({ eventId: 'evt2', eventName: 'Festa', replaces: 0 });
+    expect(mockEventUserRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'client' }),
+    );
+    expect(mockBalanceRepository.findOne).not.toHaveBeenCalled();
+  });
+
+  it('já membro não duplica o vínculo', async () => {
+    mockEventUserRepository.findOne.mockResolvedValue({ id: 'eu-existente' });
+
+    const r = await service.entrar('user1', 'festa', false);
+
+    expect(r).toEqual({ eventId: 'evt2', eventName: 'Festa', replaces: 0 });
+    expect(mockEventUserRepository.create).not.toHaveBeenCalled();
+    expect(mockEventUserRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('replace com saldo positivo noutro evento → 409 nomeando o evento bloqueante', async () => {
+    mockBalanceRepository.findOne.mockResolvedValue({
+      id: 'b1',
+      currentBalance: 12.5,
+      event: { id: 'evt1', name: 'Magusto' },
+    });
+
+    const erro = await service.entrar('user1', 'festa', true).catch((e: any) => e);
+
+    expect(erro).toBeInstanceOf(ConflictException);
+    expect(erro.message).toContain('Magusto');
+    expect(mockEventUserRepository.remove).not.toHaveBeenCalled();
+    expect(mockEventUserRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('replace sem saldo remove os memberships anteriores e devolve replaces', async () => {
+    const anteriores = [{ id: 'eu-old1' }, { id: 'eu-old2' }];
+    mockEventUserRepository.find.mockResolvedValue(anteriores);
+
+    const r = await service.entrar('user1', 'festa', true);
+
+    expect(r).toEqual({ eventId: 'evt2', eventName: 'Festa', replaces: 2 });
+    expect(mockBalanceRepository.findOne).toHaveBeenCalled();
+    expect(mockEventUserRepository.remove).toHaveBeenCalledWith(anteriores);
+    expect(mockEventUserRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'client' }),
+    );
+  });
+
+  it('código desconhecido → 404', async () => {
+    mockEventRepository.findOne.mockResolvedValue(null);
+    await expect(service.entrar('user1', 'naoexiste', false)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

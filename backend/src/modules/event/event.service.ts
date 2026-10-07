@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, Not, MoreThan } from 'typeorm';
 import { randomUUID } from 'node:crypto';
 import {
   EventEntity,
@@ -14,6 +14,7 @@ import {
   UserEntity,
   OrderEntity,
   CashClosureEntity,
+  BalanceEntity,
 } from '../../entities';
 import { CreateEventDto, UpdateEventDto, AddMemberDto, EventSettingsDto } from './dto';
 import { AuditService } from '../audit/audit.service';
@@ -37,6 +38,8 @@ export class EventService {
     @InjectRepository(CashClosureEntity)
     private readonly cashClosureRepository: Repository<CashClosureEntity>,
     private readonly auditService: AuditService,
+    @InjectRepository(BalanceEntity)
+    private readonly balanceRepository: Repository<BalanceEntity>,
   ) {}
 
   async findByUser(user: any): Promise<EventEntity[]> {
@@ -183,6 +186,56 @@ export class EventService {
       throw new NotFoundException('Evento não encontrado');
     }
     return { id: event.id, name: event.name, shortCode: event.shortCode };
+  }
+
+  async vincularCliente(userId: string, eventId: string): Promise<void> {
+    const existente = await this.eventUserRepository.findOne({
+      where: { event: { id: eventId }, user: { id: userId } },
+    });
+    if (!existente) {
+      await this.addUserRole(eventId, userId, 'client');
+    }
+  }
+
+  async entrar(
+    userId: string,
+    eventCode: string,
+    replace: boolean,
+  ): Promise<{ eventId: string; eventName: string; replaces: number }> {
+    const evento = await this.findByCode(eventCode);
+    const membroAtual = await this.eventUserRepository.findOne({
+      where: { event: { id: evento.id }, user: { id: userId } },
+    });
+
+    let replaces = 0;
+    if (replace) {
+      const saldoNoutroEvento = await this.balanceRepository.findOne({
+        where: {
+          user: { id: userId },
+          event: { id: Not(evento.id) },
+          currentBalance: MoreThan(0),
+        },
+        relations: { event: true },
+      });
+      if (saldoNoutroEvento) {
+        throw new ConflictException(
+          `Tens saldo no evento "${saldoNoutroEvento.event?.name}". Usa o QR desse evento ou esgota o saldo antes de trocar.`,
+        );
+      }
+      const anteriores = await this.eventUserRepository.find({
+        where: { user: { id: userId }, event: { id: Not(evento.id) } },
+      });
+      if (anteriores.length > 0) {
+        await this.eventUserRepository.remove(anteriores);
+        replaces = anteriores.length;
+      }
+    }
+
+    if (!membroAtual) {
+      await this.addUserRole(evento.id, userId, 'client');
+    }
+
+    return { eventId: evento.id, eventName: evento.name, replaces };
   }
 
   private validarShortCode(valor: string): string {

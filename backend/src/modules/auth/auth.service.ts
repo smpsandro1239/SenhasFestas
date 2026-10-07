@@ -1,4 +1,10 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Repository, IsNull, Brackets } from 'typeorm';
@@ -8,6 +14,7 @@ import * as crypto from 'crypto';
 import { UserEntity, RefreshTokenEntity } from '../../entities';
 import { toPublicUser } from '../../common/serializers';
 import { codigoAcessoUnico } from '../../common/access-code';
+import { EventService } from '../event/event.service';
 
 export interface JwtPayload {
   sub: string;
@@ -34,6 +41,7 @@ export class AuthService {
     @InjectRepository(RefreshTokenEntity)
     private readonly refreshTokenRepository: Repository<RefreshTokenEntity>,
     private readonly jwtService: JwtService,
+    private readonly eventService: EventService,
   ) {}
 
   private hashToken(token: string): string {
@@ -181,7 +189,20 @@ export class AuthService {
     name: string,
     role: string,
     phone?: string,
+    eventCode?: string,
   ): Promise<AuthResult> {
+    let evento: { id: string } | null = null;
+    if (eventCode !== undefined && eventCode !== null) {
+      try {
+        evento = await this.eventService.findByCode(eventCode);
+      } catch (erro) {
+        if (erro instanceof NotFoundException) {
+          throw new BadRequestException('Código de evento inválido');
+        }
+        throw erro;
+      }
+    }
+
     const existingUser = await this.userRepository.findOne({ where: { email } });
     if (existingUser) {
       throw new ConflictException('Email já em uso');
@@ -202,6 +223,10 @@ export class AuthService {
 
     const savedUser = await this.userRepository.save(user);
 
+    if (evento) {
+      await this.eventService.vincularCliente(savedUser.id, evento.id);
+    }
+
     const token = this.signAccessToken(savedUser);
     const refreshToken = await this.emitRefreshToken(savedUser.id);
 
@@ -210,6 +235,14 @@ export class AuthService {
       refreshToken,
       user: this.sanitizeUser(savedUser),
     };
+  }
+
+  async entrar(
+    user: UserEntity,
+    eventCode: string,
+    replace: boolean,
+  ): Promise<{ eventId: string; eventName: string; replaces: number }> {
+    return this.eventService.entrar(user.id, eventCode, replace);
   }
 
   async validateUser(payload: JwtPayload): Promise<UserEntity> {

@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 import { AuthController } from '../src/modules/auth/auth.controller';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { UserEntity, RefreshTokenEntity } from '../src/entities';
+import { EventService } from '../src/modules/event/event.service';
 import { JwtService } from '@nestjs/jwt';
 
 describe('AuthController', () => {
@@ -39,6 +40,14 @@ describe('AuthController', () => {
           provide: JwtService,
           useValue: {
             sign: vi.fn(() => 'test-token'),
+          },
+        },
+        {
+          provide: EventService,
+          useValue: {
+            findByCode: vi.fn(),
+            vincularCliente: vi.fn(),
+            entrar: vi.fn(),
           },
         },
       ],
@@ -92,6 +101,25 @@ describe('AuthController', () => {
       for (const call of res.cookie.mock.calls) {
         expect(call[2]).not.toHaveProperty('domain');
       }
+    });
+  });
+
+  describe('enter-event', () => {
+    it('delega para authService.entrar com replace=false por omissão', async () => {
+      vi.spyOn(service, 'entrar').mockResolvedValue({
+        eventId: 'e1',
+        eventName: 'Festa',
+        replaces: 0,
+      });
+
+      const req = { user: { id: 'u1' } };
+
+      await expect(controller.enterEvent(req as any, { eventCode: 'festa' })).resolves.toEqual({
+        eventId: 'e1',
+        eventName: 'Festa',
+        replaces: 0,
+      });
+      expect(service.entrar).toHaveBeenCalledWith({ id: 'u1' }, 'festa', false);
     });
   });
 

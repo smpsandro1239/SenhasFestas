@@ -1,6 +1,7 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Req, Res } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Req, Res, UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
-import { IsString, IsEmail, MinLength, IsOptional, IsIn } from 'class-validator';
+import { IsString, IsEmail, MinLength, IsOptional, IsIn, IsBoolean } from 'class-validator';
 import { Request, Response } from 'express';
 
 export const TOKEN_COOKIE = 'sf_token';
@@ -67,6 +68,19 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  eventCode?: string;
+}
+
+export class EnterEventDto {
+  @IsString()
+  eventCode: string;
+
+  @IsOptional()
+  @IsBoolean()
+  replace?: boolean;
 }
 
 export class RefreshTokenDto {
@@ -102,10 +116,18 @@ export class AuthController {
       registerDto.name,
       registerDto.role,
       registerDto.phone,
+      registerDto.eventCode,
     );
     definirCookieToken(res, result.token, req);
     definirCookieRefresh(res, result.refreshToken, req);
     return { token: result.token, user: result.user };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('enter-event')
+  @HttpCode(HttpStatus.OK)
+  async enterEvent(@Req() req: any, @Body() dto: EnterEventDto) {
+    return this.authService.entrar(req.user, dto.eventCode, dto.replace ?? false);
   }
 
   @Post('refresh')

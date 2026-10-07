@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { IsNull } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
@@ -15,12 +15,23 @@ const mockJwtService = {
   sign: vi.fn().mockReturnValue('signed-token'),
 };
 
+const mockEventService = {
+  findByCode: vi.fn(),
+  vincularCliente: vi.fn().mockResolvedValue(undefined),
+  entrar: vi.fn(),
+};
+
 describe('AuthService', () => {
   let service: AuthService;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new AuthService(mockRepository as any, mockRepository as any, mockJwtService as any);
+    service = new AuthService(
+      mockRepository as any,
+      mockRepository as any,
+      mockJwtService as any,
+      mockEventService as any,
+    );
   });
 
   describe('login', () => {
@@ -115,6 +126,51 @@ describe('AuthService', () => {
       await expect(
         service.register('taken@test.com', 'secret123', 'Taken', 'client'),
       ).rejects.toThrow('Email já em uso');
+    });
+  });
+
+  describe('register com eventCode', () => {
+    beforeEach(() => {
+      mockRepository.findOne.mockResolvedValue(null);
+      mockRepository.create.mockImplementation((data: any) => data);
+      mockRepository.save.mockImplementation(async (data: any) => ({
+        id: 'u9',
+        ...data,
+      }));
+    });
+
+    it('com código válido cria o utilizador e vincula-o ao evento', async () => {
+      mockEventService.findByCode.mockResolvedValue({
+        id: 'evt1',
+        name: 'Festa',
+        shortCode: 'festa',
+      });
+
+      await service.register('novo@test.com', 'secret123', 'Novo', 'client', undefined, 'festa');
+
+      expect(mockEventService.findByCode).toHaveBeenCalledWith('festa');
+      expect(mockEventService.vincularCliente).toHaveBeenCalledWith('u9', 'evt1');
+      expect(mockRepository.save).toHaveBeenCalled();
+    });
+
+    it('com código inválido devolve 400 e não persiste utilizador', async () => {
+      mockEventService.findByCode.mockRejectedValue(new NotFoundException('Evento não encontrado'));
+
+      const erro = await service
+        .register('novo@test.com', 'secret123', 'Novo', 'client', undefined, 'naoexiste')
+        .catch((e: any) => e);
+
+      expect(erro).toBeInstanceOf(BadRequestException);
+      expect(mockRepository.save).not.toHaveBeenCalled();
+      expect(mockEventService.vincularCliente).not.toHaveBeenCalled();
+    });
+
+    it('sem eventCode não toca no EventService', async () => {
+      await service.register('novo@test.com', 'secret123', 'Novo', 'client');
+
+      expect(mockEventService.findByCode).not.toHaveBeenCalled();
+      expect(mockEventService.vincularCliente).not.toHaveBeenCalled();
+      expect(mockRepository.save).toHaveBeenCalled();
     });
   });
 

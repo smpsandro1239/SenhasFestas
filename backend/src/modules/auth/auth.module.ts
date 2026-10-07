@@ -8,6 +8,7 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { BootstrapAdminService } from './bootstrap-admin.service';
 import { UserEntity, RefreshTokenEntity } from '../../entities';
+import { EventModule } from '../event/event.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { UserEntity, RefreshTokenEntity } from '../../entities';
       inject: [ConfigService],
     }),
     TypeOrmModule.forFeature([UserEntity, RefreshTokenEntity]),
+    EventModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, BootstrapAdminService],
