@@ -166,3 +166,32 @@
     animation: fade-in 0.3s ease-out both;
   }
 }
+
+/* Impressão do QR do evento (window.print no dialog do admin): só a área
+   marcada fica visível e centrada, com preto sobre branco. Fora de @layer
+   para ganhar prioridade sobre as utilities do Tailwind. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .qr-print-area,
+  .qr-print-area * {
+    visibility: visible;
+  }
+  .qr-print-area {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    margin: auto;
+    width: max-content;
+    height: max-content;
+    background: #ffffff;
+    padding: 16px;
+    border-radius: 16px;
+  }
+  .qr-print-area p {
+    color: #000000;
+  }
+}

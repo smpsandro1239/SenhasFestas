@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { QRCodeCanvas } from 'qrcode.react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { Card } from '@/components/ui/card';
@@ -73,6 +74,11 @@ export default function AdminPage() {
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [qrEvento, setQrEvento] = useState<any>(null);
+  const [linkQr, setLinkQr] = useState('');
+  const [copiadoQr, setCopiadoQr] = useState(false);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+  const copiaTimerRef = useRef<number | null>(null);
   const [eventEditing, setEventEditing] = useState<any>(null);
   const [eventEditForm, setEventEditForm] = useState({ name: '', location: '', startDate: '', endDate: '' });
   const [eventDeleting, setEventDeleting] = useState<any>(null);
@@ -653,6 +659,40 @@ export default function AdminPage() {
     }
   };
 
+  const abrirQr = (evento: any) => {
+    if (!evento?.shortCode) return;
+    if (copiaTimerRef.current) window.clearTimeout(copiaTimerRef.current);
+    setCopiadoQr(false);
+    setLinkQr(`${window.location.origin}/entrar/${evento.shortCode}`);
+    setQrEvento(evento);
+  };
+
+  const fecharQr = () => {
+    if (copiaTimerRef.current) window.clearTimeout(copiaTimerRef.current);
+    setCopiadoQr(false);
+    setQrEvento(null);
+  };
+
+  const copiarLinkQr = async () => {
+    try {
+      await navigator.clipboard.writeText(linkQr);
+      setCopiadoQr(true);
+      if (copiaTimerRef.current) window.clearTimeout(copiaTimerRef.current);
+      copiaTimerRef.current = window.setTimeout(() => setCopiadoQr(false), 1500);
+    } catch {
+      setCopiadoQr(false);
+    }
+  };
+
+  const descarregarQr = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas || !qrEvento) return;
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = `qr-${qrEvento.shortCode}.png`;
+    a.click();
+  };
+
   return (
     <>
       <title>Admin - SenhasFestas</title>
@@ -751,6 +791,11 @@ export default function AdminPage() {
                         <Button variant="outline" size="sm" onClick={() => openEditEvent(event)}>
                           Editar
                         </Button>
+                        {event.shortCode && (
+                          <Button variant="outline" size="sm" onClick={() => abrirQr(event)}>
+                            Ver QR
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -765,6 +810,40 @@ export default function AdminPage() {
                 </div>
               )}
             </Card>
+
+            <Dialog
+              open={!!qrEvento}
+              onClose={fecharQr}
+              title="QR do evento"
+              description={
+                qrEvento
+                  ? `Os clientes apontam a câmara para entrar em ${qrEvento.name}.`
+                  : undefined
+              }
+            >
+              {qrEvento && (
+                <>
+                  <div className="qr-print-area flex flex-col items-center gap-4">
+                    <p className="text-sm font-bold text-zinc-100">{qrEvento.name}</p>
+                    <div className="rounded-2xl bg-white p-4">
+                      <QRCodeCanvas ref={qrCanvasRef} value={linkQr} size={220} level="M" />
+                    </div>
+                    <p className="text-xs text-zinc-400 break-all text-center">{linkQr}</p>
+                  </div>
+                  <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                    <Button size="sm" onClick={() => window.print()}>
+                      Imprimir
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={copiarLinkQr}>
+                      {copiadoQr ? 'Copiado!' : 'Copiar link'}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={descarregarQr}>
+                      Descarregar PNG
+                    </Button>
+                  </div>
+                </>
+              )}
+            </Dialog>
 
             <Card>
               <h2 className="text-xl font-bold text-zinc-50 mb-4">Criar Evento</h2>
