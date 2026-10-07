@@ -25,7 +25,7 @@ export default function QROrderPageWrapper() {
 
 function QROrderPage() {
   const searchParams = useSearchParams();
-  const { event, loading: eventLoading } = useCurrentEvent();
+  const { event, loading: eventLoading, error: eventError } = useCurrentEvent();
   const eventId = searchParams.get('event') ?? event?.id ?? '';
   const initialTableNumber = searchParams.get('mesa') ?? searchParams.get('table') ?? '';
   const [tableNumber, setTableNumber] = useState(initialTableNumber);
@@ -250,6 +250,8 @@ function QROrderPage() {
                   <div key={i} className="shimmer h-24 rounded-2xl" />
                 ))}
               </div>
+            ) : !eventId && eventError ? (
+              <Alert variant="error" message={eventError} />
             ) : !eventId ? (
               <Alert variant="info" message="Evento não identificado. Peça o código QR da sua mesa para fazer pedidos." />
             ) : error ? (

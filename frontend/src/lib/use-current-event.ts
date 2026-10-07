@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getEvents } from './api';
+import { selecionarEventoId } from './eventos';
 
 export interface EventItem {
   id: string;
@@ -29,11 +30,10 @@ export function useCurrentEvent(): {
     getEvents()
       .then((list: EventItem[]) => {
         if (cancelled) return;
-        const active = list.filter((e) => e.status === 'active');
-        setEvents(active.length ? active : list);
-        const preferred =
-          arrayHas(urlEventId, list) ? urlEventId : active[0]?.id ?? list[0]?.id ?? null;
-        setSelectedId(preferred ?? (list[0]?.id ?? null));
+        const visiveis = list.filter((e) => e.status === 'active');
+        const eventos = visiveis.length ? visiveis : list;
+        setEvents(eventos);
+        setSelectedId(selecionarEventoId(eventos, urlEventId));
       })
       .catch(() => {
         if (!cancelled) setError('Não foi possível carregar os eventos');
@@ -49,9 +49,4 @@ export function useCurrentEvent(): {
   const event = events.find((e) => e.id === selectedId) ?? null;
 
   return { event, events, loading, error };
-}
-
-function arrayHas(id: string | null, list: EventItem[]): boolean {
-  if (!id) return false;
-  return list.some((e) => e.id === id);
 }
