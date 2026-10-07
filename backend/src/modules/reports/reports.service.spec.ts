@@ -227,4 +227,51 @@ describe('ReportsService — Fila B: balances', () => {
     expect(res.totals.consumedNet).toBe(15.0);
     expect(res.items).toHaveLength(2);
   });
+
+  function movementRepoCom() {
+    return {
+      createQueryBuilder: vi.fn().mockReturnValue({
+        leftJoin: vi.fn().mockReturnThis(),
+        leftJoinAndSelect: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        addSelect: vi.fn().mockReturnThis(),
+        groupBy: vi.fn().mockReturnThis(),
+        addGroupBy: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        andWhere: vi.fn().mockReturnThis(),
+        getRawMany: vi.fn().mockResolvedValue([]),
+        getCount: vi.fn().mockResolvedValue(0),
+      } as any),
+    };
+  }
+
+  it('com ?eventId gera o predicado completo saldo.eventId = :eventId', async () => {
+    const movementRepo = movementRepoCom();
+    const svc = makeService({ movementRepository: movementRepo });
+    await svc.obterBalancesPorEvento({ eventId: 'evt1' }, { id: 'admin', role: 'superadmin' });
+
+    const predicates = movementRepo.createQueryBuilder.mock.results[0].value.andWhere.mock.calls.map((c: any[]) => String(c[0]));
+    expect(predicates).toContainEqual('saldo.eventId = :eventId');
+    expect(predicates.some((p: string) => p === 'saldo.eventId')).toBe(false);
+  });
+
+  it('sem ?eventId e com escopo de igualdade gera o predicado completo (bug do split)', async () => {
+    const movementRepo = movementRepoCom();
+    const svc = makeService({
+      movementRepository: movementRepo,
+      membership: {
+        eventIdsFor: vi.fn().mockResolvedValue([]),
+        eventColumnFor: vi.fn().mockReturnValue({
+          column: 'eventId = :scopeNoEvent',
+          params: { scopeNoEvent: '00000000-0000-0000-0000-000000000000' },
+        }),
+        roleEfetiva: vi.fn().mockResolvedValue('cashier'),
+      },
+    });
+    await svc.obterBalancesPorEvento({}, { id: 'staff', role: 'cashier' });
+
+    const predicates = movementRepo.createQueryBuilder.mock.results[0].value.andWhere.mock.calls.map((c: any[]) => String(c[0]));
+    expect(predicates).toContainEqual('saldo.eventId = :scopeNoEvent');
+    expect(predicates.some((p: string) => p === 'saldo.eventId')).toBe(false);
+  });
 });

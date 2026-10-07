@@ -364,12 +364,7 @@ export class ReportsService {
     if (filters?.eventId) {
       query.andWhere('saldo.eventId = :eventId', { eventId: filters.eventId });
     } else if (scope) {
-      if (String(scope.column).includes('IN')) {
-        query.andWhere('saldo.eventId IN (:...scopeEventIds)', scope.params);
-      } else {
-        const col = String(scope.column).split('=')[0].trim();
-        query.andWhere('saldo.' + col, scope.params);
-      }
+      query.andWhere('saldo.' + scope.column, scope.params);
     }
     if (filters?.from) {
       query.andWhere('movimentacao.createdAt >= :desde', { desde: filters.from });
