@@ -338,4 +338,91 @@ export class ReportsService {
       total: recebidos + emPreparacao + prontos,
     };
   }
+
+  async obterBalancesPorEvento(filters: any, utilizador: any) {
+    const eventIds = await this.membershipService.eventIdsFor(utilizador);
+    const scope = this.membershipService.eventColumnFor(eventIds, filters?.eventId);
+    const query = this.movementRepository
+      .createQueryBuilder('movimentacao')
+      .leftJoin('movimentacao.balance', 'saldo')
+      .leftJoinAndSelect('saldo.user', 'usuario')
+      .select('saldo.userId', 'userId')
+      .addSelect('usuario.name', 'name')
+      .addSelect('usuario.email', 'email')
+      .addSelect('usuario.phone', 'phone')
+      .addSelect('movimentacao.type', 'tipo')
+      .addSelect('COALESCE(SUM(movimentacao.amount), 0)', 'total')
+      .addSelect('COUNT(movimentacao.id)::int', 'qty')
+      .groupBy('saldo.userId')
+      .addGroupBy('usuario.name')
+      .addGroupBy('usuario.email')
+      .addGroupBy('usuario.phone')
+      .addGroupBy('movimentacao.type')
+      .orderBy('usuario.name', 'ASC');
+    if (filters?.eventId) {
+      query.andWhere('saldo.eventId = :eventId', { eventId: filters.eventId });
+    } else if (scope) {
+      if (String(scope.column).includes('IN')) {
+        query.andWhere('saldo.eventId IN (:...scopeEventIds)', scope.params);
+      } else {
+        const col = String(scope.column).split('=')[0].trim();
+        query.andWhere('saldo.' + col, scope.params);
+      }
+    }
+    if (filters?.from) {
+      query.andWhere('movimentacao.createdAt >= :desde', { desde: filters.from });
+    }
+    if (filters?.to) {
+      query.andWhere('movimentacao.createdAt <= :ate', { ate: filters.to });
+    }
+    if (filters?.type) {
+      query.andWhere('movimentacao.type = :tipoMov', { tipoMov: filters.type });
+    }
+    if (filters?.operator) {
+      query.andWhere('movimentacao.createdById = :operador', { operador: filters.operator });
+    }
+    if (filters?.q) {
+      const q = '%' + filters.q + '%';
+      query.andWhere('(LOWER(usuario.name) LIKE LOWER(:q) OR LOWER(usuario.email) LIKE LOWER(:q) OR usuario.phone LIKE :q)', { q });
+    }
+    const raw = await query.getRawMany();
+    const countMov = (await (query as any).getCount?.()) ?? raw.length;
+    const map = new Map<string, any>();
+    for (const r of raw) {
+      const key = r.userId;
+      if (!map.has(key)) {
+        map.set(key, { userId: r.userId, name: r.name ?? 'Cliente', email: r.email, phone: r.phone, loadedGross: 0, loadedNet: 0, consumedGross: 0, consumedNet: 0, movementCount: 0 });
+      }
+      const item = map.get(key);
+      const total = parseFloat(r.total) || 0;
+      const tipo = r.tipo;
+      if (tipo === 'load') item.loadedGross += total;
+      if (tipo === 'cancel') item.loadedNet -= total;
+      if (tipo === 'consume') item.consumedGross += total;
+      if (tipo === 'refund') item.consumedNet -= total;
+      item.movementCount = (item.movementCount ?? 0) + (Number(r.qty) || 0);
+    }
+    for (const item of map.values()) {
+      item.loadedNet = item.loadedGross + item.loadedNet;
+      item.consumedNet = item.consumedGross + item.consumedNet;
+      if (item.loadedNet < 0) item.loadedNet = 0;
+      if (item.consumedNet < 0) item.consumedNet = 0;
+    }
+    const items = Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    let loadedGross = 0, loadedNet = 0, consumedGross = 0, consumedNet = 0;
+    for (const r of raw) {
+      const total = parseFloat(r.total) || 0;
+      const tipo = r.tipo;
+      if (tipo === 'load') loadedGross += total;
+      if (tipo === 'cancel') loadedNet -= total;
+      if (tipo === 'consume') consumedGross += total;
+      if (tipo === 'refund') consumedNet -= total;
+    }
+    loadedNet = loadedGross + loadedNet;
+    consumedNet = consumedGross + consumedNet;
+    if (loadedNet < 0) loadedNet = 0;
+    if (consumedNet < 0) consumedNet = 0;
+    return { eventId: filters?.eventId, items, totals: { loadedGross, loadedNet, consumedGross, consumedNet }, movementCount: countMov };
+  }
+
 }

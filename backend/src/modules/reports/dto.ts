@@ -70,3 +70,28 @@ export class TotalQueryDto {
   @IsOptional()
   to?: string;
 }
+export class BalancesQueryDto {
+  @IsUUID()
+  eventId: string;
+
+  @IsDateString()
+  @IsOptional()
+  from?: string;
+
+  @IsDateString()
+  @IsOptional()
+  to?: string;
+
+  @IsEnum(['load', 'consume', 'refund', 'cancel'])
+  @IsOptional()
+  type?: string;
+
+  @IsUUID()
+  @IsOptional()
+  operator?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  q?: string;
+}
