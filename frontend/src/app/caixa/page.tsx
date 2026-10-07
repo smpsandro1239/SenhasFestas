@@ -14,7 +14,7 @@ import { Alert } from '@/components/ui/alert';
 import { CashIcon, QrIcon } from '@/components/ui/icons';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
-import { getOpenCash, openCash, closeCash, getCashByEvent, getUsers, getUserById, getUserByAccessCode, loadBalance, deductBalance, getBalance, reverseLoad } from '@/lib/api';
+import { getOpenCash, openCash, closeCash, getCashByEvent, getUsers, getUserById, getUserByAccessCode, loadBalance, deductBalance, getBalance, reverseLoad, getReports } from '@/lib/api';
 
 // jsQR são 311 KB e só são precisos quando alguém abre a câmara. Sem isto, a
 // rota /caixa carregava-os no First Load JS para 99% dos usos que não escaneiam.
@@ -45,7 +45,9 @@ function CaixaPage() {
   const [caixaAberta, setCaixaAberta] = useState<any>(null);
   const [formData, setFormData] = useState({ valorInicial: '', observacoes: '' });
   const [fechoData, setFechoData] = useState({ totalReal: '', observacoes: '' });
-  const [movements, setMovements] = useState<any[]>([]);
+  const [saldosData, setSaldosData] = useState<any>(null);
+  const [saldosLoading, setSaldosLoading] = useState(false);
+  const [saldosError, setSaldosError] = useState('');
   const [historicoError, setHistoricoError] = useState('');
   const [historicoLoaded, setHistoricoLoaded] = useState(false);
   const [movementList, setMovementList] = useState<any[]>([]);
@@ -147,17 +149,6 @@ function CaixaPage() {
     try {
       const list = await getCashByEvent(event.id);
       setHistoricoError('');
-      setMovements(
-        list
-          .filter((c) => c.status === 'closed')
-          .map((c) => ({
-            hora: formatDateTime(c.openedAt),
-            tipo: 'Entrada',
-            valor: `+€${formatEuro(c.closingBalance ?? 0)}`,
-            operador: user?.name ?? '',
-            obs: c.notes ?? '',
-          })),
-      );
       setHistory(
         list.map((c) => ({
           numero: `#${c.id?.slice(0, 8) ?? '000'}`,
@@ -167,16 +158,30 @@ function CaixaPage() {
         })),
       );
     } catch (err: any) {
-      // Antes isto fazia so setMovements([])/setHistory([]) e engolia o erro:
+      // Antes isto fazia so setHistory([]) e engolia o erro:
       // um 403, um 500 ou a rede abaixo ficavam com o mesmo aspecto de um
-      // evento sem caixas, e as duas tabs desenhavam zero pixels sem dizer nada.
+      // evento sem caixas, e a tab desenhava zero pixels sem dizer nada.
       setHistoricoError(err?.message ?? 'Erro ao carregar o histórico de caixa');
-      setMovements([]);
       setHistory([]);
     } finally {
       setHistoricoLoaded(true);
     }
-  }, [event, user?.name]);
+  }, [event]);
+
+  const carregarSaldos = useCallback(async () => {
+    if (!event) return;
+    setSaldosLoading(true);
+    setSaldosError('');
+    try {
+      const data = await getReports('balances', { eventId: event.id });
+      setSaldosData(data ?? null);
+    } catch (err: any) {
+      setSaldosData(null);
+      setSaldosError(err?.message ?? 'Erro ao carregar saldos');
+    } finally {
+      setSaldosLoading(false);
+    }
+  }, [event]);
 
   const pesquisarUtilizadores = async (q: string) => {
     try {
@@ -329,10 +334,18 @@ function CaixaPage() {
     }
   }, [event, carregarCaixaAberta, carregarHistorico]);
 
+  // Carrega os saldos quando alguém abre a tab; não bloqueia as outras tabs.
+  useEffect(() => {
+    if (event && activeTab === 'movimentacoes' && !saldosData && !saldosLoading) {
+      carregarSaldos();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event, activeTab]);
+
   const tabs = [
     { id: 'fecho', label: 'Fecho de Caixa' },
     { id: 'saldo', label: 'Carregar Saldo' },
-    { id: 'movimentacoes', label: 'Movimentações' },
+    { id: 'movimentacoes', label: 'Saldos' },
     { id: 'historico', label: 'Histórico' },
   ];
 
@@ -680,42 +693,82 @@ function CaixaPage() {
 
         {activeTab === 'movimentacoes' && (
           <div className="space-y-4">
-            {historicoError ? (
-              <Alert variant="error" message={historicoError} />
-            ) : !historicoLoaded ? (
-              <div className="text-sm text-zinc-400 py-4">A carregar movimentações...</div>
-            ) : movements.length === 0 ? (
-              <div className="text-sm text-zinc-400 py-4">
-                Sem caixas fechadas neste evento. As movimentações aparecem depois do
-                primeiro fecho de caixa.
-              </div>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-zinc-400">
+                Carregamentos e consumos por cliente neste evento. Valores líquidos já
+                descontam estornos e reembolsos.
+              </p>
+              <Button variant="secondary" size="sm" onClick={carregarSaldos} disabled={saldosLoading}>
+                Atualizar
+              </Button>
+            </div>
+
+            {saldosError ? (
+              <Alert variant="error" message={saldosError} />
+            ) : !saldosData && saldosLoading ? (
+              <div className="text-sm text-zinc-400 py-4">A carregar saldos...</div>
+            ) : !saldosData ? (
+              <div className="text-sm text-zinc-400 py-4">Selecione um evento para ver os saldos.</div>
             ) : (
-              <Card padding="none" className="overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-surface-hover border-b border-border">
-                        {['Hora', 'Tipo', 'Valor', 'Operador', 'Observação'].map((h) => (
-                          <th key={h} className="px-4 py-3 text-left font-medium text-zinc-400">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {movements.map((m, idx) => (
-                        <tr key={idx} className="border-b border-border last:border-0 hover:bg-surface-hover transition-colors">
-                          <td className="px-4 py-3 text-zinc-400">{m.hora}</td>
-                          <td className="px-4 py-3 font-medium">
-                            <span className={m.tipo === 'Entrada' ? 'text-emerald-400' : 'text-red-400'}>{m.tipo}</span>
-                          </td>
-                          <td className={`px-4 py-3 font-mono font-semibold ${m.tipo === 'Entrada' ? 'text-emerald-400' : 'text-red-400'}`}>{m.valor}</td>
-                          <td className="px-4 py-3 text-zinc-300">{m.operador}</td>
-                          <td className="px-4 py-3 text-zinc-400">{m.obs}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              <>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Carregado (líquido)', value: `€${Number(saldosData.totals?.loadedNet ?? 0).toFixed(2)}`, sub: `bruto €${Number(saldosData.totals?.loadedGross ?? 0).toFixed(2)}` },
+                    { label: 'Consumido (líquido)', value: `€${Number(saldosData.totals?.consumedNet ?? 0).toFixed(2)}`, sub: `bruto €${Number(saldosData.totals?.consumedGross ?? 0).toFixed(2)}` },
+                    { label: 'A favor dos clientes', value: `€${(Number(saldosData.totals?.loadedNet ?? 0) - Number(saldosData.totals?.consumedNet ?? 0)).toFixed(2)}`, sub: 'líquido carregado - consumido' },
+                    { label: 'Movimentos', value: String(saldosData.movementCount ?? 0), sub: `${saldosData.items?.length ?? 0} cliente(s)` },
+                  ].map((stat) => (
+                    <Card key={stat.label} padding="sm">
+                      <div className="text-xs text-zinc-400 mb-1">{stat.label}</div>
+                      <div className="text-lg font-bold text-zinc-50 font-mono">{stat.value}</div>
+                      <div className="text-xs text-zinc-500 mt-0.5">{stat.sub}</div>
+                    </Card>
+                  ))}
                 </div>
-              </Card>
+
+                <Card padding="none" className="overflow-hidden">
+                  {(saldosData.items ?? []).length === 0 ? (
+                    <div className="text-sm text-zinc-400 py-4 px-4">
+                      Sem movimentos de saldo neste evento.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-surface-hover border-b border-border">
+                            {['Cliente', 'Carregado (bruto / líquido)', 'Consumido (bruto / líquido)', 'Movimentos'].map((h) => (
+                              <th key={h} className="px-4 py-3 text-left font-medium text-zinc-400">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(saldosData.items ?? []).map((item: any) => (
+                            <tr key={item.userId} className="border-b border-border last:border-0 hover:bg-surface-hover transition-colors">
+                              <td className="px-4 py-3">
+                                <div className="font-medium text-zinc-100">{item.name ?? 'Cliente'}</div>
+                                {(item.email || item.phone) && (
+                                  <div className="text-xs text-zinc-500">{item.email ?? item.phone}</div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 font-mono">
+                                <span className="text-emerald-400">€{Number(item.loadedGross ?? 0).toFixed(2)}</span>
+                                <span className="text-zinc-500"> / </span>
+                                <span className="text-zinc-200">€{Number(item.loadedNet ?? 0).toFixed(2)}</span>
+                              </td>
+                              <td className="px-4 py-3 font-mono">
+                                <span className="text-amber-300">€{Number(item.consumedGross ?? 0).toFixed(2)}</span>
+                                <span className="text-zinc-500"> / </span>
+                                <span className="text-zinc-200">€{Number(item.consumedNet ?? 0).toFixed(2)}</span>
+                              </td>
+                              <td className="px-4 py-3 text-zinc-300">{item.movementCount ?? 0}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+              </>
             )}
           </div>
         )}
