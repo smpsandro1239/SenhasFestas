@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { configuracaoBaseDados } from './app.setup';
+import * as migrations from './database/migrations';
 import { AuthModule } from './modules/auth/auth.module';
 import { EventModule } from './modules/event/event.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
@@ -45,7 +46,9 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
       useFactory: (configService: ConfigService) => ({
         type: 'postgres' as const,
         ...configuracaoBaseDados(configService),
-        migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
+        // Registry estática (não glob): o bundle da função Vercel não contém
+        // ficheiros de migrations — o glob descobria 0 migrations em silêncio.
+        migrations: Object.values(migrations).filter((v) => typeof v === 'function'),
         migrationsRun: configService.get<string>('NODE_ENV') === 'production',
         synchronize: false,
         autoLoadEntities: true,
