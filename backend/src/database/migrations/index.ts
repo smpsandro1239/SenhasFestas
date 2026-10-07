@@ -13,3 +13,4 @@ export { AddSoftDelete1789700000000 } from './1789700000000-AddSoftDelete';
 export { AddUserAccessCode1789800000000 } from './1789800000000-AddUserAccessCode';
 export { CashClosureUniqueness1789900000000 } from './1789900000000-CashClosureUniqueness';
 export { BalanceArchiving1790100000000 } from './1790100000000-BalanceArchiving';
+export { AddEventShortCode1790200000000 } from './1790200000000-AddEventShortCode';

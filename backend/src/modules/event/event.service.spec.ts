@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { EventService } from './event.service';
 
 const mockEventRepository = {
@@ -254,5 +254,139 @@ describe('EventService — updateStatus: não reabrir com data passada', () => {
       service.updateStatus('eventoW', ORGANIZADOR, 'active'),
     ).rejects.toThrow('Não é possível reabrir o evento');
     expect(mockEventRepository.save).not.toHaveBeenCalled();
+  });
+});
+
+describe('EventService — shortCode do evento', () => {
+  let service: EventService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    service = new EventService(
+      mockEventRepository as any,
+      mockEventUserRepository as any,
+      mockOrderRepository as any,
+      mockCashClosureRepository as any,
+      mockAuditService as any,
+    );
+    mockEventRepository.find.mockResolvedValue([]);
+    mockEventRepository.create.mockImplementation((data: any) => data);
+    mockEventRepository.save.mockImplementation(async (e: any) => ({
+      id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      ...e,
+    }));
+  });
+
+  const DADOS = {
+    name: 'Magusto de Vila 2026',
+    startDate: '2026-10-01T00:00:00Z',
+    endDate: '2026-10-03T00:00:00Z',
+  } as any;
+
+  it('cria derivando o shortCode do name', async () => {
+    const ev = await service.create(SUPERADMIN, DADOS);
+    expect(ev.shortCode).toBe('magusto-de-vila-2026');
+  });
+
+  it('sufixa -2 quando a base já está em uso', async () => {
+    mockEventRepository.find.mockResolvedValue([{ shortCode: 'magusto-de-vila-2026' }]);
+    const ev = await service.create(SUPERADMIN, DADOS);
+    expect(ev.shortCode).toBe('magusto-de-vila-2026-2');
+  });
+
+  it('cria com shortCode explícito normalizado', async () => {
+    const ev = await service.create(SUPERADMIN, { ...DADOS, shortCode: 'Festa  do Bar' });
+    expect(ev.shortCode).toBe('festa-do-bar');
+  });
+
+  it('recusa shortCode explícito duplicado (409)', async () => {
+    mockEventRepository.find.mockResolvedValue([{ shortCode: 'festa-do-bar' }]);
+    await expect(
+      service.create(SUPERADMIN, { ...DADOS, shortCode: 'festa-do-bar' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('recusa shortCode explícito inválido (400)', async () => {
+    await expect(
+      service.create(SUPERADMIN, { ...DADOS, shortCode: 'ab' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(mockEventRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('update normaliza o shortCode recebido', async () => {
+    mockEventRepository.findOne.mockResolvedValue({ id: 'evt1', shortCode: 'antigo' });
+    mockEventUserRepository.findOne.mockResolvedValue({ role: 'organizer' });
+    mockEventRepository.find.mockResolvedValue([{ shortCode: 'antigo' }]);
+
+    const ev = await service.update('evt1', ORGANIZADOR, {
+      shortCode: 'Magusto de Vila 2026',
+    } as any);
+
+    expect(ev.shortCode).toBe('magusto-de-vila-2026');
+    expect(mockEventRepository.save).toHaveBeenCalled();
+  });
+
+  it('update recusa shortCode ocupado por outro evento (409)', async () => {
+    mockEventRepository.findOne.mockResolvedValue({ id: 'evt1', shortCode: 'antigo' });
+    mockEventUserRepository.findOne.mockResolvedValue({ role: 'organizer' });
+    mockEventRepository.find.mockResolvedValue([
+      { shortCode: 'antigo' },
+      { shortCode: 'ocupado' },
+    ]);
+
+    await expect(
+      service.update('evt1', ORGANIZADOR, { shortCode: 'ocupado' } as any),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(mockEventRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('update mantém o próprio shortCode sem erro de colisão', async () => {
+    mockEventRepository.findOne.mockResolvedValue({ id: 'evt1', shortCode: 'antigo' });
+    mockEventUserRepository.findOne.mockResolvedValue({ role: 'organizer' });
+    mockEventRepository.find.mockResolvedValue([{ shortCode: 'antigo' }]);
+
+    await expect(
+      service.update('evt1', ORGANIZADOR, { shortCode: 'antigo' } as any),
+    ).resolves.toEqual(expect.objectContaining({ shortCode: 'antigo' }));
+    expect(mockEventRepository.save).toHaveBeenCalled();
+  });
+
+  it('update recusa shortCode inválido (400)', async () => {
+    mockEventRepository.findOne.mockResolvedValue({ id: 'evt1', shortCode: 'antigo' });
+    mockEventUserRepository.findOne.mockResolvedValue({ role: 'organizer' });
+
+    await expect(
+      service.update('evt1', ORGANIZADOR, { shortCode: '??' } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(mockEventRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('findByCode devolve só {id, name, shortCode}', async () => {
+    mockEventRepository.findOne.mockResolvedValue({
+      id: 'evt1',
+      name: 'Magusto',
+      shortCode: 'magusto-2026',
+      settings: { currency: 'EUR' },
+    });
+
+    const r = await service.findByCode('magusto-2026');
+
+    expect(r).toEqual({ id: 'evt1', name: 'Magusto', shortCode: 'magusto-2026' });
+    expect(mockEventRepository.findOne).toHaveBeenCalledWith({
+      where: { shortCode: 'magusto-2026' },
+    });
+  });
+
+  it('findByCode devolve 404 para código inexistente', async () => {
+    mockEventRepository.findOne.mockResolvedValue(null);
+    await expect(service.findByCode('naoexiste')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('findByCode normaliza o código recebido do URL', async () => {
+    mockEventRepository.findOne.mockResolvedValue(null);
+    await expect(service.findByCode('Magusto 2026')).rejects.toBeInstanceOf(NotFoundException);
+    expect(mockEventRepository.findOne).toHaveBeenCalledWith({
+      where: { shortCode: 'magusto-2026' },
+    });
   });
 });

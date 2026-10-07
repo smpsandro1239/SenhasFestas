@@ -15,6 +15,10 @@ export class CreateEventDto {
 
   @IsString()
   @IsOptional()
+  shortCode?: string;
+
+  @IsString()
+  @IsOptional()
   description?: string;
 
   @IsDateString()
@@ -43,6 +47,10 @@ export class UpdateEventDto {
   @IsString()
   @IsOptional()
   name?: string;
+
+  @IsString()
+  @IsOptional()
+  shortCode?: string;
 
   @IsString()
   @IsOptional()

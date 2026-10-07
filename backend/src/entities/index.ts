@@ -60,6 +60,9 @@ export class EventEntity {
   @Column()
   name: string;
 
+  @Column({ type: 'varchar', length: 32, unique: true })
+  shortCode: string;
+
   @Column({ nullable: true, type: 'text' })
   description?: string;
 

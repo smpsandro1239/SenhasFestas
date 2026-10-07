@@ -1,6 +1,13 @@
-import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
+import { randomUUID } from 'node:crypto';
 import {
   EventEntity,
   EventUserEntity,
@@ -11,6 +18,12 @@ import {
 import { CreateEventDto, UpdateEventDto, AddMemberDto, EventSettingsDto } from './dto';
 import { AuditService } from '../audit/audit.service';
 import { eventWindowMessage } from '../../common/event-window';
+import {
+  FORMATO_SHORT_CODE,
+  normalizarShortCode,
+  gerarShortCode,
+  escolherShortCode,
+} from '../../common/short-code';
 
 @Injectable()
 export class EventService {
@@ -132,8 +145,12 @@ export class EventService {
   }
 
   async create(user: UserEntity, dto: CreateEventDto): Promise<EventEntity> {
+    const id = randomUUID();
+    const shortCode = await this.resolverShortCodeParaCriacao(dto, id);
     const event = this.eventRepository.create({
       ...dto,
+      id,
+      shortCode,
       status: 'draft',
     });
     const savedEvent = await this.eventRepository.save(event);
@@ -147,8 +164,54 @@ export class EventService {
 
   async update(id: string, user: UserEntity, dto: UpdateEventDto): Promise<EventEntity> {
     const event = await this.findOne(id, user);
+    if (dto.shortCode !== undefined) {
+      const normalizado = this.validarShortCode(dto.shortCode);
+      const existentes = await this.shortCodesExistentes();
+      if (existentes.has(normalizado) && normalizado !== event.shortCode) {
+        throw new ConflictException('shortCode já está em uso');
+      }
+      dto = { ...dto, shortCode: normalizado };
+    }
     Object.assign(event, dto);
     return this.eventRepository.save(event);
+  }
+
+  async findByCode(codigo: string): Promise<{ id: string; name: string; shortCode: string }> {
+    const normalizado = normalizarShortCode(codigo);
+    const event = await this.eventRepository.findOne({ where: { shortCode: normalizado } });
+    if (!event) {
+      throw new NotFoundException('Evento não encontrado');
+    }
+    return { id: event.id, name: event.name, shortCode: event.shortCode };
+  }
+
+  private validarShortCode(valor: string): string {
+    const normalizado = normalizarShortCode(valor);
+    if (!FORMATO_SHORT_CODE.test(normalizado)) {
+      throw new BadRequestException(
+        'shortCode inválido: use 3-32 caracteres minúsculos, números e hífens',
+      );
+    }
+    return normalizado;
+  }
+
+  private async shortCodesExistentes(): Promise<Set<string>> {
+    const linhas = await this.eventRepository.find({ select: { shortCode: true } });
+    return new Set(linhas.map((linha) => linha.shortCode));
+  }
+
+  private async resolverShortCodeParaCriacao(dto: CreateEventDto, id: string): Promise<string> {
+    if (dto.shortCode !== undefined) {
+      const normalizado = this.validarShortCode(dto.shortCode);
+      const existentes = await this.shortCodesExistentes();
+      if (existentes.has(normalizado)) {
+        throw new ConflictException('shortCode já está em uso');
+      }
+      return normalizado;
+    }
+    const base = gerarShortCode(dto.name, id);
+    const existentes = await this.shortCodesExistentes();
+    return escolherShortCode(base, (cand) => existentes.has(cand));
   }
 
   async updateStatus(
