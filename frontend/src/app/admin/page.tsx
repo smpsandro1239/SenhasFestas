@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Alert } from '@/components/ui/alert';
 import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon, PencilIcon, TrashIcon, CopyIcon, WalletIcon } from '@/components/ui/icons';
 import { Dialog } from '@/components/ui/dialog';
+import { deveAvisarSessao, marcarAvisoSessao } from '@/lib/saldo-aviso';
 import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances, getReports } from '@/lib/api';
 import { downloadTextFile } from '@/lib/download';
 
@@ -80,6 +81,10 @@ export default function AdminPage() {
   const [outstandingBalances, setOutstandingBalances] = useState<any[]>([]);
   const [outstandingLoading, setOutstandingLoading] = useState(false);
   const [outstandingTotal, setOutstandingTotal] = useState(0);
+  const [expiring, setExpiring] = useState<any>(null);
+  const [expiringLoading, setExpiringLoading] = useState(false);
+  const [expiringError, setExpiringError] = useState('');
+  const [expiringPopup, setExpiringPopup] = useState(false);
   const [balancesEventId, setBalancesEventId] = useState('');
   const [balancesType, setBalancesType] = useState('');
   const [balancesFrom, setBalancesFrom] = useState('');
@@ -468,6 +473,28 @@ export default function AdminPage() {
       setSettingsLoading(false);
     }
   };
+
+  const loadExpiring = useCallback(async () => {
+    setExpiringLoading(true);
+    setExpiringError('');
+    try {
+      const data = await getReports('expiring-balances', { dias: 7, limiteEventos: 5 });
+      setExpiring(data ?? null);
+      if ((data?.eventos?.length ?? 0) > 0 && deveAvisarSessao('admin-saldos-expirar')) {
+        marcarAvisoSessao('admin-saldos-expirar');
+        setExpiringPopup(true);
+      }
+    } catch (err: any) {
+      setExpiring(null);
+      setExpiringError(err?.message ?? 'Erro ao carregar saldos a expirar');
+    } finally {
+      setExpiringLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadExpiring();
+  }, [loadExpiring]);
 
   useEffect(() => {
     if (activeTab === 'eventos') loadEvents();
@@ -987,6 +1014,69 @@ export default function AdminPage() {
 
         {activeTab === 'saldos' && (
           <div className="space-y-6">
+            <Card>
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div>
+                  <h2 className="text-xl font-bold text-zinc-50 mb-2">Saldos a expirar</h2>
+                  <p className="text-zinc-400 text-sm">
+                    Eventos com saldos por vencer nos próximos {expiring?.dias ?? 7} dias —
+                    até 5 eventos, do prazo mais próximo ao mais distante.
+                  </p>
+                </div>
+                <Button variant="secondary" size="sm" onClick={loadExpiring} disabled={expiringLoading}>
+                  Atualizar
+                </Button>
+              </div>
+
+              {expiringError && <Alert variant="error" message={expiringError} className="mb-4" />}
+
+              {expiringLoading && !expiring ? (
+                <div className="text-sm text-zinc-400 py-2">A carregar saldos a expirar...</div>
+              ) : (expiring?.eventos ?? []).length === 0 ? (
+                <div className="text-sm text-zinc-400 py-2">
+                  Sem saldos a expirar nos próximos {expiring?.dias ?? 7} dias.
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    {expiring.eventos.map((ev: any) => (
+                      <Card
+                        key={ev.eventId}
+                        padding="sm"
+                        className="flex flex-wrap items-center justify-between gap-3 bg-surface"
+                      >
+                        <div>
+                          <div className="text-sm font-medium text-zinc-100">{ev.nome}</div>
+                          <div className="text-xs text-zinc-500">
+                            Prazo: {new Date(ev.deadline).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Badge variant={ev.diasRestantes <= 1 ? 'danger' : 'warning'}>
+                            {ev.diasRestantes <= 0
+                              ? 'expira hoje'
+                              : ev.diasRestantes === 1
+                                ? 'expira amanhã'
+                                : `expira em ${ev.diasRestantes} dias`}
+                          </Badge>
+                          <span className="text-xs text-zinc-400">
+                            {ev.clientes} cliente{ev.clientes === 1 ? '' : 's'}
+                          </span>
+                          <span className="text-sm font-mono text-amber-300">€{Number(ev.total).toFixed(2)}</span>
+                          <Button variant="ghost" size="sm" onClick={() => setBalancesEventId(ev.eventId)}>
+                            Ver saldos
+                          </Button>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                  <div className="mt-3 text-xs text-zinc-500">
+                    Total: {expiring.totalClientes} cliente{expiring.totalClientes === 1 ? '' : 's'} • €{Number(expiring.total).toFixed(2)}
+                  </div>
+                </>
+              )}
+            </Card>
+
             <Card>
               <div className="flex items-start justify-between gap-4 mb-4">
                 <div>
@@ -2072,6 +2162,38 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
+        <Dialog
+          open={expiringPopup}
+          onClose={() => setExpiringPopup(false)}
+          title="Saldos a expirar"
+          footer={
+            <Button variant="secondary" onClick={() => setExpiringPopup(false)}>
+              Compreendi
+            </Button>
+          }
+        >
+          {(expiring?.eventos ?? []).length === 0 ? (
+            <p className="text-sm text-zinc-300">Sem saldos a expirar de momento.</p>
+          ) : (
+            <div className="space-y-2">
+              {(expiring?.eventos ?? []).map((ev: any) => (
+                <div
+                  key={ev.eventId}
+                  className="flex items-center justify-between gap-3 rounded-xl bg-surface border border-border px-3 py-2"
+                >
+                  <span className="text-sm text-zinc-200">{ev.nome}</span>
+                  <span className="text-xs text-zinc-400">
+                    {ev.clientes} cliente{ev.clientes === 1 ? '' : 's'} • €{Number(ev.total).toFixed(2)}
+                  </span>
+                </div>
+              ))}
+              <p className="pt-1 text-sm text-zinc-400">
+                Avisa os clientes com saldo por usar antes do fim do prazo.
+              </p>
+            </div>
+          )}
+        </Dialog>
 
         {error && <div className="mt-4"><Alert variant="error" message={error} /></div>}
       </AppShell>
