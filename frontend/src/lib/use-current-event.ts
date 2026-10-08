@@ -3,12 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getEvents } from './api';
-import { selecionarEventoId } from './eventos';
+import { selecionarEventoId, type EventoParaSelecao } from './eventos';
 
-export interface EventItem {
-  id: string;
-  name: string;
-  status: string;
+export interface EventItem extends EventoParaSelecao {
   [key: string]: unknown;
 }
 

@@ -14,6 +14,7 @@ import { useCurrentEvent } from '@/lib/use-current-event';
 import { getProducts, getBalance, createOrder, getProductSuggestions, getEventByCode } from '@/lib/api';
 import { normalizarShortCode } from '@/lib/entrar';
 import { parseQrMesa } from '@/lib/mesa-qr';
+import { escolherEventoId, eventosDisponiveis } from '@/lib/eventos';
 import type { Product, CartItem } from '@/lib/types';
 import { groupProducts } from '@/lib/group-products';
 import { getOrderTotal } from '@/lib/order-total';
@@ -28,7 +29,8 @@ export default function QROrderPageWrapper() {
 
 function QROrderPage() {
   const searchParams = useSearchParams();
-  const { event, loading: eventLoading, error: eventError } = useCurrentEvent();
+  const { event, events, loading: eventLoading, error: eventError } = useCurrentEvent();
+  const [eventoManual, setEventoManual] = useState<string | null>(null);
   const [codigoEvento, setCodigoEvento] = useState<string | null>(null);
   const urlCode = searchParams.get('code') ?? '';
 
@@ -51,8 +53,14 @@ function QROrderPage() {
     };
   }, [urlCode]);
 
-  const eventId = searchParams.get('event') ?? codigoEvento ?? event?.id ?? '';
+  const eventId = escolherEventoId(
+    events,
+    searchParams.get('event') ?? codigoEvento ?? eventoManual,
+  ) ?? '';
   const initialTableNumber = searchParams.get('mesa') ?? searchParams.get('table') ?? '';
+  const disponiveis = eventosDisponiveis(events);
+  const eventoDisponivelEscolhido = disponiveis.some((e) => e.id === eventId);
+  const preciseiEscolha = disponiveis.length > 1 && !eventId;
   const [tableNumber, setTableNumber] = useState(initialTableNumber);
   const [showTableModal, setShowTableModal] = useState(!initialTableNumber);
   const [tableDraft, setTableDraft] = useState('');
@@ -98,6 +106,19 @@ function QROrderPage() {
       }
     },
     [router],
+  );
+
+  const escolherEvento = useCallback(
+    (id: string) => {
+      if (!id) {
+        setEventoManual(null);
+        return;
+      }
+      setEventoManual(id);
+      const mesa = tableNumber ? `&table=${encodeURIComponent(tableNumber)}` : '';
+      router.replace(`/qr-order?event=${id}${mesa}`);
+    },
+    [router, tableNumber],
   );
 
   const fetchProducts = useCallback(async () => {
@@ -281,6 +302,25 @@ function QROrderPage() {
               </div>
             </button>
           </div>
+
+          {disponiveis.length > 1 && (
+            <label className="mt-3 flex items-center gap-2">
+              <span className="text-xs text-zinc-400 shrink-0">Evento</span>
+              <select
+                value={eventoDisponivelEscolhido ? eventId : ''}
+                onChange={(e) => escolherEvento(e.target.value)}
+                aria-label="Escolher evento"
+                className="flex-1 bg-surface border border-border rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40"
+              >
+                <option value="">Em que evento estás?</option>
+                {disponiveis.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name ?? e.id}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
       </header>
 
@@ -329,8 +369,10 @@ function QROrderPage() {
               </div>
             ) : !eventId && eventError ? (
               <Alert variant="error" message={eventError} />
+            ) : preciseiEscolha ? (
+              <Alert variant="info" message="Em que evento estás? Escolhe acima." />
             ) : !eventId ? (
-              <Alert variant="info" message="Evento não identificado. Toca em Scan e escaneia o QR da tua mesa." />
+              <Alert variant="info" message="Sem eventos activos de momento. Pede o QR do evento à organização." />
             ) : error ? (
               <Alert variant="error" message={error} />
             ) : products.length === 0 ? (
