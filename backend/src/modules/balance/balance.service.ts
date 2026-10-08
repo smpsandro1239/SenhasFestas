@@ -62,6 +62,7 @@ export class BalanceService {
     }
     await this.eventService.assertEventOperavelById(dto.eventId);
     const updated = await this.runLoadTransaction(userId, dto, actor);
+    await this.eventService.vincularCliente(userId, dto.eventId);
     return {
       id: updated.id,
       currentBalance: updated.currentBalance,
@@ -298,6 +299,7 @@ export class BalanceService {
       };
     });
 
+    await this.eventService.vincularCliente(userId, dto.eventId);
     return resultado;
   }
 

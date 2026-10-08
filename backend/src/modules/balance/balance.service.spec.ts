@@ -7,6 +7,7 @@ import { EventService } from '../event/event.service';
 describe('BalanceService — guard de janela operacional', () => {
   const eventService = {
     assertEventOperavelById: vi.fn(),
+    vincularCliente: vi.fn(),
   } as unknown as EventService;
 
   const orderGateway = {
@@ -82,6 +83,36 @@ describe('BalanceService — guard de janela operacional', () => {
 
       expect(orderGateway.emitOrderUpdate).not.toHaveBeenCalled();
     });
+
+    it('H2: cria vínculo EventUser (client) no load quando o cliente não é membro do evento', async () => {
+      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) =>
+        fn({
+          findOne: vi.fn().mockResolvedValue({ id: 'b1', currentBalance: 0, event: eventoAtivo }),
+          create: vi.fn(),
+          save: vi.fn().mockImplementation((_e, entity) => Promise.resolve(entity)),
+        }),
+      );
+
+      await balanceService.loadBalance('u1', { amount: 10, eventId: 'evt1' } as any, { id: 'staff' });
+
+      expect(eventService.vincularCliente).toHaveBeenCalledTimes(1);
+      expect(eventService.vincularCliente).toHaveBeenCalledWith('u1', 'evt1');
+    });
+
+    it('H2: load num cliente que já é membro continua inalterado (vincularCliente é idempotente)', async () => {
+      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) =>
+        fn({
+          findOne: vi.fn().mockResolvedValue({ id: 'b1', currentBalance: 0, event: eventoAtivo }),
+          create: vi.fn(),
+          save: vi.fn().mockImplementation((_e, entity) => Promise.resolve(entity)),
+        }),
+      );
+
+      const resultado = await balanceService.loadBalance('u1', { amount: 10, eventId: 'evt1' } as any, { id: 'staff' });
+
+      expect(resultado.currentBalance).toBe(10);
+      expect(eventService.vincularCliente).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('deductBalance', () => {
@@ -132,6 +163,21 @@ describe('BalanceService — guard de janela operacional', () => {
       await balanceService.deductBalance('u1', { amount: 10, eventId: 'evt1' } as any, { id: 'staff' });
 
       expect(orderGateway.emitOrderUpdate).not.toHaveBeenCalled();
+    });
+
+    it('H2: cria vínculo EventUser (client) no deduct quando o cliente não é membro do evento', async () => {
+      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) =>
+        fn({
+          findOne: vi.fn().mockResolvedValue({ id: 'b1', currentBalance: 100 }),
+          save: vi.fn().mockImplementation((_e, entity) => Promise.resolve(entity)),
+          create: vi.fn(),
+        }),
+      );
+
+      await balanceService.deductBalance('u1', { amount: 10, eventId: 'evt1' } as any, { id: 'staff' });
+
+      expect(eventService.vincularCliente).toHaveBeenCalledTimes(1);
+      expect(eventService.vincularCliente).toHaveBeenCalledWith('u1', 'evt1');
     });
   });
 
