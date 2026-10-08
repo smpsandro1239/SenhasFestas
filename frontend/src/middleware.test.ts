@@ -93,7 +93,7 @@ describe('middleware — JWT_SECRET ausente (erro de configuração)', () => {
   });
 
   it('mantém as rotas públicas acessíveis sem segredo', async () => {
-    for (const rota of ['/auth/login', '/publico', '/publico/abc', '/api/health']) {
+    for (const rota of ['/auth/login', '/publico', '/publico/abc', '/api/health', '/entrar/magusto-2026', '/mesa/magusto-2026/12', '/mesa/magusto-2026']) {
       const resposta = await middleware(pedido(rota));
       expect(deixaPassar(resposta), `rota pública ${rota} foi bloqueada`).toBe(true);
     }
@@ -159,7 +159,7 @@ describe('middleware — com JWT_SECRET configurado (comportamento actual)', () 
 // `sincronizado` falhe se alguém mexer no middleware sem actualizar o teste.
 const LOOKAHEAD =
   '_next/static|_next/image|favicon.ico|auth(?:/|$)|publico(?:/|$)|api(?:/|$)|' +
-  'entrar(?:/|$)|' +
+  'entrar(?:/|$)|mesa(?:/|$)|' +
   '.*\\.(?:png|jpg|jpeg|svg|webp|gif|ico|css|js|txt|xml|woff2?|map|json|webmanifest)$';
 
 const PADRAO_NEXT = new RegExp(`^/((?!${LOOKAHEAD}).*)$`);
@@ -175,7 +175,7 @@ describe('matcher — exclusão de rotas', () => {
   });
 
   it('não invoca o middleware nas rotas públicas', () => {
-    for (const rota of ['/auth/login', '/auth/register', '/publico', '/publico/abc', '/api/health', '/entrar/magusto-2026']) {
+    for (const rota of ['/auth/login', '/auth/register', '/publico', '/publico/abc', '/api/health', '/entrar/magusto-2026', '/mesa/magusto-2026/12', '/mesa/magusto-2026']) {
       expect(invocado(rota), `middleware ainda corre em ${rota}`).toBe(false);
     }
   });
@@ -192,7 +192,8 @@ describe('matcher — exclusão de rotas', () => {
   it('não confunde prefixos com palavras que começam igual', () => {
     // "administrador", "autenticado", "publico-alfa" e "apidocs" não são as
     // rotas públicas: a exclusa tem de respeitar o separador `/` ou o fim.
-    for (const rota of ['/administrador', '/autenticado', '/publico-alfa', '/apidocs', '/autenticacao', '/entrada']) {
+    // "/mesada" e "/mesas" também não: só `/mesa/...` e `/mesa` o são.
+    for (const rota of ['/administrador', '/autenticado', '/publico-alfa', '/apidocs', '/autenticacao', '/entrada', '/mesada', '/mesas']) {
       expect(invocado(rota), `${rota} foi excluída como se fosse rota pública`).toBe(true);
     }
   });
