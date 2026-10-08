@@ -86,6 +86,42 @@ vercel deploy --prebuilt --prod --yes
 - Verificar: `GET https://senhasfestas-api.vercel.app/api/health` → 200
   `{"status":"ok",...}`.
 
+## Migrations — pipeline de base de dados (Opção D)
+
+**Porquê um registry estático e não um glob:** o `build.vercel.mjs` faz bundle
+esbuild apenas do código alcançável a partir de `serverless.main.js`. Um patrão
+de glob (`__dirname + '/migrations/*'`) não existe dentro da função — descobre
+**0 migrations em silêncio** e o schema nunca é migrado. Foi o que causou o
+incidente em que o `BalanceArchiving` não estava aplicado: o glob não apanhava
+nada e ninguém reparava.
+
+**Como funciona o pipeline:**
+
+1. **Registry estática** — `backend/src/database/migrations/index.ts` exporta,
+   uma linha por migração, a classe de cada ficheiro da pasta. O esbuild vê
+   estes imports e inclui as classes no bundle da função.
+2. **Consumo** — `backend/src/app.module.ts:51` monta a lista com
+   `Object.values(migrations).filter((v) => typeof v === 'function')`
+   e o TypeORM corre `migrationsRun: true` **só em produção**
+   (`NODE_ENV === 'production'`); `synchronize: false` sempre.
+3. **Falha = fail-closed** — se uma migration pendente rebentar no boot, o
+   arranque **thows**; não há estado "meio migrado" nem divergência silenciosa.
+
+**Regra ao criar uma migration:**
+
+```
+backend/src/database/migrations/<timestamp>-<Nome>.ts   # classe nova
+backend/src/database/migrations/index.ts                # + 1 linha de export
+```
+
+O teste `backend/src/database/migrations/index.spec.ts` compara a pasta
+(filesystem) com os exports do registry e falha **antes do commit** se faltar
+export — o "esqueci-me" nunca chega a produção. Não há warn/check em runtime:
+o `index.spec.ts` + o `migrationsRun` fail-closed já cobrem as duas falhas.
+
+**Local/desenvolvimento:** `migrationsRun` está desligado fora de produção.
+Para aplicar localmente, usar o TypeORM CLI com `backend/src/database/data-source.ts`.
+
 ## Deploy do frontend
 
 ```bash
