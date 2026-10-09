@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { selecionarEventoId, eventosDisponiveis, escolherEventoId } from './eventos';
+import {
+  selecionarEventoId,
+  eventosDisponiveis,
+  escolherEventoId,
+  eventosPossiveis,
+  requerEntrada,
+} from './eventos';
 
 const ativo = { id: 'e-ativo', status: 'active' };
 const rascunho = { id: 'e-rascunho', status: 'draft' };
@@ -114,5 +120,50 @@ describe('escolherEventoId', () => {
 
   it('sem escolha + 0 disponíveis → null', () => {
     expect(escolherEventoId([terminou, fechado], null, AGORA)).toBeNull();
+  });
+});
+
+describe('eventosPossiveis', () => {
+  const publicoA = { id: 'e-ativo', name: 'Festa Teste', shortCode: 'festa' };
+  const publicoB = { id: 'e-publico', name: 'Magusto', shortCode: 'magusto' };
+
+  it('une membros disponíveis com a lista pública, sem duplicados', () => {
+    const ids = eventosPossiveis([emJanela], [publicoA, publicoB], AGORA).map((e) => e.id);
+    expect(ids).toEqual(['e-em-janela', 'e-ativo', 'e-publico']);
+  });
+
+  it('membros sem status (só públicos) não são filtrados pela janela (backend já filtrou)', () => {
+    const ids = eventosPossiveis([], [publicoA], AGORA).map((e) => e.id);
+    expect(ids).toEqual(['e-ativo']);
+  });
+
+  it('membro terminado fica de fora; a lista pública continua a contar', () => {
+    const ids = eventosPossiveis([terminou], [publicoB], AGORA).map((e) => e.id);
+    expect(ids).toEqual(['e-publico']);
+  });
+
+  it('evento que é membro E público conta uma vez (o membro ganha o lugar)', () => {
+    const ids = eventosPossiveis([emJanela], [{ ...publicoA, id: 'e-em-janela' }], AGORA).map(
+      (e) => e.id,
+    );
+    expect(ids).toEqual(['e-em-janela']);
+  });
+
+  it('sem membros nem públicos → vazio', () => {
+    expect(eventosPossiveis([], [], AGORA)).toEqual([]);
+  });
+});
+
+describe('requerEntrada', () => {
+  it('evento de que já é membro → false', () => {
+    expect(requerEntrada('e-em-janela', [emJanela])).toBe(false);
+  });
+
+  it('evento sem membership → true', () => {
+    expect(requerEntrada('e-ativo', [emJanela])).toBe(true);
+  });
+
+  it('sem membros → true para qualquer evento', () => {
+    expect(requerEntrada('x', [])).toBe(true);
   });
 });

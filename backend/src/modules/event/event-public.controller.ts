@@ -12,4 +12,12 @@ export class EventPublicController {
   async findByCode(@Param('shortCode') shortCode: string) {
     return this.eventService.findByCode(shortCode);
   }
+
+  // Lista os eventos activos (janela aberta) para o dropdown do /qr-order.
+  // Também registado antes do EventController: '/events/public' colidiria
+  // com '/events/:id' para um id literal 'public'.
+  @Get('public')
+  async listPublicos() {
+    return this.eventService.listEventosPublicos();
+  }
 }

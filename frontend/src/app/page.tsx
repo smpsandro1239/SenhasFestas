@@ -181,9 +181,7 @@ function HomeContent() {
             const href =
               item.href === '/publico' && currentEvent?.id
                 ? `/publico?event=${currentEvent.id}`
-                : item.href === '/qr-order' && currentEvent?.id
-                  ? `/qr-order?event=${currentEvent.id}`
-                  : item.href;
+                : item.href;
             return (
               <Link key={item.href} href={href} className={`animate-fade-in stagger-${idx + 1}`}>
                 <Card hover className="h-full">

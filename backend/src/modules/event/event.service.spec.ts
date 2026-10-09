@@ -489,3 +489,32 @@ describe('EventService — entrar no evento (eventCode)', () => {
     );
   });
 });
+
+describe('listEventosPublicos', () => {
+  function isoDias(dias: number): string {
+    return new Date(Date.now() + dias * 86_400_000).toISOString();
+  }
+
+  it('devolve só os activos dentro da janela, com id/name/shortCode', async () => {
+    mockEventRepository.find.mockResolvedValue([
+      { id: 'e1', name: 'Festa Teste', shortCode: 'festa', status: 'active', startDate: isoDias(-1), endDate: isoDias(1) },
+      { id: 'e2', name: 'Magusto', shortCode: 'magusto', status: 'closed', startDate: isoDias(-1), endDate: isoDias(1) },
+      { id: 'e3', name: 'Rascunho', shortCode: 'rascunho', status: 'draft', startDate: isoDias(-1), endDate: isoDias(1) },
+      { id: 'e4', name: 'Antigo', shortCode: 'antigo', status: 'active', startDate: isoDias(-10), endDate: isoDias(-5) },
+      { id: 'e5', name: 'Futuro', shortCode: 'futuro', status: 'active', startDate: isoDias(2), endDate: isoDias(5) },
+    ]);
+
+    const service = new EventService(
+      mockEventRepository as any,
+      mockEventUserRepository as any,
+      mockOrderRepository as any,
+      mockCashClosureRepository as any,
+      mockAuditService as any,
+      mockBalanceRepository as any,
+    );
+
+    await expect(service.listEventosPublicos()).resolves.toEqual([
+      { id: 'e1', name: 'Festa Teste', shortCode: 'festa' },
+    ]);
+  });
+});

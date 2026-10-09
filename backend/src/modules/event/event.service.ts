@@ -18,7 +18,7 @@ import {
 } from '../../entities';
 import { CreateEventDto, UpdateEventDto, AddMemberDto, EventSettingsDto } from './dto';
 import { AuditService } from '../audit/audit.service';
-import { eventWindowMessage } from '../../common/event-window';
+import { eventWindowMessage, isEventWindowOpen } from '../../common/event-window';
 import {
   FORMATO_SHORT_CODE,
   normalizarShortCode,
@@ -52,6 +52,24 @@ export class EventService {
       .innerJoin(EventUserEntity, 'eu', 'eu.eventId = event.id')
       .where('eu.userId = :userId', { userId: user?.id })
       .getMany();
+  }
+
+  /**
+   * Lista pública (sem membership): só eventos activos dentro da janela,
+   * com os campos mínimos para o dropdown do /qr-order (nome + shortCode).
+   * O shortCode permite entrar no evento pelo mesmo fluxo do /entrar.
+   */
+  async listEventosPublicos(
+    now: Date = new Date(),
+  ): Promise<Array<{ id: string; name: string; shortCode: string }>> {
+    const eventos = await this.eventRepository.find({ where: { status: 'active' as any } });
+    return eventos
+      .filter((evento) => evento.status === 'active' && isEventWindowOpen(evento, now))
+      .map((evento) => ({
+        id: evento.id,
+        name: evento.name,
+        shortCode: evento.shortCode ?? '',
+      }));
   }
 
   /**

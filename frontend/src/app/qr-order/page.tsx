@@ -11,10 +11,11 @@ import { MinusIcon, PlusIcon, QrIcon, CameraIcon, ArrowLeftIcon, CheckIcon } fro
 import { QrScanner } from '@/components/ui/qr-scanner';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
-import { getProducts, getBalance, createOrder, getProductSuggestions, getEventByCode } from '@/lib/api';
+import { getProducts, getBalance, createOrder, getProductSuggestions, getEventByCode, getEventosPublicos, enterEvent } from '@/lib/api';
 import { normalizarShortCode } from '@/lib/entrar';
 import { parseQrMesa } from '@/lib/mesa-qr';
-import { escolherEventoId, eventosDisponiveis } from '@/lib/eventos';
+import { eventosPossiveis, requerEntrada, type EventoParaSelecao, type EventoPossivel } from '@/lib/eventos';
+import { lerEventoDoDia, guardarEventoDoDia, limparEventoDoDia } from '@/lib/evento-do-dia';
 import type { Product, CartItem } from '@/lib/types';
 import { groupProducts } from '@/lib/group-products';
 import { getOrderTotal } from '@/lib/order-total';
@@ -30,9 +31,33 @@ export default function QROrderPageWrapper() {
 function QROrderPage() {
   const searchParams = useSearchParams();
   const { event, events, loading: eventLoading, error: eventError } = useCurrentEvent();
+  const storage = typeof window !== 'undefined' ? window.localStorage : null;
   const [eventoManual, setEventoManual] = useState<string | null>(null);
+  const [eventoDoDia, setEventoDoDia] = useState<string>('');
   const [codigoEvento, setCodigoEvento] = useState<string | null>(null);
+  const [eventosPublicos, setEventosPublicos] = useState<EventoPossivel[]>([]);
+  const [eventosMembros, setEventosMembros] = useState<EventoParaSelecao[]>([]);
+  const [aEntrar, setAEntrar] = useState(false);
   const urlCode = searchParams.get('code') ?? '';
+  const urlEvent = searchParams.get('event');
+
+  useEffect(() => {
+    setEventosMembros(events);
+  }, [events]);
+
+  useEffect(() => {
+    let ativo = true;
+    getEventosPublicos()
+      .then((lista) => {
+        if (ativo) setEventosPublicos(Array.isArray(lista) ? lista : []);
+      })
+      .catch(() => {
+        if (ativo) setEventosPublicos([]);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, []);
 
   useEffect(() => {
     const codigo = normalizarShortCode(urlCode);
@@ -53,14 +78,14 @@ function QROrderPage() {
     };
   }, [urlCode]);
 
-  const eventId = escolherEventoId(
-    events,
-    searchParams.get('event') ?? codigoEvento ?? eventoManual,
-  ) ?? '';
+  const eventId = (urlEvent ?? codigoEvento ?? eventoManual ?? eventoDoDia) || '';
   const initialTableNumber = searchParams.get('mesa') ?? searchParams.get('table') ?? '';
-  const disponiveis = eventosDisponiveis(events);
-  const eventoDisponivelEscolhido = disponiveis.some((e) => e.id === eventId);
-  const preciseiEscolha = disponiveis.length > 1 && !eventId;
+  const possiveis = eventosPossiveis(eventosMembros, eventosPublicos);
+  const explicito = urlEvent ?? codigoEvento ?? eventoManual;
+  const eventoDisponivelEscolhido = possiveis.some((e) => e.id === eventId);
+  const preciseiEscolha = possiveis.length >= 1 && !eventId;
+  const eventoEscolhido =
+    eventosMembros.find((e) => e.id === eventId) ?? event;
   const [tableNumber, setTableNumber] = useState(initialTableNumber);
   const [showTableModal, setShowTableModal] = useState(!initialTableNumber);
   const [tableDraft, setTableDraft] = useState('');
@@ -82,6 +107,21 @@ function QROrderPage() {
   const [scanError, setScanError] = useState('');
   const router = useRouter();
 
+  useEffect(() => {
+    if (eventLoading) return;
+    if (explicito) {
+      const valido =
+        possiveis.some((e) => e.id === explicito) ||
+        eventosMembros.some((e) => e.id === explicito);
+      if (valido) {
+        guardarEventoDoDia(explicito, storage);
+        setEventoDoDia(explicito);
+        return;
+      }
+    }
+    setEventoDoDia(lerEventoDoDia(storage) ?? '');
+  }, [eventLoading, explicito, possiveis, eventosMembros, storage]);
+
   const tratarScan = useCallback(
     async (texto: string) => {
       setScanError('');
@@ -97,28 +137,65 @@ function QROrderPage() {
           setScanError('Evento não encontrado para este QR.');
           return;
         }
+        if (requerEntrada(ev.id, eventosMembros) && ev.shortCode) {
+          try {
+            await enterEvent(ev.shortCode, false);
+            setEventosMembros((prev) =>
+              prev.some((e) => e.id === ev.id) ? prev : [...prev, { ...ev, status: 'active' }],
+            );
+          } catch {
+            setScanError('Não foi possível entrar no evento deste QR. Tenta outra vez.');
+            return;
+          }
+        }
         setTableNumber(qr.numero ?? '');
         setShowTableModal(false);
+        guardarEventoDoDia(ev.id, storage);
+        setEventoDoDia(ev.id);
         const mesa = qr.numero ? `&table=${encodeURIComponent(qr.numero)}` : '';
         router.replace(`/qr-order?event=${ev.id}${mesa}`);
       } catch {
         setScanError('Não foi possível identificar o evento deste QR.');
       }
     },
-    [router],
+    [router, eventosMembros, storage],
   );
 
   const escolherEvento = useCallback(
-    (id: string) => {
+    async (id: string) => {
       if (!id) {
+        limparEventoDoDia(storage);
+        setEventoDoDia('');
         setEventoManual(null);
+        const mesa = tableNumber ? `?table=${encodeURIComponent(tableNumber)}` : '';
+        router.replace(`/qr-order${mesa}`);
         return;
       }
+      const evento = possiveis.find((e) => e.id === id);
+      if (!evento) return;
+      if (requerEntrada(id, eventosMembros)) {
+        if (!evento.shortCode || aEntrar) return;
+        setAEntrar(true);
+        setError('');
+        try {
+          await enterEvent(evento.shortCode, false);
+          setEventosMembros((prev) =>
+            prev.some((e) => e.id === id) ? prev : [...prev, { ...evento, status: 'active' }],
+          );
+        } catch (err: any) {
+          setAEntrar(false);
+          setError(err?.message ?? 'Erro ao entrar no evento');
+          return;
+        }
+        setAEntrar(false);
+      }
+      guardarEventoDoDia(id, storage);
+      setEventoDoDia(id);
       setEventoManual(id);
       const mesa = tableNumber ? `&table=${encodeURIComponent(tableNumber)}` : '';
       router.replace(`/qr-order?event=${id}${mesa}`);
     },
-    [router, tableNumber],
+    [router, tableNumber, possiveis, eventosMembros, aEntrar, storage],
   );
 
   const fetchProducts = useCallback(async () => {
@@ -303,17 +380,18 @@ function QROrderPage() {
             </button>
           </div>
 
-          {disponiveis.length > 1 && (
+          {possiveis.length >= 1 && (
             <label className="mt-3 flex items-center gap-2">
               <span className="text-xs text-zinc-400 shrink-0">Evento</span>
               <select
                 value={eventoDisponivelEscolhido ? eventId : ''}
                 onChange={(e) => escolherEvento(e.target.value)}
+                disabled={aEntrar}
                 aria-label="Escolher evento"
-                className="flex-1 bg-surface border border-border rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                className="flex-1 bg-surface border border-border rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:opacity-60"
               >
                 <option value="">Em que evento estás?</option>
-                {disponiveis.map((e) => (
+                {possiveis.map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.name ?? e.id}
                   </option>
@@ -338,7 +416,7 @@ function QROrderPage() {
             <Alert variant="error" message={scanError} />
           </div>
         )}
-        {event?.status === 'closed' ? (
+        {eventoEscolhido?.status === 'closed' ? (
           <div className="rounded-2xl border border-zinc-800 bg-surface p-8 text-center">
             <h2 className="text-2xl font-bold text-zinc-50 mb-2">Evento encerrado</h2>
             <p className="text-zinc-400 text-sm">

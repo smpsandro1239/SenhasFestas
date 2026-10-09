@@ -402,6 +402,10 @@ export async function getEventByCode(shortCode: string): Promise<any> {
   return apiRequest(`/events/by-code/${encodeURIComponent(shortCode)}`);
 }
 
+export async function getEventosPublicos(): Promise<any> {
+  return apiRequest('/events/public');
+}
+
 export async function createEvent(data: any): Promise<any> {
   return apiRequest('/events', {
     method: 'POST',

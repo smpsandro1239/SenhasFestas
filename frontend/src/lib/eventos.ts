@@ -50,3 +50,34 @@ export function escolherEventoId(
   }
   return null;
 }
+
+/**
+ * Oportunidades do /qr-order: membros ativos+janeira unidos com a lista
+ * pública (backend pré-filtrada por ativos+janeira — sem status na payload,
+ * por isso os públicos não passam por eventosDisponiveis). Dedup por id.
+ */
+export interface EventoPossivel {
+  id: string;
+  name?: string;
+  shortCode?: string;
+}
+
+export function eventosPossiveis(
+  membros: EventoParaSelecao[],
+  publicos: EventoPossivel[],
+  agora: Date = new Date(),
+): EventoPossivel[] {
+  const vistos = new Set<string>();
+  const lista: EventoPossivel[] = [];
+  for (const evento of [...eventosDisponiveis(membros, agora), ...publicos]) {
+    if (vistos.has(evento.id)) continue;
+    vistos.add(evento.id);
+    lista.push(evento);
+  }
+  return lista;
+}
+
+/** Escolher um evento que não é de um dos membros exige entrar (vincularCliente). */
+export function requerEntrada(eventId: string, membros: EventoParaSelecao[]): boolean {
+  return !membros.some((e) => e.id === eventId);
+}
