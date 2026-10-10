@@ -109,7 +109,7 @@ jobs:
 
   deploy:
     name: Deploy produção
-    if: ${{ github.ref == 'refs/heads/main' && secrets.DEPLOY_HOST != '' }}
+    if: github.ref == 'refs/heads/main'
     needs: [backend, frontend]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -123,6 +123,7 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - name: Correr migrações de base de dados
+        if: ${{ secrets.DEPLOY_HOST != '' }}
         working-directory: backend
         env:
           NODE_ENV: production
@@ -137,6 +138,7 @@ jobs:
           npm run migration:run
 
       - name: Deploy via SSH
+        if: ${{ secrets.DEPLOY_HOST != '' }}
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.DEPLOY_HOST }}

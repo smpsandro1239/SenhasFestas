@@ -268,6 +268,94 @@ export class CatalogService {
     });
   }
 
+
+  async importProducts(
+    user: UserEntity,
+    sourceEventId: string,
+    targetEventId: string,
+    productIds?: string[],
+  ): Promise<{ importedCount: number; products: ProductEntity[] }> {
+    if (user.role !== "superadmin") {
+      await this.membershipService.assertMember(user, sourceEventId);
+      await this.membershipService.assertMember(user, targetEventId);
+    }
+
+    const sourceEvent = await this.eventRepository.findOne({ where: { id: sourceEventId } });
+    const targetEvent = await this.eventRepository.findOne({ where: { id: targetEventId } });
+
+    if (!sourceEvent || !targetEvent) {
+      throw new NotFoundException("Evento de origem ou destino não encontrado");
+    }
+
+    const where: Record<string, unknown> = {
+      event: { id: sourceEventId },
+      isActive: true,
+    };
+    if (productIds && productIds.length > 0) {
+      where.id = In(productIds);
+    }
+
+    const sourceProducts = await this.productRepository.find({
+      where,
+      relations: { category: true },
+    });
+
+    if (sourceProducts.length === 0) {
+      return { importedCount: 0, products: [] };
+    }
+
+    // Mapear categorias existentes no evento destino por nome
+    const targetCategories = await this.categoryRepository.find({
+      where: { event: { id: targetEventId } },
+    });
+    const categoryMap = new Map<string, CategoryEntity>();
+    for (const cat of targetCategories) {
+      categoryMap.set(cat.name.toLowerCase().trim(), cat);
+    }
+
+    const newProducts: ProductEntity[] = [];
+
+    for (const srcProd of sourceProducts) {
+      let targetCategory: CategoryEntity | undefined;
+      if (srcProd.category) {
+        const catName = srcProd.category.name.toLowerCase().trim();
+        if (categoryMap.has(catName)) {
+          targetCategory = categoryMap.get(catName)!;
+        } else {
+          targetCategory = this.categoryRepository.create({
+            event: targetEvent,
+            name: srcProd.category.name,
+            description: srcProd.category.description,
+            sortOrder: srcProd.category.sortOrder,
+            isActive: true,
+          });
+          targetCategory = await this.categoryRepository.save(targetCategory);
+          categoryMap.set(catName, targetCategory);
+        }
+      }
+
+      const cloned = this.productRepository.create({
+        name: srcProd.name,
+        description: srcProd.description,
+        imageUrl: srcProd.imageUrl,
+        price: srcProd.price,
+        availability: srcProd.availability,
+        stock: srcProd.stock,
+        isActive: true,
+        category: targetCategory,
+        event: targetEvent,
+        options: srcProd.options ? { ...srcProd.options } : undefined,
+        modifiers: srcProd.modifiers ? { ...srcProd.modifiers } : undefined,
+        kitchenName: srcProd.kitchenName,
+      });
+
+      newProducts.push(cloned);
+    }
+
+    const savedProducts = await this.productRepository.save(newProducts);
+    return { importedCount: savedProducts.length, products: savedProducts };
+  }
+
   async softRemove(id: string, user: UserEntity): Promise<{ deleted: boolean; softDelete: boolean }> {
     const product = await this.findOne(id, user);
     if (product.event?.id) {
