@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CatalogService } from './catalog.service';
-import { CreateProductDto, UpdateProductDto } from './dto';
+import { CreateProductDto, UpdateProductDto, ImportProductsDto } from './dto';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -83,6 +83,18 @@ export class CatalogController {
     @Request() req: any,
   ) {
     return this.catalogService.findSuggestions(req.user, query.eventId, id, query.limit);
+  }
+
+
+  @Post('import')
+  @Roles(...MANAGEMENT_ROLES)
+  async importProducts(@Request() req: any, @Body() dto: ImportProductsDto) {
+    return this.catalogService.importProducts(
+      req.user,
+      dto.sourceEventId,
+      dto.targetEventId,
+      dto.productIds,
+    );
   }
 
   @Post()

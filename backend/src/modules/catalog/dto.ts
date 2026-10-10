@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsUUID, IsBoolean } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsUUID, IsBoolean, IsArray } from 'class-validator';
 
 export class CreateProductDto {
   @IsString()
@@ -31,8 +31,6 @@ export class CreateProductDto {
   @IsOptional()
   stock?: number;
 
-  // Nome que a cozinha lê, quando difere do nome de menu. Precisa de @IsString
-  // para não entrar um number e o KDS mostrar "42".
   @IsString()
   @IsOptional()
   kitchenName?: string;
@@ -71,9 +69,20 @@ export class UpdateProductDto {
   @IsOptional()
   isActive?: boolean;
 
-  // null limpa: um produto que deixou de ter nome próprio na cozinha volta ao
-  // nome de menu.
   @IsString()
   @IsOptional()
   kitchenName?: string | null;
+}
+
+export class ImportProductsDto {
+  @IsUUID()
+  sourceEventId: string;
+
+  @IsUUID()
+  targetEventId: string;
+
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @IsOptional()
+  productIds?: string[];
 }

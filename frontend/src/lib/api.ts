@@ -559,3 +559,13 @@ export async function exportReportsCsv(params?: Record<string, string | number |
   const query = search.toString();
   return apiRequest(`/reports/export.csv${query ? `?${query}` : ''}`);
 }
+export async function importProducts(
+  sourceEventId: string,
+  targetEventId: string,
+  productIds?: string[],
+) {
+  return apiRequest("/products/import", {
+    method: "POST",
+    body: JSON.stringify({ sourceEventId, targetEventId, productIds }),
+  });
+}

@@ -14,7 +14,7 @@ import { Alert } from '@/components/ui/alert';
 import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon, PencilIcon, TrashIcon, CopyIcon, WalletIcon } from '@/components/ui/icons';
 import { Dialog } from '@/components/ui/dialog';
 import { deveAvisarSessao, marcarAvisoSessao } from '@/lib/saldo-aviso';
-import { getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances, getReports, extendBalance, unarchiveBalance, markBalanceNotified } from '@/lib/api';
+import { importProducts, getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances, getReports, extendBalance, unarchiveBalance, markBalanceNotified } from '@/lib/api';
 import { downloadTextFile } from '@/lib/download';
 import { montarUrlMesa } from '@/lib/mesa-qr';
 
@@ -233,6 +233,81 @@ export default function AdminPage() {
       setLoading(false);
     }
   }, [productPage, productLimit, productSearch, productCategory, productAvailability]);
+
+
+  // Importação de produtos entre eventos
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [sourceEventId, setSourceEventId] = useState("");
+  const [importAll, setImportAll] = useState(true);
+  const [sourceProducts, setSourceProducts] = useState<any[]>([]);
+  const [selectedSourceProductIds, setSelectedSourceProductIds] = useState<string[]>([]);
+  const [importingProducts, setImportingProducts] = useState(false);
+  const [importSuccessMsg, setImportSuccessMsg] = useState("");
+
+  const abrirModalImportacao = () => {
+    setShowImportModal(true);
+    setSourceEventId("");
+    setSourceProducts([]);
+    setSelectedSourceProductIds([]);
+    setImportSuccessMsg("");
+  };
+
+  const carregarProdutosOrigem = async (evId: string) => {
+    setSourceEventId(evId);
+    if (!evId) {
+      setSourceProducts([]);
+      setSelectedSourceProductIds([]);
+      return;
+    }
+    try {
+      const res = await getProducts(evId, 1, 100, "", "", "", "true");
+      const list = res.items || [];
+      setSourceProducts(list);
+      setSelectedSourceProductIds(list.map((p: any) => p.id));
+    } catch {
+      setSourceProducts([]);
+    }
+  };
+
+  const handleImportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sourceEventId) {
+      setError("Selecione o evento de origem");
+      return;
+    }
+    if (!activeEventId) {
+      setError("Selecione um evento ativo no topo");
+      return;
+    }
+    if (sourceEventId === activeEventId) {
+      setError("O evento de origem deve ser diferente do evento de destino");
+      return;
+    }
+
+    const idsParaImportar = importAll ? undefined : selectedSourceProductIds;
+    if (!importAll && (!idsParaImportar || idsParaImportar.length === 0)) {
+      setError("Selecione pelo menos um produto para importar");
+      return;
+    }
+
+    setImportingProducts(true);
+    setError("");
+    setImportSuccessMsg("");
+
+    try {
+      const res = await importProducts(sourceEventId, activeEventId, idsParaImportar);
+      setImportSuccessMsg(`Sucesso! ${res.importedCount} produto(s) importado(s) com sucesso.`);
+      await fetchProducts(activeEventId);
+      setTimeout(() => {
+        setShowImportModal(false);
+        setImportSuccessMsg("");
+      }, 1800);
+    } catch (err: any) {
+      setError(err?.message || "Não foi possível importar os produtos");
+    } finally {
+      setImportingProducts(false);
+    }
+  };
 
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
