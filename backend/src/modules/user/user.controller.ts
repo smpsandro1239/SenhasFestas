@@ -43,8 +43,12 @@ export class UserController {
 
   @Patch(':id')
   @Roles('superadmin')
-  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
-    return this.userService.update(id, dto);
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateUserDto,
+    @Request() req: any,
+  ) {
+    return this.userService.update(id, dto, req.user);
   }
 
   @Delete(':id')

@@ -131,7 +131,10 @@ export class UserService {
     return toPublicUser(savedUser) as Partial<UserEntity>;
   }
 
-  async update(id: string, dto: UpdateUserDto): Promise<Partial<UserEntity>> {
+  async update(id: string, dto: UpdateUserDto, actor?: UserEntity): Promise<Partial<UserEntity>> {
+    if (dto.role === 'superadmin' && actor?.role !== 'superadmin') {
+      throw new ForbiddenException('Apenas um superadmin pode atribuir a função superadmin');
+    }
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('Utilizador não encontrado');
