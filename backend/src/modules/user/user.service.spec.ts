@@ -85,6 +85,31 @@ describe('UserService', () => {
     });
   });
 
+  describe('update', () => {
+    it('rejeita atualização para role superadmin por ator não-superadmin', async () => {
+      await expect(
+        service.update(
+          'u1',
+          { role: 'superadmin' },
+          { id: 'organizer', role: 'organizer' } as any,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('permite atualização para role superadmin por ator superadmin', async () => {
+      mockUserRepository.findOne.mockResolvedValue({ id: 'u1', role: 'client' });
+      mockUserRepository.save.mockResolvedValue({ id: 'u1', role: 'superadmin' });
+
+      await expect(
+        service.update(
+          'u1',
+          { role: 'superadmin' },
+          { id: 'boss', role: 'superadmin' } as any,
+        ),
+      ).resolves.toBeDefined();
+    });
+  });
+
   describe('findAll — accessCode não enumerável', () => {
     it('não inclui accessCode no select da listagem', async () => {
       mockMembershipService.eventIdsFor.mockResolvedValue(null);
