@@ -16,6 +16,7 @@ import { normalizarShortCode } from '@/lib/entrar';
 import { parseQrMesa } from '@/lib/mesa-qr';
 import { eventosPossiveis, requerEntrada, type EventoParaSelecao, type EventoPossivel } from '@/lib/eventos';
 import { lerEventoDoDia, guardarEventoDoDia, limparEventoDoDia } from '@/lib/evento-do-dia';
+import { calcularEstadoPedido } from '@/lib/qr-order-estado';
 import type { Product, CartItem } from '@/lib/types';
 import { groupProducts } from '@/lib/group-products';
 import { getOrderTotal } from '@/lib/order-total';
@@ -274,8 +275,31 @@ function QROrderPage() {
   const getCartTotal = () => getOrderTotal(cart);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const usableBalance = Math.min(balance?.balance ?? 0, getCartTotal());
-  const semSaldo =
-    balance !== null && ((balance.balance ?? 0) <= 0 || Boolean(balance.archivedAt));
+  const produtosCount = products.length;
+  const eventoWindowOpen = true;
+  const erroCarregamento = Boolean(!eventLoading && eventId && error && !products.length && !loading);
+
+  const estado = useMemo(
+    () =>
+      calcularEstadoPedido({
+        eventId,
+        eventoStatus: eventoEscolhido?.status ?? null,
+        eventoWindowOpen,
+        saldo: balance?.balance ?? null,
+        produtosCount,
+        erroCarregamento,
+        eventosPossiveis: possiveis.length,
+      }),
+    [
+      eventId,
+      eventoEscolhido?.status,
+      balance?.balance,
+      produtosCount,
+      erroCarregamento,
+      possiveis.length,
+      eventLoading,
+    ],
+  );
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) {
@@ -416,45 +440,53 @@ function QROrderPage() {
             <Alert variant="error" message={scanError} />
           </div>
         )}
-        {eventoEscolhido?.status === 'closed' ? (
+        {estado.tipo === 'sem-evento' && estado.eventosDisponiveis === 0 ? (
+          <Alert variant="info" message="Sem eventos activos de momento. Pede o QR do evento à organização." />
+        ) : estado.tipo === 'sem-evento' && estado.eventosDisponiveis >= 1 ? (
+          <Alert variant="info" message="Em que evento estás? Escolhe acima." />
+        ) : estado.tipo === 'evento-encerrado' ? (
           <div className="rounded-2xl border border-zinc-800 bg-surface p-8 text-center">
             <h2 className="text-2xl font-bold text-zinc-50 mb-2">Evento encerrado</h2>
             <p className="text-zinc-400 text-sm">
-              Este evento já terminou e não aceita mais pedidos. Se tiver saldo por gastar,
-              fale com o caixa para devolver o valor.
+              Este evento já terminou. Se tens saldo, fala com o caixa para reaver o valor.
             </p>
           </div>
-        ) : semSaldo ? (
+        ) : estado.tipo === 'sem-saldo' ? (
           <div className="rounded-2xl border border-zinc-800 bg-surface p-8 text-center space-y-4">
             <h2 className="text-2xl font-bold text-zinc-50">Sem saldo para pedir</h2>
-            <Alert
-              variant="info"
-              message="Precisas de carregar saldo antes de pedir. Vai ao caixa."
-            />
+            <Alert variant="info" message="Sem saldo para pedir. Vai ao caixa carregar saldo." />
             <Button size="lg" className="w-full" onClick={() => router.push('/saldo')}>
               Ver saldo
             </Button>
           </div>
-        ) : (
+        ) : estado.tipo === 'sem-produtos' ? (
+          <div className="rounded-2xl border border-zinc-800 bg-surface p-8 text-center space-y-4">
+            <Alert
+              variant="info"
+              message="O menu deste evento ainda não está disponível. Contacta a organização."
+            />
+            {(balance?.balance ?? 0) <= 0 && (
+              <Button size="lg" className="w-full" onClick={() => router.push('/saldo')}>
+                Ver saldo
+              </Button>
+            )}
+          </div>
+        ) : estado.tipo === 'erro-carregamento' ? (
+          <div className="space-y-3">
+            <Alert variant="error" message="Não foi possível carregar o menu. Tenta novamente." />
+            <Button size="sm" variant="secondary" onClick={() => fetchProducts()}>
+              Tentar
+            </Button>
+          </div>
+        ) : estado.tipo === 'pronto' && products.length > 0 ? (
           <div className="space-y-6">
             <h2 className="text-lg font-bold text-zinc-100 mb-4">Escolha os seus petiscos</h2>
-
             {loading ? (
               <div className="space-y-3">
                 {[...Array(4)].map((_, i) => (
                   <div key={i} className="shimmer h-24 rounded-2xl" />
                 ))}
               </div>
-            ) : !eventId && eventError ? (
-              <Alert variant="error" message={eventError} />
-            ) : preciseiEscolha ? (
-              <Alert variant="info" message="Em que evento estás? Escolhe acima." />
-            ) : !eventId ? (
-              <Alert variant="info" message="Sem eventos activos de momento. Pede o QR do evento à organização." />
-            ) : error ? (
-              <Alert variant="error" message={error} />
-            ) : products.length === 0 ? (
-              <Alert variant="info" message="Nenhum produto disponível de momento." />
             ) : (
               <div className="space-y-6">
                 {groupedProducts.map((group) => (
@@ -526,6 +558,18 @@ function QROrderPage() {
               </div>
             )}
           </div>
+        ) : (
+          <div className="space-y-3">
+            {loading ? (
+              <div className="space-y-3">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="shimmer h-24 rounded-2xl" />
+                ))}
+              </div>
+            ) : (
+              <Alert variant="info" message="O menu deste evento ainda não está disponível. Contacta a organização." />
+            )}
+          </div>
         )}
       </main>
 
@@ -585,7 +629,7 @@ function QROrderPage() {
       </div>
 
       {/* Table modal */}
-      {showTableModal && !semSaldo && (
+      {showTableModal && (balance?.balance ?? 0) > 0 && !Boolean(balance?.archivedAt) && (
         <div
           role="dialog"
           aria-modal="true"
