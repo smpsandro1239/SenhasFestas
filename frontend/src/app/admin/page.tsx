@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import { useCurrentEvent } from '@/lib/use-current-event';
 import { QRCodeCanvas } from 'qrcode.react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
@@ -28,7 +29,18 @@ const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
   client: 'warning',
 };
 
-export default function AdminPage() {
+export default function AdminPageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <AdminPage />
+    </Suspense>
+  );
+}
+
+function AdminPage() {
+  const { event: currentEvent } = useCurrentEvent();
+  const activeEventId = currentEvent?.id;
+  const activeEvent = currentEvent;
   const [activeTab, setActiveTab] = useState('eventos');
   const [events, setEvents] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -260,7 +272,7 @@ export default function AdminPage() {
       return;
     }
     try {
-      const res = await getProducts(evId, 1, 100, "", "", "", "true");
+      const res = await getProducts({ eventId: evId, page: 1, limit: 100, includeInactive: true });
       const list = res.items || [];
       setSourceProducts(list);
       setSelectedSourceProductIds(list.map((p: any) => p.id));
@@ -295,9 +307,9 @@ export default function AdminPage() {
     setImportSuccessMsg("");
 
     try {
-      const res = await importProducts(sourceEventId, activeEventId, idsParaImportar);
+      const res: any = await importProducts(sourceEventId, activeEventId, idsParaImportar);
       setImportSuccessMsg(`Sucesso! ${res.importedCount} produto(s) importado(s) com sucesso.`);
-      await fetchProducts(activeEventId);
+      await loadProducts();
       setTimeout(() => {
         setShowImportModal(false);
         setImportSuccessMsg("");
