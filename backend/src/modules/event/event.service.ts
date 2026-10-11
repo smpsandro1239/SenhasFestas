@@ -314,7 +314,7 @@ export class EventService {
     settings: EventSettingsDto,
   ): Promise<Record<string, any>> {
     const event = await this.findOne(id, user);
-    event.settings = { ...(event.settings ?? {}), ...settings };
+    event.settings = { ...event.settings, ...settings };
     await this.eventRepository.save(event);
     return event.settings;
   }
