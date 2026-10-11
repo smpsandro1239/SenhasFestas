@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/cn';
@@ -28,6 +28,92 @@ export default function QROrderPageWrapper() {
     <Suspense fallback={null}>
       <QROrderPage />
     </Suspense>
+  );
+}
+
+function EventoDropdown({
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  options: EventoPossivel[];
+  onChange: (id: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  const selected = options.find((o) => o.id === value);
+
+  return (
+    <div className="relative flex-1" ref={rootRef}>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Escolher evento"
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-2 pl-3 pr-3 py-2 rounded-xl bg-surface border border-border hover:border-border-hover text-left focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40 transition-colors disabled:opacity-60"
+      >
+        <span className={cn('flex-1 text-sm', selected ? 'text-zinc-100' : 'text-zinc-500')}>
+          {selected ? (selected.name ?? selected.id) : 'Em que evento estás?'}
+        </span>
+        <ChevronDownIcon
+          className={cn('h-4 w-4 text-zinc-400 transition-transform', open && 'rotate-180')}
+        />
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Escolher evento"
+          className="absolute left-0 right-0 top-full mt-1 z-40 p-1 rounded-xl border border-border bg-surface-solid shadow-2xl"
+        >
+          {options.map((o) => {
+            const active = o.id === value;
+            return (
+              <li key={o.id} role="option" aria-selected={active}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(o.id);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition-colors',
+                    active ? 'text-brand' : 'text-zinc-100 hover:bg-surface-hover',
+                  )}
+                >
+                  <span className="flex-1 truncate">{o.name ?? o.id}</span>
+                  {active && <CheckIcon className="h-4 w-4 shrink-0" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -473,26 +559,15 @@ function QROrderPage() {
           </div>
 
           {possiveis.length >= 1 && (
-            <label className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex items-center gap-2">
               <span className="text-xs text-zinc-400 shrink-0">Evento</span>
-              <div className="relative flex-1">
-                <select
-                  value={eventoDisponivelEscolhido ? eventId : ''}
-                  onChange={(e) => escolherEvento(e.target.value)}
-                  disabled={aEntrar}
-                  aria-label="Escolher evento"
-                  className="w-full appearance-none bg-surface border border-border hover:border-border-hover rounded-xl pl-3 pr-9 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40 transition-colors disabled:opacity-60"
-                >
-                  <option value="">Em que evento estás?</option>
-                  {possiveis.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.name ?? e.id}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-              </div>
-            </label>
+              <EventoDropdown
+                value={eventoDisponivelEscolhido ? eventId : ''}
+                options={possiveis}
+                onChange={(id) => escolherEvento(id)}
+                disabled={aEntrar}
+              />
+            </div>
           )}
         </div>
       </header>
