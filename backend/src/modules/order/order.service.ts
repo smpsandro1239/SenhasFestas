@@ -63,6 +63,26 @@ export class OrderService {
       }
       const productById = new Map(products.map((product) => [product.id, product]));
 
+      // Relock só os produtos com controlo de stock (stock != null). O read
+      // inicial não é seguro para vender: duas encomendas concorrentes podiam
+      // ler o mesmo número e vender a mesma unidade. O lock pessimista
+      // serializa a venda e devolve o valor atual, que é o usado para validar
+      // e para decrementar.
+      const trackedIds = dto.items
+        .map((item) => productById.get(item.productId))
+        .filter((product) => product?.stock != null)
+        .map((product) => product!.id);
+      const lockedById = new Map<string, ProductEntity>();
+      if (trackedIds.length > 0) {
+        const locked = await manager.find(ProductEntity, {
+          where: { id: In(trackedIds) },
+          lock: { mode: 'pessimistic_write' },
+        });
+        for (const product of locked) {
+          lockedById.set(product.id, product);
+        }
+      }
+
       let total = 0;
       for (const item of dto.items) {
         const product = productById.get(item.productId);
@@ -75,7 +95,8 @@ export class OrderService {
         if (!product.isActive) {
           throw new BadRequestException(`Produto indisponível: ${item.productId}`);
         }
-        if (product.stock !== null && product.stock !== undefined && item.quantity > Number(product.stock)) {
+        const stock = lockedById.get(item.productId)?.stock ?? product.stock;
+        if (stock != null && item.quantity > Number(stock)) {
           throw new BadRequestException(`Stock insuficiente para: ${item.productId}`);
         }
         total = centavos(total + item.quantity * centavos(Number(product.price)));
@@ -115,6 +136,16 @@ export class OrderService {
           notes: item.notes,
         });
         await manager.save(OrderItemEntity, orderItem);
+      }
+
+      // Decrementar o stock só nos produtos com controlo (stock != null).
+      // Quem não tem controlo (menu aberto) fica intocável.
+      for (const item of dto.items) {
+        const locked = lockedById.get(item.productId);
+        if (locked?.stock != null) {
+          locked.stock = Number(locked.stock) - item.quantity;
+          await manager.save(ProductEntity, locked);
+        }
       }
 
       if (dto.balanceId && balanceUsed > 0) {
@@ -193,6 +224,26 @@ export class OrderService {
       orderId,
     });
     await manager.save(BalanceMovementEntity, movement);
+  }
+
+  // Repõe no stock as unidades devolvidas por um cancelamento. Simétrico do
+  // decremento em create: só produtos com controlo (stock != null). Devolve
+  // a quantidade comprada mesmo que o admin tenha rebaixado o stock entretanto
+  // — as unidades vendidas nunca saíram da contagem real.
+  private async reporStockEmTransacao(
+    manager: import('typeorm').EntityManager,
+    orderId: string,
+  ): Promise<void> {
+    const itens = await manager.find(OrderItemEntity, {
+      where: { order: { id: orderId } },
+      relations: { product: true },
+    });
+    for (const item of itens) {
+      const product = item.product;
+      if (!product || product.stock == null) continue;
+      product.stock = Number(product.stock) + item.quantity;
+      await manager.save(ProductEntity, product);
+    }
   }
 
   async findByEvent(eventId: string, user: any): Promise<{
@@ -333,6 +384,7 @@ export class OrderService {
       const updatedOrder = await manager.save(OrderEntity, currentOrder);
 
       await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
+      await this.reporStockEmTransacao(manager, currentOrder.id);
 
       return updatedOrder;
     });
@@ -391,6 +443,7 @@ export class OrderService {
           assertPodeMexerEmSaldo(user);
         }
         await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
+        await this.reporStockEmTransacao(manager, currentOrder.id);
       }
 
       return updated;

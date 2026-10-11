@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { OrderService } from './order.service';
 import { EventService } from '../event/event.service';
-import { BalanceMovementEntity, MovementType } from '../../entities';
+import { BalanceMovementEntity, MovementType, ProductEntity } from '../../entities';
 
 describe('OrderService — guard de janela operacional', () => {
   const eventService = {
@@ -270,6 +270,7 @@ describe('OrderService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
     };
     const balanceSave = vi.fn();
     const manager = {
+      find: vi.fn().mockResolvedValue([]),
       findOne: vi
         .fn()
         .mockResolvedValueOnce({ id: 'o1', status: 'received', balanceId: 'b1', balanceUsed: 10 })
@@ -326,6 +327,7 @@ describe('OrderService — cancelamento via updateStatus deve reembolsar saldo (
     };
     const balanceSave = vi.fn();
     const manager = {
+      find: vi.fn().mockResolvedValue([]),
       findOne: vi
         .fn()
         .mockResolvedValueOnce({ id: 'o1', status: 'received', balanceId: 'b1', balanceUsed: 10 })
@@ -464,5 +466,116 @@ describe('OrderService — A8: valida produtos ativos, do evento e com stock (RE
     } as any);
 
     expect(result).toBeDefined();
+  });
+
+  it('decrementa o stock dos produtos com controlo ao criar o pedido', async () => {
+    const p1 = { id: 'p1', price: 100, isActive: true, event: { id: 'evt1' }, stock: 5 };
+    const manager = makeManager([p1]);
+    const svc = makeSvc(manager);
+    (svc as any).findOne = vi.fn().mockResolvedValue({ id: 'order1' });
+
+    await svc.create({ id: 'u1', role: 'client' }, {
+      eventId: 'evt1',
+      items: [{ productId: 'p1', quantity: 2 }],
+      source: 'qr',
+    } as any);
+
+    expect(p1.stock).toBe(3);
+    expect(manager.save).toHaveBeenCalledWith(ProductEntity, expect.objectContaining({ stock: 3 }));
+  });
+
+  it('mantém intocável o produto sem controlo de stock (stock null)', async () => {
+    const p1 = { id: 'p1', price: 100, isActive: true, event: { id: 'evt1' }, stock: null };
+    const manager = makeManager([p1]);
+    const svc = makeSvc(manager);
+    (svc as any).findOne = vi.fn().mockResolvedValue({ id: 'order1' });
+
+    await svc.create({ id: 'u1', role: 'client' }, {
+      eventId: 'evt1',
+      items: [{ productId: 'p1', quantity: 4 }],
+      source: 'qr',
+    } as any);
+
+    expect(manager.save).not.toHaveBeenCalledWith(ProductEntity, expect.anything());
+  });
+
+  it('relê os produtos com controlo com lock pessimista antes de validar', async () => {
+    const p1 = { id: 'p1', price: 100, isActive: true, event: { id: 'evt1' }, stock: 5 };
+    const manager = makeManager([p1]);
+    const svc = makeSvc(manager);
+    (svc as any).findOne = vi.fn().mockResolvedValue({ id: 'order1' });
+
+    await svc.create({ id: 'u1', role: 'client' }, {
+      eventId: 'evt1',
+      items: [{ productId: 'p1', quantity: 1 }],
+      source: 'qr',
+    } as any);
+
+    // call 0 = pre-load sem lock; call 1 = relock pessimista dos controlados
+    const lockedCall = manager.find.mock.calls[1]?.[1];
+    expect(lockedCall?.lock).toEqual({ mode: 'pessimistic_write' });
+  });
+});
+
+describe('OrderService — cancelamento repõe stock (B1c)', () => {
+  function makeSvc(manager: any) {
+    const orderRepository = {
+      findOne: vi.fn().mockResolvedValue({
+        id: 'o1',
+        status: 'received',
+        event: { id: 'evt1' },
+      }),
+    };
+    const eventUserRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'm1' }),
+    };
+    const dataSource = {
+      transaction: vi.fn().mockImplementation(async (fn: any) => fn(manager)),
+    };
+    return new OrderService(
+      orderRepository as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      eventUserRepository as any,
+      dataSource as any,
+      { generateOrderQRCode: vi.fn() } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+      { notifyNewOrder: vi.fn() } as any,
+      { assertEventOperavel: vi.fn() } as any,
+    );
+  }
+
+  function makeManager(produto: any) {
+    const itens = [{ quantity: 2, product: produto }];
+    return {
+      find: vi.fn().mockResolvedValue(itens),
+      findOne: vi.fn().mockResolvedValue({ id: 'o1', status: 'received', event: { id: 'evt1' } }),
+      save: vi.fn().mockImplementation((_e: any, d: any) => Promise.resolve(d)),
+      create: vi.fn().mockImplementation((_e: any, d: any) => d),
+    };
+  }
+
+  it('devolve ao stock as unidades de produtos com controlo', async () => {
+    const p1 = { id: 'p1', price: 100, isActive: true, event: { id: 'evt1' }, stock: 3 };
+    const manager = makeManager(p1);
+    const svc = makeSvc(manager);
+
+    await svc.cancelOrder('o1', { id: 'u1', role: 'cashier' });
+
+    expect(p1.stock).toBe(5);
+    expect(manager.save).toHaveBeenCalledWith(ProductEntity, expect.objectContaining({ stock: 5 }));
+  });
+
+  it('não mexe em produtos sem controlo de stock', async () => {
+    const p1 = { id: 'p1', price: 100, isActive: true, event: { id: 'evt1' }, stock: null };
+    const manager = makeManager(p1);
+    const svc = makeSvc(manager);
+
+    await svc.cancelOrder('o1', { id: 'u1', role: 'cashier' });
+
+    expect(manager.save).not.toHaveBeenCalledWith(ProductEntity, expect.anything());
   });
 });
