@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Post, Body, Query, UseGuards, Request, ForbiddenException, ParseUUIDPipe } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { BalanceService } from './balance.service';
-import { LoadBalanceDto, DeductBalanceDto, ReverseLoadDto, ExtendBalanceDto, BalanceEventDto } from './dto';
+import { LoadBalanceDto, DeductBalanceDto, ReverseLoadDto, ExtendBalanceDto, BalanceEventDto, TransferBalanceDto } from './dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { FINANCE_ROLES } from '../../common/roles';
@@ -69,6 +69,15 @@ export class BalanceController {
     return this.balanceService.deductBalance(userId, dto, req.user);
   }
 
+  @Get(':userId/events')
+  @Roles(...FINANCE_ROLES)
+  async listEvents(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Request() req: any,
+  ) {
+    return this.balanceService.listBalancesPorEvento(userId, req.user);
+  }
+
   @Get(':userId/history')
   async getHistory(
     @Param('userId', ParseUUIDPipe) userId: string,
@@ -81,6 +90,20 @@ export class BalanceController {
       await this.balanceService.assertMemberEvent(req.user.id, eventId);
     }
     return this.balanceService.getBalanceHistory(userId, eventId);
+  }
+
+  @Post(':userId/transfer')
+  @Roles(...FINANCE_ROLES)
+  async transfer(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() dto: TransferBalanceDto,
+    @Request() req: any,
+  ) {
+    this.assertStaffEventScope(req.user, dto.toEventId);
+    if (req.user.role !== 'superadmin') {
+      await this.balanceService.assertMemberEvent(req.user.id, dto.toEventId);
+    }
+    return this.balanceService.transferBalance(userId, dto, req.user);
   }
 
   @Post(':userId/extend')

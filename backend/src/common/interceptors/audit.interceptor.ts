@@ -41,6 +41,9 @@ const SUFIXOS: Array<[string, string]> = [
   ['/extend', 'EXTEND'],
   ['/unarchive', 'UNARCHIVE'],
   ['/notified', 'NOTIFIED'],
+  ['/upload', 'UPLOAD'],
+  ['/transfer', 'TRANSFER'],
+  ['/stock', 'STOCK_ADJUST'],
   ['/login', 'LOGIN'],
   ['/logout', 'LOGOUT'],
 ];

@@ -45,3 +45,15 @@ export class BalanceEventDto {
   @IsUUID()
   eventId: string;
 }
+
+export class TransferBalanceDto {
+  @IsUUID()
+  fromEventId: string;
+
+  @IsUUID()
+  toEventId: string;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  amount: number;
+}

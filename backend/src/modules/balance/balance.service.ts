@@ -2,7 +2,7 @@
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource, MoreThan, IsNull, LessThan } from 'typeorm';
 import { BalanceEntity, UserEntity, BalanceMovementEntity, EventEntity, EventUserEntity, MovementType } from '../../entities';
-import { LoadBalanceDto, DeductBalanceDto, ReverseLoadDto, ExtendBalanceDto } from './dto';
+import { LoadBalanceDto, DeductBalanceDto, ReverseLoadDto, ExtendBalanceDto, TransferBalanceDto } from './dto';
 import { toPublicUser } from '../../common/serializers';
 import { centavos, soma, subtrai } from '../../common/money';
 import { assertSaldoUtilizavel, saldoDeadlineUtc } from '../../common/balance-guard';
@@ -454,6 +454,161 @@ export class BalanceService {
         deadline: deadline ? deadline.toISOString() : null,
       };
     });
+  }
+
+  // Saldos do utilizador nos vários eventos em que tem dinheiro — o caixa usa
+  // isto para mostrar "Tens €100 no Magusto" e transferir para o evento atual.
+  async listBalancesPorEvento(
+    userId: string,
+    utilizador: any,
+  ): Promise<
+    {
+      eventId: string | null;
+      eventName: string;
+      balance: number;
+      archivedAt: string | null;
+      deadline: string | null;
+    }[]
+  > {
+    const saldos = await this.balanceRepository.find({
+      where: { user: { id: userId }, currentBalance: MoreThan(0) as any },
+      relations: { event: true },
+      order: { currentBalance: 'DESC' },
+    });
+
+    let eventIdsMembro: string[] | null = null;
+    if (utilizador?.role !== 'superadmin') {
+      const membros = await this.eventUserRepository.find({
+        where: { user: { id: utilizador.id } },
+        relations: { event: true },
+      });
+      eventIdsMembro = membros.map((m) => m.event?.id).filter(Boolean) as string[];
+    }
+
+    return saldos
+      .filter(
+        (s) =>
+          !eventIdsMembro ||
+          (s.event?.id != null && eventIdsMembro.includes(s.event.id)),
+      )
+      .map((s) => {
+        const deadline = saldoDeadlineUtc(s.event, s.extendedUntil);
+        return {
+          eventId: s.event?.id ?? null,
+          eventName: s.event?.name ?? 'Evento',
+          balance: Number(s.currentBalance),
+          archivedAt: s.archivedAt ? s.archivedAt.toISOString() : null,
+          deadline: deadline ? deadline.toISOString() : null,
+        };
+      });
+  }
+
+  // Move dinheiro do saldo de um evento (ex.: festa anterior) para o saldo do
+  // evento atual. Duas escritas, numa transação com lock: origem a diminuir
+  // (movimento CANCEL) e destino a aumentar (movimento LOAD), cada um com a
+  // descrição a apontar para o outro evento — sem migração de BD e visível
+  // nos históricos/auditoria financeira dos dois lados.
+  async transferBalance(
+    userId: string,
+    dto: TransferBalanceDto,
+    actor?: any,
+  ): Promise<{
+    balance: { id: string; currentBalance: number };
+    originBalance: { id: string; currentBalance: number };
+    movement: BalanceMovementEntity;
+    fromEventId: string;
+    toEventId: string;
+  }> {
+    if (dto.fromEventId === dto.toEventId) {
+      throw new ForbiddenException('Origem e destino têm de ser eventos diferentes');
+    }
+    await this.eventService.assertEventOperavelById(dto.toEventId);
+    const fromEvent = await this.eventRepository.findOne({
+      where: { id: dto.fromEventId },
+    });
+    if (!fromEvent) {
+      throw new NotFoundException('Evento de origem não encontrado');
+    }
+    if (actor?.role !== 'superadmin') {
+      await this.assertMemberEvent(actor.id, dto.fromEventId);
+      await this.assertMemberEvent(actor.id, dto.toEventId);
+    }
+
+    const montante = centavos(dto.amount);
+    const resultado = await this.dataSource.transaction(async (manager) => {
+      const origem = await manager.findOne(BalanceEntity, {
+        where: { user: { id: userId }, event: { id: dto.fromEventId } } as any,
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!origem) {
+        throw new NotFoundException('O utilizador não tem saldo no evento de origem');
+      }
+      if (centavos(Number(origem.currentBalance)) < montante) {
+        throw new ForbiddenException('Saldo insuficiente no evento de origem');
+      }
+
+      let destino = await manager.findOne(BalanceEntity, {
+        where: { user: { id: userId }, event: { id: dto.toEventId } } as any,
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!destino) {
+        const userEntity = await manager.findOne(UserEntity, {
+          where: { id: userId },
+        });
+        if (!userEntity) {
+          throw new NotFoundException('Utilizador não encontrado');
+        }
+        destino = manager.create(BalanceEntity, {
+          user: userEntity,
+          event: { id: dto.toEventId } as EventEntity,
+          currentBalance: 0,
+        });
+        await manager.save(BalanceEntity, destino);
+      } else if (destino.archivedAt) {
+        // O dinheiro chega agora ao destino: revive um saldo arquivado.
+        destino.archivedAt = null;
+      }
+
+      origem.currentBalance = subtrai(Number(origem.currentBalance), montante);
+      destino.currentBalance = soma(Number(destino.currentBalance), montante);
+      const origemSalva = await manager.save(BalanceEntity, origem);
+      const destinoSalvo = await manager.save(BalanceEntity, destino);
+
+      const movOrigem = manager.create(BalanceMovementEntity, {
+        balance: origemSalva,
+        type: MovementType.CANCEL,
+        amount: montante,
+        description: `Transferência para ${fromEvent.name}`,
+        createdById: actor?.id,
+      });
+      await manager.save(BalanceMovementEntity, movOrigem);
+
+      const movDestino = manager.create(BalanceMovementEntity, {
+        balance: destinoSalvo,
+        type: MovementType.LOAD,
+        amount: montante,
+        description: `Transferência de ${fromEvent.name}`,
+        createdById: actor?.id,
+      });
+      await manager.save(BalanceMovementEntity, movDestino);
+
+      return {
+        balance: {
+          id: destinoSalvo.id,
+          currentBalance: Number(destinoSalvo.currentBalance),
+        },
+        originBalance: {
+          id: origemSalva.id,
+          currentBalance: Number(origemSalva.currentBalance),
+        },
+        movement: movDestino,
+        fromEventId: dto.fromEventId,
+        toEventId: dto.toEventId,
+      };
+    });
+
+    await this.eventService.vincularCliente(userId, dto.toEventId);
+    return resultado;
   }
 
   async getBalance(

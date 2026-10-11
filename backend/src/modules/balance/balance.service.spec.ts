@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenException, ConflictException } from '@nestjs/common';
 import { BalanceService } from './balance.service';
 import { EventService } from '../event/event.service';
+import { MovementType, BalanceMovementEntity } from '../../entities';
 
 describe('BalanceService — guard de janela operacional', () => {
   const eventService = {
@@ -652,5 +653,142 @@ describe('BalanceService — lista de saldos pendentes com estado de arquivo/avi
     await expect(
       service.listSaldosPendentes('nao-existe', { role: 'superadmin' }),
     ).rejects.toThrow('Evento não encontrado');
+  });
+});
+describe('BalanceService — transferência entre eventos (melhoria #8)', () => {
+  const eventService = {
+    assertEventOperavelById: vi.fn().mockResolvedValue(undefined),
+    vincularCliente: vi.fn().mockResolvedValue(undefined),
+  } as unknown as EventService;
+
+  const Novo = () =>
+    new BalanceService(
+      { find: vi.fn() } as any,
+      {} as any,
+      {} as any,
+      { findOne: vi.fn() } as any,
+      { find: vi.fn(), findOne: vi.fn() } as any,
+      { transaction: vi.fn() } as any,
+      eventService,
+    );
+
+  it('move o valor do evento de origem para o destino com movimentos CANCEL/LOAD', async () => {
+    const svc = Novo();
+    const eventos: any[] = [];
+    (svc as any).eventRepository.findOne.mockResolvedValue({ id: 'magusto', name: 'Magusto' });
+    (svc as any).eventUserRepository.findOne.mockResolvedValue({ id: 'm1' });
+
+    const origem = { id: 'b-origem', currentBalance: 100 };
+    const destino = { id: 'b-destino', currentBalance: 20 };
+    const manager = {
+      findOne: vi
+        .fn()
+        .mockResolvedValueOnce(origem)
+        .mockResolvedValueOnce(destino),
+      save: vi.fn().mockImplementation(async (_e: any, d: any) => {
+        if (d?.currentBalance !== undefined) {
+          eventos.push({ currentBalance: Number(d.currentBalance) });
+        }
+        return Promise.resolve(d);
+      }),
+      create: vi.fn().mockImplementation((_e: any, d: any) => d),
+    };
+    (svc as any).dataSource.transaction.mockImplementation(async (fn: any) => fn(manager));
+
+    const r = await svc.transferBalance(
+      'u1',
+      { fromEventId: 'magusto', toEventId: 'atual', amount: 30 },
+      { id: 'staff', role: 'cashier' },
+    );
+
+    expect(r.originBalance.currentBalance).toBe(70);
+    expect(r.balance.currentBalance).toBe(50);
+    expect(r.movement).toEqual(
+      expect.objectContaining({
+        type: MovementType.LOAD,
+        amount: 30,
+        description: 'Transferência de Magusto',
+      }),
+    );
+    expect(manager.create).toHaveBeenCalledWith(
+      BalanceMovementEntity,
+      expect.objectContaining({
+        type: MovementType.CANCEL,
+        amount: 30,
+        description: 'Transferência para Magusto',
+      }),
+    );
+    expect(eventService.vincularCliente).toHaveBeenCalledWith('u1', 'atual');
+  });
+
+  it('origem sem saldo suficiente → Forbidden', async () => {
+    const svc = Novo();
+    (svc as any).eventRepository.findOne.mockResolvedValue({ id: 'magusto', name: 'Magusto' });
+    (svc as any).dataSource.transaction.mockImplementation(async (fn: any) =>
+      fn({
+        findOne: vi.fn().mockResolvedValueOnce({ id: 'b-origem', currentBalance: 10 }),
+        save: vi.fn().mockImplementation(async (_e: any, d: any) => Promise.resolve(d)),
+        create: vi.fn().mockImplementation((_e: any, d: any) => d),
+      }),
+    );
+    await expect(
+      svc.transferBalance('u1', { fromEventId: 'magusto', toEventId: 'atual', amount: 30 }, { role: 'superadmin' }),
+    ).rejects.toThrow('Saldo insuficiente no evento de origem');
+  });
+
+  it('origem e destino iguais → Forbidden', async () => {
+    const svc = Novo();
+    await expect(
+      svc.transferBalance('u1', { fromEventId: 'e', toEventId: 'e', amount: 5 }, { role: 'superadmin' }),
+    ).rejects.toThrow('Origem e destino têm de ser eventos diferentes');
+  });
+
+  it('cria o saldo de destino quando ainda não existe', async () => {
+    const svc = Novo();
+    (svc as any).eventRepository.findOne.mockResolvedValue({ id: 'magusto', name: 'Magusto' });
+    (svc as any).userRepository.findOne = vi.fn().mockResolvedValue({ id: 'u1', name: 'Ana' });
+    const criaDestino = vi.fn();
+    const manager = {
+      findOne: vi
+        .fn()
+        .mockResolvedValueOnce({ id: 'b-origem', currentBalance: 50 })
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 'u1', name: 'Ana' }),
+      save: vi.fn().mockImplementation(async (_e: any, d: any) => {
+        if (d?.currentBalance === 0) criaDestino(d);
+        return Promise.resolve(d);
+      }),
+      create: vi.fn().mockImplementation((_e: any, d: any) => d),
+    };
+    (svc as any).dataSource.transaction.mockImplementation(async (fn: any) => fn(manager));
+    const r = await svc.transferBalance('u1', { fromEventId: 'magusto', toEventId: 'atual', amount: 10 }, { role: 'superadmin' });
+    expect(r.originBalance.currentBalance).toBe(40);
+    expect(r.balance.currentBalance).toBe(10);
+    expect(criaDestino).toHaveBeenCalled();
+  });
+
+  it('listBalancesPorEvento lista só eventos do staff (non-superadmin)', async () => {
+    const svc = Novo();
+    (svc as any).balanceRepository.find.mockResolvedValue([
+      { id: 'b1', currentBalance: 100, event: { id: 'magusto', name: 'Magusto' }, archivedAt: null, extendedUntil: null },
+      { id: 'b2', currentBalance: 15, event: { id: 'outro', name: 'Outro' }, archivedAt: null, extendedUntil: null },
+    ]);
+    (svc as any).eventUserRepository.find.mockResolvedValue([
+      { event: { id: 'magusto' } },
+    ]);
+    const res = await svc.listBalancesPorEvento('u1', { id: 'staff', role: 'cashier' });
+    expect(res).toHaveLength(1);
+    expect(res[0]).toMatchObject({ eventId: 'magusto', eventName: 'Magusto', balance: 100 });
+  });
+
+  it('listBalancesPorEvento para superadmin ignora membroships', async () => {
+    const svc = Novo();
+    (svc as any).balanceRepository.find.mockResolvedValue([
+      { id: 'b1', currentBalance: 7, event: { id: 'e1', name: 'E1' }, archivedAt: null, extendedUntil: null },
+    ]);
+    (svc as any).eventUserRepository.find = vi.fn();
+    const res = await svc.listBalancesPorEvento('u1', { id: 'sa', role: 'superadmin' });
+    expect(res).toHaveLength(1);
+    expect((svc as any).eventUserRepository.find).not.toHaveBeenCalled();
   });
 });

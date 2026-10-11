@@ -38,6 +38,8 @@ export const AUDIT_ACOES_FINANCEIRAS = [
   'CLOSE',
   'OPEN',
   'EXPORT',
+  'TRANSFER',
+  'STOCK_ADJUST',
 ];
 
 const LIMITE_EXPORTACAO = 5000;
