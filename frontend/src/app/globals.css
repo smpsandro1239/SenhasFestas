@@ -4,6 +4,7 @@
 
 @layer base {
   :root {
+    color-scheme: dark;
     --color-bg: #090a0f;
     --color-surface: rgba(255,255,255,0.03);
     --color-surface-hover: rgba(255,255,255,0.06);

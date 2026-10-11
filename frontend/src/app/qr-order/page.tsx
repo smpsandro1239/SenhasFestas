@@ -470,11 +470,9 @@ function QROrderPage() {
                 aria-label="Escolher evento"
                 className="flex-1 bg-surface border border-border rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:opacity-60"
               >
-                <option value="" className="bg-white text-zinc-900">
-                  Em que evento estás?
-                </option>
+                <option value="">Em que evento estás?</option>
                 {possiveis.map((e) => (
-                  <option key={e.id} value={e.id} className="bg-white text-zinc-900">
+                  <option key={e.id} value={e.id}>
                     {e.name ?? e.id}
                   </option>
                 ))}
