@@ -2,14 +2,15 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
-import { fetchWithAuth } from '@/lib/api';
+import { fetchWithAuth, getProducts } from '@/lib/api';
 import { useCurrentEvent } from '@/lib/use-current-event';
 import { useOrderSocket } from '@/lib/use-order-socket';
+import { stockBaixo, esgotado } from '@/lib/stock';
 import { Badge, type BadgeVariant } from '@/components/ui/badge';
 import { Tabs } from '@/components/ui/tabs';
 import { Alert } from '@/components/ui/alert';
 import { Spinner } from '@/components/ui/spinner';
-import { ArrowLeftIcon, ChefHatIcon, RefreshIcon, PlayIcon, CheckIcon } from '@/components/ui/icons';
+import { ArrowLeftIcon, ChefHatIcon, RefreshIcon, PlayIcon, CheckIcon, CloseIcon } from '@/components/ui/icons';
 import { cn } from '@/lib/cn';
 import { kitchenDisplayName } from '@/lib/kitchen-name';
 
@@ -74,6 +75,7 @@ function CozinhaPageInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'received' | 'preparing'>('all');
+  const [lowStock, setLowStock] = useState<any[]>([]);
   const now = useClock();
 
   const { event: eventoAtual } = useCurrentEvent();
@@ -87,12 +89,22 @@ function CozinhaPageInner() {
       );
       setOrders(sorted);
       setError('');
+      if (eventoAtual?.id) {
+        try {
+          const produtos = await getProducts({ eventId: eventoAtual.id, limit: 100 });
+          const comStock = ((produtos?.items ?? produtos) ?? []).filter((p: any) => p.isActive !== false);
+          setLowStock(comStock.filter((p: any) => stockBaixo(p) || esgotado(p)));
+        } catch {
+          // o aviso de stock é acessório: a cozinha continua a funcionar
+          // mesmo sem conseguir listar produtos.
+        }
+      }
     } catch {
       setError('Erro ao carregar pedidos da cozinha');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [eventoAtual?.id]);
 
   const { status: socketStatus } = useOrderSocket(fetchOrders, eventoAtual?.id);
 
@@ -115,6 +127,14 @@ function CozinhaPageInner() {
     } finally {
       setUpdatingId(null);
     }
+  };
+
+  const rejeitarPedido = async (order: Order) => {
+    const ok = window.confirm(
+      `Cancelar o pedido #${order.id.slice(-4)}${order.tableNumber ? ` (Mesa ${order.tableNumber})` : ''}? O saldo e o stock são devolvidos.`,
+    );
+    if (!ok) return;
+    await updateStatus(order.id, 'cancelled');
   };
 
   const filteredOrders = orders.filter((order) => {
@@ -198,6 +218,27 @@ function CozinhaPageInner() {
         {/* Content */}
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6">
           {error && <div className="mb-6"><Alert variant="error" message={error} /></div>}
+
+          {lowStock.length > 0 && (
+            <div className="mb-6 rounded-2xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3">
+              <div className="text-sm font-semibold text-amber-400">
+                ⚠ Menção ao bar — stock baixo:
+              </div>
+              <div className="mt-1 flex flex-wrap gap-2">
+                {lowStock.map((p: any) => (
+                  <span
+                    key={p.id}
+                    className="inline-flex items-center gap-1.5 text-xs bg-surface border border-border rounded-lg px-2 py-1 text-zinc-300"
+                  >
+                    {p.name}
+                    <Badge variant={esgotado(p) ? 'danger' : 'warning'} size="sm">
+                      {esgotado(p) ? 'Esgotado' : `${p.stock} restantes`}
+                    </Badge>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <Tabs items={tabs} activeTab={filter} onChange={(id) => setFilter(id as any)} className="mb-6" layout="pills" />
 
@@ -288,6 +329,17 @@ function CozinhaPageInner() {
                       </span>
 
                       <div className="flex gap-3">
+                        {(order.status === 'received' || order.status === 'preparing') && (
+                          <button
+                            onClick={() => rejeitarPedido(order)}
+                            disabled={updatingId !== null}
+                            title="Cancelar pedido (devolve saldo e stock)"
+                            className="flex items-center gap-2 px-4 py-3.5 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 font-semibold text-sm hover:bg-red-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <CloseIcon className="h-4 w-4" />
+                            Rejeitar
+                          </button>
+                        )}
                         {order.status === 'received' && (
                           <button
                             onClick={() => updateStatus(order.id, 'preparing')}
