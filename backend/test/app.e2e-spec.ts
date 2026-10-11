@@ -6,6 +6,7 @@ import * as bcrypt from 'bcryptjs';
 import { criarAplicacao } from '../src/app.setup';
 import { UserEntity } from '../src/entities';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { gerarCodigoAcesso } from '../src/common/access-code';
 
 const PROBE_TIMEOUT_MS = 5000;
 
@@ -67,7 +68,7 @@ describe('App e2e (Postgres + Redis)', () => {
         password: await bcrypt.hash(password, 10),
         name: 'Teste E2E',
         role: 'client',
-        accessCode: '123456',
+        accessCode: gerarCodigoAcesso(),
         isActive: true,
       }),
     );
