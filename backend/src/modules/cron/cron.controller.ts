@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Headers, ForbiddenException, Logger } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { EventService } from '../event/event.service';
 import { BalanceService } from '../balance/balance.service';
 
@@ -70,12 +71,10 @@ export class CronController {
     }
   }
 
+  // Comparação de tempo constante com hashing SHA-256 para evitar vazamento do tamanho do segredo por canal lateral de tempo.
   private safeEqual(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
-    let diff = 0;
-    for (let i = 0; i < a.length; i += 1) {
-      diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    }
-    return diff === 0;
+    const bufA = crypto.createHash('sha256').update(a).digest();
+    const bufB = crypto.createHash('sha256').update(b).digest();
+    return crypto.timingSafeEqual(bufA, bufB);
   }
 }
