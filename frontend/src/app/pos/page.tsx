@@ -13,6 +13,7 @@ import { SearchIcon, QrIcon, CheckIcon, ArrowLeftIcon, MinusIcon, PlusIcon } fro
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
 import { getProducts, getBalance, createOrder, getBalanceHistory } from '@/lib/api';
+import { esgotado, podeAdicionar } from '@/lib/stock';
 
 export default function PO_webp_placeOrder() {
   return (
@@ -75,6 +76,8 @@ function POSPage() {
 
   const addToCart = (product: any) => {
     setCart((prev) => {
+      const noCarrinho = prev.find((i) => i.id === product.id)?.quantity ?? 0;
+      if (!podeAdicionar(product, noCarrinho)) return prev;
       const existing = prev.find((i) => i.id === product.id);
       return existing
         ? prev.map((i) => (i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i))
@@ -110,6 +113,7 @@ function POSPage() {
       setPlaced(snapshot);
       setCart([]);
       setBalance((prev) => (prev ? { ...prev, balance: Math.max((prev.balance ?? 0) - cartTotal, 0) } : prev));
+      fetchProducts();
     } catch (err: any) {
       setError(err?.message ?? 'Erro ao criar o pedido');
     } finally {
@@ -157,12 +161,14 @@ function POSPage() {
             {filtered.map((product: any) => {
               const item = cart.find((i) => i.id === product.id);
               const qty = item?.quantity ?? 0;
+              const sem = esgotado(product);
+              const podeMais = podeAdicionar(product, qty);
               return (
                 <div
                   key={product.id}
                   className={cn(
                     'flex items-center gap-4 rounded-2xl border p-4 transition-all',
-                    qty > 0 ? 'bg-brand/5 border-brand/30' : 'bg-surface border-border',
+                    qty > 0 ? 'bg-brand/5 border-brand/30' : sem ? 'bg-surface border-border opacity-70' : 'bg-surface border-border',
                   )}
                 >
                   <div className="flex-1">
@@ -172,6 +178,11 @@ function POSPage() {
                     </div>
                     {product.description && (
                       <p className="mt-0.5 text-sm text-zinc-400 line-clamp-2">{product.description}</p>
+                    )}
+                    {sem && (
+                      <span className="inline-block mt-1.5 rounded-full bg-red-500/15 text-red-300 text-[10px] font-semibold px-2 py-0.5">
+                        Esgotado
+                      </span>
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-2.5">
@@ -189,8 +200,12 @@ function POSPage() {
                     <button
                       type="button"
                       onClick={() => addToCart(product)}
-                      aria-label={`Adicionar ${product.name}`}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-black hover:bg-brand-hover transition-colors"
+                      disabled={!podeMais}
+                      aria-label={sem ? `${product.name} esgotado` : `Adicionar ${product.name}`}
+                      className={cn(
+                        'flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-black hover:bg-brand-hover transition-colors',
+                        !podeMais && 'opacity-40 cursor-not-allowed hover:bg-brand/70',
+                      )}
                     >
                       <PlusIcon className="h-3.5 w-3.5" />
                     </button>

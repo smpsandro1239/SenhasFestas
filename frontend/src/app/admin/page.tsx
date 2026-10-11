@@ -11,6 +11,7 @@ import { Tabs } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/cn';
 import { Alert } from '@/components/ui/alert';
 import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon, PencilIcon, TrashIcon, CopyIcon, WalletIcon } from '@/components/ui/icons';
 import { Dialog } from '@/components/ui/dialog';
@@ -70,6 +71,7 @@ function AdminPage() {
     price: '',
     availability: 'available',
     stock: '',
+    stockControl: false,
     categoryId: '',
     kitchenName: '',
   });
@@ -128,6 +130,7 @@ function AdminPage() {
     description: '',
     price: '',
     stock: '',
+    stockControl: false,
     availability: 'available',
     categoryId: '',
     kitchenName: '',
@@ -349,16 +352,24 @@ function AdminPage() {
     setLoading(true);
     setError('');
     try {
+      let stock: number | null = null;
+      if (productForm.stockControl) {
+        stock = productForm.stock ? parseFloat(productForm.stock) : null;
+        if (stock === null || isNaN(stock) || stock < 0) {
+          setError('Indique uma quantidade para controlar o stock');
+          return;
+        }
+      }
       await createProduct({
         name: productForm.name,
         description: productForm.description || undefined,
         price,
         availability: productForm.availability,
-        stock: productForm.stock ? parseFloat(productForm.stock) : undefined,
+        stock,
         categoryId: productForm.categoryId || undefined,
         kitchenName: productForm.kitchenName || undefined,
       });
-      setProductForm({ name: '', description: '', price: '', availability: 'available', stock: '', categoryId: '', kitchenName: '' });
+      setProductForm({ name: '', description: '', price: '', availability: 'available', stock: '', stockControl: false, categoryId: '', kitchenName: '' });
       await loadProducts();
     } catch (err: any) {
       setError(err?.message ?? 'Erro ao criar produto');
@@ -411,6 +422,7 @@ function AdminPage() {
       // "sem stock" e nao 0.
       price: product.price != null ? String(product.price) : '',
       stock: product.stock != null ? String(product.stock) : '',
+      stockControl: product.stock != null,
       availability: product.availability ?? 'available',
       categoryId: product.category?.id ?? '',
       kitchenName: product.kitchenName ?? '',
@@ -426,10 +438,13 @@ function AdminPage() {
       setProductEditError('Preencha o nome e um preço válido');
       return;
     }
-    const stock = productEditForm.stock ? parseFloat(productEditForm.stock) : null;
-    if (stock !== null && (isNaN(stock) || stock < 0)) {
-      setProductEditError('O stock tem de ser um número positivo');
-      return;
+    let stock: number | null = null;
+    if (productEditForm.stockControl) {
+      stock = productEditForm.stock ? parseFloat(productEditForm.stock) : null;
+      if (stock === null || isNaN(stock) || stock < 0) {
+        setProductEditError('Indique uma quantidade para controlar o stock');
+        return;
+      }
     }
     setProductEditBusy(true);
     setProductEditError('');
@@ -1656,7 +1671,9 @@ function AdminPage() {
                                     : 'Indisponível'}
                               </Badge>
                               {product.stock != null && (
-                                <Badge variant="neutral">Stock: {product.stock}</Badge>
+                                <Badge variant={product.stock <= 0 ? 'danger' : 'neutral'}>
+                                  {product.stock <= 0 ? 'Esgotado' : `Stock: ${product.stock}`}
+                                </Badge>
                               )}
                               {product.isActive === false && (
                                 <Badge variant="neutral">Inativo — escondido do POS e QR</Badge>
@@ -1826,14 +1843,54 @@ function AdminPage() {
                     onChange={(e) => setProductEditForm({ ...productEditForm, price: e.target.value })}
                     required
                   />
-                  <Input
-                    label="Stock (opcional)"
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={productEditForm.stock}
-                    onChange={(e) => setProductEditForm({ ...productEditForm, stock: e.target.value })}
-                  />
+                  <div className="space-y-1.5">
+                    <span className="block text-sm font-medium text-zinc-400">Controlo de stock</span>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setProductEditForm({ ...productEditForm, stockControl: false })
+                        }
+                        className={cn(
+                          'flex-1 rounded-xl border px-3 py-2 text-sm transition-colors',
+                          !productEditForm.stockControl
+                            ? 'bg-brand/10 border-brand/50 text-zinc-100'
+                            : 'bg-surface border-border text-zinc-400 hover:bg-surface-hover',
+                        )}
+                      >
+                        Sem stock
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProductEditForm({ ...productEditForm, stockControl: true })}
+                        className={cn(
+                          'flex-1 rounded-xl border px-3 py-2 text-sm transition-colors',
+                          productEditForm.stockControl
+                            ? 'bg-brand/10 border-brand/50 text-zinc-100'
+                            : 'bg-surface border-border text-zinc-400 hover:bg-surface-hover',
+                        )}
+                      >
+                        Com stock
+                      </button>
+                    </div>
+                    <p className="text-xs text-zinc-500 leading-relaxed">
+                      {productEditForm.stockControl
+                        ? 'O stock abate a cada pedido e repõe-se quando o pedido é cancelado. Em 0, o produto fica esgotado.'
+                        : 'Menu aberto: vende-se sem limite, o bar decide quando acabar.'}
+                    </p>
+                    {productEditForm.stockControl && (
+                      <Input
+                        label="Quantidade"
+                        type="number"
+                        min="0"
+                        step="1"
+                        autoFocus
+                        value={productEditForm.stock}
+                        onChange={(e) => setProductEditForm({ ...productEditForm, stock: e.target.value })}
+                        placeholder="Ex.: 50"
+                      />
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <label htmlFor="product-edit-category" className="block text-sm font-medium text-zinc-400">
@@ -2074,27 +2131,51 @@ function AdminPage() {
                   placeholder="igual ao nome do produto"
                   hint="É o que o ecrã da cozinha mostra. Vazio usa o nome do produto."
                 />
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="Preço (€)"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={productForm.price}
-                    onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
-                    placeholder="3.50"
-                    required
-                  />
-                  <Input
-                    label="Stock (opcional)"
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={productForm.stock}
-                    onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
-                    placeholder="100"
-                  />
-                </div>
+                <div className="space-y-1.5">
+  <span className="block text-sm font-medium text-zinc-400">Controlo de stock</span>
+  <div className="flex gap-2">
+    <button
+      type="button"
+      onClick={() => setProductForm({ ...productForm, stockControl: false })}
+      className={cn(
+        'flex-1 rounded-xl border px-3 py-2 text-sm transition-colors',
+        !productForm.stockControl
+          ? 'bg-brand/10 border-brand/50 text-zinc-100'
+          : 'bg-surface border-border text-zinc-400 hover:bg-surface-hover',
+      )}
+    >
+      Sem stock
+    </button>
+    <button
+      type="button"
+      onClick={() => setProductForm({ ...productForm, stockControl: true })}
+      className={cn(
+        'flex-1 rounded-xl border px-3 py-2 text-sm transition-colors',
+        productForm.stockControl
+          ? 'bg-brand/10 border-brand/50 text-zinc-100'
+          : 'bg-surface border-border text-zinc-400 hover:bg-surface-hover',
+      )}
+    >
+      Com stock
+    </button>
+  </div>
+  <p className="text-xs text-zinc-500 leading-relaxed">
+    {productForm.stockControl
+      ? 'O stock abate a cada pedido e repõe-se quando o pedido é cancelado. Em 0, o produto fica esgotado.'
+      : 'Menu aberto: vende-se sem limite, o bar decide quando acabar.'}
+  </p>
+  {productForm.stockControl && (
+    <Input
+      label="Quantidade"
+      type="number"
+      min="0"
+      step="1"
+      value={productForm.stock}
+      onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
+      placeholder="Ex.: 50"
+    />
+  )}
+</div>
                 <div className="space-y-1.5">
                   <label className="block text-sm font-medium text-zinc-400">Categoria</label>
                   <select

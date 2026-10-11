@@ -18,6 +18,7 @@ import { eventosPossiveis, requerEntrada, type EventoParaSelecao, type EventoPos
 import { lerEventoDoDia, guardarEventoDoDia, limparEventoDoDia } from '@/lib/evento-do-dia';
 import { calcularEstadoPedido, type SaldoOutroEvento } from '@/lib/qr-order-estado';
 import { isEventWindowOpen } from '@/lib/event-window';
+import { esgotado, podeAdicionar } from '@/lib/stock';
 import type { Product, CartItem } from '@/lib/types';
 import { groupProducts } from '@/lib/group-products';
 import { getOrderTotal } from '@/lib/order-total';
@@ -213,19 +214,21 @@ function QROrderPage() {
     [router, tableNumber, possiveis, eventosMembros, aEntrar, storage],
   );
 
-  const fetchProducts = useCallback(async () => {
+  const fetchProducts = useCallback(async (silencioso = false) => {
     try {
-      setLoading(true);
-      setErroProdutos(false);
+      if (!silencioso) setLoading(true);
+      if (!silencioso) setErroProdutos(false);
       const data = await getProducts(eventId ? { eventId } : undefined);
       setProducts(Array.isArray(data) ? data : data?.items ?? []);
     } catch {
-      // erro dedicado: o `error` global tambem recolhe falhas de entrar no
-      // evento e de criar pedido, e usar o para dizer "menu nao carregou" dava
-      // mensagem errada.
-      setErroProdutos(true);
+      if (!silencioso) {
+        // erro dedicado: o `error` global tambem recolhe falhas de entrar no
+        // evento e de criar pedido, e usar o para dizer "menu nao carregou" dava
+        // mensagem errada.
+        setErroProdutos(true);
+      }
     } finally {
-      setLoading(false);
+      if (!silencioso) setLoading(false);
     }
   }, [eventId]);
 
@@ -306,6 +309,12 @@ function QROrderPage() {
 
   const addToCart = (product: Product) => {
     setCart((prev) => {
+      // o backend também recusa, mas travar aqui evita chegar lá: não se pode
+      // pedir mais do que o stock deixa (produtos sem stock são ilimitados).
+      const noCarrinho = prev.find((item) => item.id === product.id)?.quantity ?? 0;
+      if (!podeAdicionar(product, noCarrinho)) {
+        return prev;
+      }
       const existingItem = prev.find((item) => item.id === product.id);
       if (existingItem) {
         return prev.map((item) =>
@@ -385,6 +394,9 @@ function QROrderPage() {
       setOrderPlaced(true);
       setLastOrder(snapshot);
       setCart([]);
+      // refresca o menu sem flicker (carrinho vazio): o stock já foi abatido
+      // no servidor.
+      fetchProducts(true);
       setShowPaymentModal(true);
       setBalance((prev) =>
         prev
@@ -568,6 +580,8 @@ function QROrderPage() {
                       {group.items.map((product: Product) => {
                         const cartItem = cart.find((item) => item.id === product.id);
                         const qty = cartItem?.quantity || 0;
+                        const sem = esgotado(product);
+                        const podeMais = podeAdicionar(product, qty);
                         return (
                           <div
                             key={product.id}
@@ -575,7 +589,9 @@ function QROrderPage() {
                               'rounded-2xl p-4 flex items-center gap-4 transition-all duration-200 border',
                               qty > 0
                                 ? 'bg-brand/5 border-brand/30'
-                                : 'bg-surface border-border',
+                                : sem
+                                  ? 'bg-surface border-border opacity-70'
+                                  : 'bg-surface border-border',
                             )}
                           >
                             <div className="flex-1">
@@ -589,6 +605,11 @@ function QROrderPage() {
                                 <p className="text-sm text-zinc-400 mt-0.5 line-clamp-2">
                                   {product.description}
                                 </p>
+                              )}
+                              {sem && (
+                                <span className="inline-block mt-1.5 rounded-full bg-red-500/15 text-red-300 text-[10px] font-semibold px-2 py-0.5">
+                                  Esgotado
+                                </span>
                               )}
                             </div>
 
@@ -606,11 +627,14 @@ function QROrderPage() {
                               </span>
                               <button
                                 onClick={() => addToCart(product)}
+                                disabled={!podeMais}
+                                aria-label={sem ? `${product.name} esgotado` : `Adicionar ${product.name}`}
                                 className={cn(
                                   'h-8 w-8 rounded-lg flex items-center justify-center transition-all',
                                   qty > 0
                                     ? 'bg-brand text-black hover:bg-brand-hover'
                                     : 'bg-surface border border-border text-zinc-300 hover:bg-surface-hover',
+                                  !podeMais && 'opacity-40 cursor-not-allowed hover:bg-surface',
                                 )}
                               >
                                 <PlusIcon className="h-3.5 w-3.5" />
@@ -639,6 +663,7 @@ function QROrderPage() {
           <ul className="space-y-2">
             {suggestions
               .filter((s: Product) => !cart.some((c: CartItem) => c.id === s.id))
+              .filter((s: Product) => !esgotado(s))
               .map((s: Product) => (
                 <li key={s.id} className="flex items-center gap-3">
                   <span className="text-lg text-gray-200">€{Number(s.price ?? 0).toFixed(2)}</span>
