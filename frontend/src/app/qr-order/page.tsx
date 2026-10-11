@@ -7,7 +7,7 @@ import { cn } from '@/lib/cn';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
-import { MinusIcon, PlusIcon, QrIcon, CameraIcon, ArrowLeftIcon, CheckIcon } from '@/components/ui/icons';
+import { MinusIcon, PlusIcon, QrIcon, CameraIcon, ArrowLeftIcon, CheckIcon, ChevronDownIcon } from '@/components/ui/icons';
 import { QrScanner } from '@/components/ui/qr-scanner';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
@@ -475,20 +475,23 @@ function QROrderPage() {
           {possiveis.length >= 1 && (
             <label className="mt-3 flex items-center gap-2">
               <span className="text-xs text-zinc-400 shrink-0">Evento</span>
-              <select
-                value={eventoDisponivelEscolhido ? eventId : ''}
-                onChange={(e) => escolherEvento(e.target.value)}
-                disabled={aEntrar}
-                aria-label="Escolher evento"
-                className="flex-1 bg-surface border border-border rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:opacity-60"
-              >
-                <option value="">Em que evento estás?</option>
-                {possiveis.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name ?? e.id}
-                  </option>
-                ))}
-              </select>
+              <div className="relative flex-1">
+                <select
+                  value={eventoDisponivelEscolhido ? eventId : ''}
+                  onChange={(e) => escolherEvento(e.target.value)}
+                  disabled={aEntrar}
+                  aria-label="Escolher evento"
+                  className="w-full appearance-none bg-surface border border-border hover:border-border-hover rounded-xl pl-3 pr-9 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40 transition-colors disabled:opacity-60"
+                >
+                  <option value="">Em que evento estás?</option>
+                  {possiveis.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name ?? e.id}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+              </div>
             </label>
           )}
         </div>
