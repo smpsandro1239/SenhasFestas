@@ -17,6 +17,7 @@ describe('KitchenService — cancelamento via atualizarEstado deve reembolsar sa
     };
     const balanceSave = vi.fn();
     const manager = {
+      find: vi.fn().mockResolvedValue([]),
       findOne: vi
         .fn()
         .mockResolvedValueOnce({ id: 'o1', status: 'received', balanceId: 'b1', balanceUsed: 10 })
@@ -55,6 +56,48 @@ describe('KitchenService — cancelamento via atualizarEstado deve reembolsar sa
   // análise, não teste (mocks não simulam corrida real). Ver common/order-refund.ts.
 });
 
+describe('KitchenService — cancelar repõe o stock físico (melhoria #6)', () => {
+  it('devolve as unidades vendidas quando o pedido é cancelado na cozinha', async () => {
+    const orderRepository = {
+      findOne: vi.fn().mockResolvedValue({
+        id: 'o1',
+        status: 'preparing',
+        event: { id: 'evt1' },
+      }),
+      manager: { transaction: null as any },
+    };
+    const produtoSalvo = vi.fn();
+    orderRepository.manager.transaction = vi.fn().mockImplementation(async (fn: any) =>
+      fn({
+        find: vi.fn().mockResolvedValue([
+          { quantity: 2, product: { id: 'p1', stock: 3 } },
+          { quantity: 1, product: { id: 'p2', stock: null } },
+        ]),
+        findOne: vi.fn().mockResolvedValue({
+          id: 'o1',
+          status: 'preparing',
+        }),
+        save: vi.fn().mockImplementation((_entity: any, data: any) => {
+          if (data?.stock !== undefined) produtoSalvo(data);
+          return Promise.resolve(data);
+        }),
+        create: vi.fn().mockImplementation((_entity: any, data: any) => data),
+      }),
+    );
+
+    const svc = new KitchenService(
+      orderRepository as any,
+      { assertMember: vi.fn(), eventIdsFor: vi.fn().mockResolvedValue(null) } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+    );
+
+    await svc.atualizarEstado('o1', 'cancelled', { id: 'u1', role: 'superadmin' });
+
+    expect(produtoSalvo).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1', stock: 5 }));
+    expect(produtoSalvo).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'p2' }));
+  });
+});
+
 describe('KitchenService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
   const criarSvc = (orderRepository: any) => {
     const svc = new KitchenService(
@@ -82,6 +125,7 @@ describe('KitchenService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
     };
     orderRepository.manager.transaction = vi.fn().mockImplementation(async (fn: any) =>
       fn({
+        find: vi.fn().mockResolvedValue([]),
         findOne: vi.fn().mockResolvedValue({
           id: 'o1',
           status: 'received',
@@ -112,6 +156,7 @@ describe('KitchenService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
     const balanceSave = vi.fn();
     orderRepository.manager.transaction = vi.fn().mockImplementation(async (fn: any) =>
       fn({
+        find: vi.fn().mockResolvedValue([]),
         findOne: vi
           .fn()
           .mockResolvedValueOnce({ id: 'o1', status: 'received', balanceId: 'b1', balanceUsed: 10 })

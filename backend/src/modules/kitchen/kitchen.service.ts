@@ -5,6 +5,7 @@ import { OrderEntity } from '../../entities';
 import { MembershipService } from '../../common/membership.service';
 import { reembolsarSaldoEmTransacao, temSaldoParaReembolsar } from '../../common/order-refund';
 import { assertPodeMexerEmSaldo } from '../../common/balance-guard';
+import { reporStockEmTransacao } from '../../common/order-stock';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { KitchenQueryDto } from './dto';
 
@@ -104,6 +105,10 @@ export class KitchenService {
 
       if (novoEstado === 'cancelled') {
         await reembolsarSaldoEmTransacao(manager, atual, utilizador?.id);
+        // Cancelado na cozinha (prato rejeitado / indisponível) devolve o
+        // stock tal como num cancelamento pelo caixa: sem isto as unidades
+        // derrapavam e o produto esgotava no sistema sem estar esgotado.
+        await reporStockEmTransacao(manager, atual.id);
       }
 
       return salvo;

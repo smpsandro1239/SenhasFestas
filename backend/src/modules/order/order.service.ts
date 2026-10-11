@@ -10,6 +10,7 @@ import { MovementType } from '../../entities';
 import { centavos, soma, subtrai } from '../../common/money';
 import { reembolsarSaldoEmTransacao, temSaldoParaReembolsar } from '../../common/order-refund';
 import { assertPodeMexerEmSaldo, assertSaldoUtilizavel } from '../../common/balance-guard';
+import { reporStockEmTransacao } from '../../common/order-stock';
 import { EventService } from '../event/event.service';
 
 @Injectable()
@@ -226,26 +227,9 @@ export class OrderService {
     await manager.save(BalanceMovementEntity, movement);
   }
 
-  // Repõe no stock as unidades devolvidas por um cancelamento. Simétrico do
-  // decremento em create: só produtos com controlo (stock != null). Devolve
-  // a quantidade comprada mesmo que o admin tenha rebaixado o stock entretanto
-  // — as unidades vendidas nunca saíram da contagem real.
-  private async reporStockEmTransacao(
-    manager: import('typeorm').EntityManager,
-    orderId: string,
-  ): Promise<void> {
-    const itens = await manager.find(OrderItemEntity, {
-      where: { order: { id: orderId } },
-      relations: { product: true },
-    });
-    for (const item of itens) {
-      const product = item.product;
-      if (!product || product.stock == null) continue;
-      product.stock = Number(product.stock) + item.quantity;
-      await manager.save(ProductEntity, product);
-    }
-  }
-
+  // Reposição de stock em cancelamentos vive em common/order-stock.ts e é
+  // partilhada com a kitchen: reverter a venda tem de devolver as unidades
+  // seja qual for o ponto de cancelamento.
   async findByEvent(eventId: string, user: any): Promise<{
     items: any[];
     total: number;
@@ -384,7 +368,7 @@ export class OrderService {
       const updatedOrder = await manager.save(OrderEntity, currentOrder);
 
       await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
-      await this.reporStockEmTransacao(manager, currentOrder.id);
+      await reporStockEmTransacao(manager, currentOrder.id);
 
       return updatedOrder;
     });
@@ -443,7 +427,7 @@ export class OrderService {
           assertPodeMexerEmSaldo(user);
         }
         await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
-        await this.reporStockEmTransacao(manager, currentOrder.id);
+        await reporStockEmTransacao(manager, currentOrder.id);
       }
 
       return updated;
