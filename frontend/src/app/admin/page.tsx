@@ -16,7 +16,8 @@ import { Alert } from '@/components/ui/alert';
 import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon, PencilIcon, TrashIcon, CopyIcon, WalletIcon } from '@/components/ui/icons';
 import { Dialog } from '@/components/ui/dialog';
 import { deveAvisarSessao, marcarAvisoSessao } from '@/lib/saldo-aviso';
-import { importProducts, getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances, getReports, extendBalance, unarchiveBalance, markBalanceNotified } from '@/lib/api';
+import { importProducts, getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, ajustarStock, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances, getReports, extendBalance, unarchiveBalance, markBalanceNotified } from '@/lib/api';
+import { stockBaixo, esgotado } from '@/lib/stock';
 import { downloadTextFile } from '@/lib/download';
 import { montarUrlMesa } from '@/lib/mesa-qr';
 
@@ -124,6 +125,10 @@ function AdminPage() {
   const [productDeletingBusy, setProductDeletingBusy] = useState(false);
   // id do produto a ser duplicado, para so o botao dele ficar ocupado
   const [productDuplicatingId, setProductDuplicatingId] = useState<string | null>(null);
+  const [productStockBusy, setProductStockBusy] = useState<string | null>(null);
+  const [stockAdjusting, setStockAdjusting] = useState<any>(null);
+  const [stockAdjustingForm, setStockAdjustingForm] = useState({ novoValor: '', motivo: '' });
+  const [stockAdjustingError, setStockAdjustingError] = useState('');
   const [productEditing, setProductEditing] = useState<any>(null);
   const [productEditForm, setProductEditForm] = useState({
     name: '',
@@ -409,6 +414,54 @@ function AdminPage() {
       setError(err?.message ?? 'Erro ao duplicar produto');
     } finally {
       setProductDuplicatingId(null);
+    }
+  };
+
+  // Reabastecimento rápido: um toque, +10 ou +20, sem formulário. O delta é
+  // aplicado com lock e registado no audit pelo backend.
+  const reabastecerProduto = async (product: any, delta: number) => {
+    if (productStockBusy) return;
+    setProductStockBusy(product.id);
+    setError('');
+    try {
+      await ajustarStock(product.id, { delta, motivo: 'Reabastecimento' });
+      await loadProducts();
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao reabastecer stock');
+    } finally {
+      setProductStockBusy(null);
+    }
+  };
+
+  const abrirAcertoStock = (product: any) => {
+    setStockAdjustingError('');
+    setStockAdjustingForm({ novoValor: String(product.stock ?? ''), motivo: '' });
+    setStockAdjusting(product);
+  };
+
+  // Acerto com motivo: contagem de fim/noite, quebras, etc. Grava antes/depois
+  // + razão no audit para reconciliar com as vendas.
+  const handleAcertarStock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stockAdjusting) return;
+    const novoValor = Number(stockAdjustingForm.novoValor);
+    if (!Number.isFinite(novoValor) || novoValor < 0) {
+      setStockAdjustingError('Indique uma quantidade válida (0 ou mais)');
+      return;
+    }
+    setProductStockBusy(stockAdjusting.id);
+    setStockAdjustingError('');
+    try {
+      await ajustarStock(stockAdjusting.id, {
+        novoValor,
+        motivo: stockAdjustingForm.motivo.trim() || 'Acerto manual',
+      });
+      await loadProducts();
+      setStockAdjusting(null);
+    } catch (err: any) {
+      setStockAdjustingError(err?.message ?? 'Erro ao acertar stock');
+    } finally {
+      setProductStockBusy(null);
     }
   };
 
@@ -1671,14 +1724,43 @@ function AdminPage() {
                                     : 'Indisponível'}
                               </Badge>
                               {product.stock != null && (
-                                <Badge variant={product.stock <= 0 ? 'danger' : 'neutral'}>
-                                  {product.stock <= 0 ? 'Esgotado' : `Stock: ${product.stock}`}
+                                <Badge variant={esgotado(product) ? 'danger' : stockBaixo(product) ? 'warning' : 'neutral'}>
+                                  {esgotado(product) ? 'Esgotado' : stockBaixo(product) ? `Stock baixo: ${product.stock}` : `Stock: ${product.stock}`}
                                 </Badge>
                               )}
                               {product.isActive === false && (
                                 <Badge variant="neutral">Inativo — escondido do POS e QR</Badge>
                               )}
                             </div>
+                            {product.stock != null && (
+                              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                <span className="text-xs text-zinc-400">Reabastecer:</span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => reabastecerProduto(product, 10)}
+                                  disabled={loading || !!productStockBusy || !!productDuplicatingId}
+                                >
+                                  +10
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => reabastecerProduto(product, 20)}
+                                  disabled={loading || !!productStockBusy || !!productDuplicatingId}
+                                >
+                                  +20
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => abrirAcertoStock(product)}
+                                  disabled={loading || !!productStockBusy}
+                                >
+                                  Acerto...
+                                </Button>
+                              </div>
+                            )}
                             <div className="mt-2 flex items-center gap-2 flex-wrap">
                               <select
                                 value={product.category?.id ?? ''}
@@ -1941,6 +2023,62 @@ function AdminPage() {
                   </Button>
                   <Button type="submit" loading={productEditBusy}>
                     Guardar
+                  </Button>
+                </div>
+              </form>
+            </Dialog>
+
+            <Dialog
+              open={!!stockAdjusting}
+              onClose={() => {
+                if (!productStockBusy) {
+                  setStockAdjusting(null);
+                  setStockAdjustingError('');
+                }
+              }}
+              title="Acerto de stock"
+              description={
+                stockAdjusting
+                  ? `${stockAdjusting.name} — corrige a contagem real (fim de noite, quebras). A diferença fica registada na auditoria.`
+                  : undefined
+              }
+              className="max-w-md"
+            >
+              <form onSubmit={handleAcertarStock} className="space-y-4">
+                {stockAdjustingError && <Alert variant="error" message={stockAdjustingError} />}
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  label="Quantidade real"
+                  value={stockAdjustingForm.novoValor}
+                  onChange={(e) =>
+                    setStockAdjustingForm({ ...stockAdjustingForm, novoValor: e.target.value })
+                  }
+                  required
+                />
+                <Input
+                  label="Motivo (opcional)"
+                  placeholder="Ex.: quebraram 2 copos, sobra do Dia 1..."
+                  value={stockAdjustingForm.motivo}
+                  onChange={(e) =>
+                    setStockAdjustingForm({ ...stockAdjustingForm, motivo: e.target.value })
+                  }
+                />
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => {
+                      setStockAdjusting(null);
+                      setStockAdjustingError('');
+                    }}
+                    disabled={!!productStockBusy}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="submit" loading={productStockBusy === stockAdjusting?.id}>
+                    Aplicar acerto
                   </Button>
                 </div>
               </form>
