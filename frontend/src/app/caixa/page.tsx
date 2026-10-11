@@ -14,7 +14,7 @@ import { Alert } from '@/components/ui/alert';
 import { CashIcon, QrIcon } from '@/components/ui/icons';
 import { useAuth } from '@/lib/auth-context';
 import { useCurrentEvent } from '@/lib/use-current-event';
-import { getOpenCash, openCash, closeCash, getCashByEvent, getUsers, getUserById, getUserByAccessCode, loadBalance, deductBalance, getBalance, reverseLoad, getReports } from '@/lib/api';
+import { getOpenCash, openCash, closeCash, getCashByEvent, getUsers, getUserById, getUserByAccessCode, loadBalance, deductBalance, getBalance, reverseLoad, getReports, getSaldosPorEvento, transferirSaldo } from '@/lib/api';
 
 // jsQR são 311 KB e só são precisos quando alguém abre a câmara. Sem isto, a
 // rota /caixa carregava-os no First Load JS para 99% dos usos que não escaneiam.
@@ -64,6 +64,9 @@ function CaixaPage() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [movementMode, setMovementMode] = useState<'load' | 'deduct'>('load');
   const [codigoInput, setCodigoInput] = useState('');
+  const [saldoOutrosEventos, setSaldoOutrosEventos] = useState<any[]>([]);
+  const [transferMountByEvent, setTransferMountByEvent] = useState<Record<string, string>>({});
+  const [transferindoEventoId, setTransferindoEventoId] = useState<string | null>(null);
 
   const carregarCaixaAberta = useCallback(async () => {
     if (!event) return;
@@ -211,6 +214,8 @@ function CaixaPage() {
     setUserSearch(u.name);
     setUsers([]);
     setUserBalance(null);
+    setSaldoOutrosEventos([]);
+    setTransferMountByEvent({});
     if (!event) return;
     try {
       const b = await getBalance(u.id, event.id);
@@ -218,6 +223,48 @@ function CaixaPage() {
     } catch {
       setUserBalance(0);
       setMovementList([]);
+    }
+    try {
+      const lista = await getSaldosPorEvento(u.id);
+      setSaldoOutrosEventos(lista.filter((s) => s.eventId !== event.id && Number(s.balance) > 0));
+    } catch {
+      setSaldoOutrosEventos([]);
+    }
+  };
+
+  const transferirSaldoDoEvento = async (saldo: any) => {
+    if (!selectedUser || !event) return;
+    const valor = parseFloat(transferMountByEvent[saldo.eventId] ?? '');
+    if (isNaN(valor) || valor <= 0) {
+      setError('Indique um valor para transferir');
+      return;
+    }
+    setTransferindoEventoId(saldo.eventId);
+    setError('');
+    setSuccess('');
+    try {
+      await transferirSaldo(selectedUser.id, {
+        fromEventId: saldo.eventId,
+        toEventId: event.id,
+        amount: valor,
+      });
+      const b = await getBalance(selectedUser.id, event.id);
+      atualizarDoBal(b);
+      try {
+        const lista = await getSaldosPorEvento(selectedUser.id);
+        setSaldoOutrosEventos(lista.filter((s) => s.eventId !== event.id && Number(s.balance) > 0));
+      } catch {
+        setSaldoOutrosEventos([]);
+      }
+      setTransferMountByEvent((prev) => ({ ...prev, [saldo.eventId]: '' }));
+      setSuccess(
+        `Transferidos €${valor.toFixed(2)} de «${saldo.eventName}» para o saldo atual de ${selectedUser.name}.`,
+      );
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao transferir saldo');
+    } finally {
+      setTransferindoEventoId(null);
     }
   };
 
@@ -590,6 +637,51 @@ function CaixaPage() {
                   <span className="text-sm">
                     Saldo: <span className="font-bold text-emerald-400">€{userBalance?.toFixed(2) ?? '0.00'}</span>
                   </span>
+                </div>
+              )}
+
+              {selectedUser && saldoOutrosEventos.length > 0 && (
+                <div className="rounded-xl border border-brand/25 bg-brand/[0.03] p-4">
+                  <h3 className="text-sm font-semibold text-zinc-200">Saldo noutro evento</h3>
+                  <p className="text-xs text-zinc-400 mt-0.5 mb-3">
+                    O cliente tem dinheiro carregado em «{saldoOutrosEventos[0].eventName}». Passa o valor
+                    para o saldo atual deste evento numa transação.
+                  </p>
+                  <div className="space-y-2">
+                    {saldoOutrosEventos.map((s) => (
+                      <div key={s.eventId} className="flex items-end gap-2 rounded-xl bg-surface border border-border p-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-zinc-100 truncate">{s.eventName}</div>
+                          <div className="text-xs text-zinc-400 mt-0.5">
+                            Disponível: <span className="font-bold text-emerald-400">€{formatEuro(Number(s.balance))}</span>
+                            {s.archivedAt && <Badge variant="warning" size="sm" className="ml-2">Arquivado</Badge>}
+                          </div>
+                        </div>
+                        <Input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={transferMountByEvent[s.eventId] ?? ''}
+                          onChange={(e) =>
+                            setTransferMountByEvent({ ...transferMountByEvent, [s.eventId]: e.target.value })
+                          }
+                          placeholder="Valor €"
+                          className="w-28 shrink-0"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          loading={transferindoEventoId === s.eventId}
+                          disabled={event?.status === 'closed' || !!transferindoEventoId || loading}
+                          onClick={() => transferirSaldoDoEvento(s)}
+                          className="shrink-0"
+                        >
+                          Transferir
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
