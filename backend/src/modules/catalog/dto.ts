@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsUUID, IsBoolean, IsArray } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsUUID, IsBoolean, IsArray, Min, MaxLength } from 'class-validator';
 
 export class CreateProductDto {
   @IsString()
@@ -72,6 +72,22 @@ export class UpdateProductDto {
   @IsString()
   @IsOptional()
   kitchenName?: string | null;
+}
+
+export class AdjustStockDto {
+  @IsNumber()
+  @IsOptional()
+  delta?: number;
+
+  @IsNumber({ maxDecimalPlaces: 0 })
+  @Min(0)
+  @IsOptional()
+  novoValor?: number;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  motivo?: string;
 }
 
 export class ImportProductsDto {

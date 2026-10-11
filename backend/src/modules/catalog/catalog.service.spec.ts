@@ -16,6 +16,7 @@ const mockProductRepository = {
   create: vi.fn(),
   save: vi.fn(),
   softDelete: vi.fn(),
+  manager: { transaction: null as any },
 };
 
 const mockCategoryRepository = {
@@ -44,6 +45,10 @@ const mockMembershipService = {
   assertMember: vi.fn(),
 };
 
+const mockAuditService = {
+  record: vi.fn().mockResolvedValue(undefined),
+};
+
 describe('CatalogService', () => {
   let service: CatalogService;
 
@@ -69,6 +74,7 @@ describe('CatalogService', () => {
       mockOrderRepository as any,
       mockOrderItemRepository as any,
       mockMembershipService as any,
+      mockAuditService as any,
     );
   });
 
@@ -1021,6 +1027,97 @@ describe('CatalogService', () => {
 
     it('o @Roles da rota é MANAGEMENT_ROLES', () => {
       const handler = controller.importProducts;
+      expect(Reflect.getMetadata(ROLES_KEY, handler) ?? []).toEqual(MANAGEMENT_ROLES);
+    });
+  });
+
+  describe('ajustarStock — reabastecimento rápido e acerto com registo (melhorias #1/#3)', () => {
+    const manager = {
+      findOne: vi.fn(),
+      save: vi.fn().mockImplementation((_e: any, data: any) => Promise.resolve(data)),
+    };
+    const transacao = vi.fn(async (fn: any) => fn(manager));
+
+    beforeEach(() => {
+      mockProductRepository.manager.transaction = transacao;
+      manager.findOne.mockReset();
+      manager.save.mockClear();
+    });
+
+    it('delta soma ao stock com lock pessimista e grava auditoria com motivo', async () => {
+      manager.findOne.mockResolvedValue({ id: 'p1', stock: 3, event: { id: 'evt1' } });
+      const r = await service.ajustarStock('p1', MEMBRO, { delta: 10, motivo: 'repo' });
+      expect(manager.findOne).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ lock: { mode: 'pessimistic_write' } }),
+      );
+      expect(r.stock).toBe(13);
+      expect(mockAuditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'STOCK_ADJUST',
+          entity: 'product',
+          entityId: 'p1',
+          eventId: 'evt1',
+          before: { stock: 3 },
+          after: { stock: 13 },
+          details: expect.objectContaining({ delta: 10, motivo: 'repo' }),
+        }),
+      );
+    });
+
+    it('delta não desce abaixo de zero', async () => {
+      manager.findOne.mockResolvedValue({ id: 'p1', stock: 2, event: { id: 'evt1' } });
+      const r = await service.ajustarStock('p1', MEMBRO, { delta: -50 });
+      expect(r.stock).toBe(0);
+    });
+
+    it('novoValor define stock absoluto (acerto)', async () => {
+      manager.findOne.mockResolvedValue({ id: 'p1', stock: 2, event: { id: 'evt1' } });
+      const r = await service.ajustarStock('p1', MEMBRO, { novoValor: 24, motivo: 'contagem' });
+      expect(r.stock).toBe(24);
+      expect(mockAuditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          before: { stock: 2 },
+          after: { stock: 24 },
+          details: expect.objectContaining({ novoValor: 24, motivo: 'contagem' }),
+        }),
+      );
+    });
+
+    it('delta e novoValor juntos → 400', async () => {
+      manager.findOne.mockResolvedValue({ id: 'p1', stock: 5, event: { id: 'evt1' } });
+      await expect(
+        service.ajustarStock('p1', MEMBRO, { delta: 1, novoValor: 5 } as any),
+      ).rejects.toThrow('Indique delta ou novoValor (não ambos)');
+    });
+
+    it('delta zero → 400', async () => {
+      manager.findOne.mockResolvedValue({ id: 'p1', stock: 5, event: { id: 'evt1' } });
+      await expect(service.ajustarStock('p1', MEMBRO, { delta: 0 })).rejects.toThrow(
+        'Delta tem de ser diferente de zero',
+      );
+    });
+
+    it('delta em produto sem controlo → 400', async () => {
+      manager.findOne.mockResolvedValue({ id: 'p1', stock: null, event: { id: 'evt1' } });
+      await expect(service.ajustarStock('p1', MEMBRO, { delta: 10 })).rejects.toThrow(
+        'Produto sem controlo de stock',
+      );
+    });
+
+    it('produto inexistente → 404', async () => {
+      manager.findOne.mockResolvedValue(null);
+      await expect(service.ajustarStock('p1', MEMBRO, { delta: 10 })).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('a rota exige MANAGEMENT_ROLES', () => {
+      const controller = new CatalogController(
+        { ajustarStock: vi.fn() } as any,
+        { assertMember: vi.fn() } as any,
+      );
+      const handler = controller.ajustarStock;
       expect(Reflect.getMetadata(ROLES_KEY, handler) ?? []).toEqual(MANAGEMENT_ROLES);
     });
   });

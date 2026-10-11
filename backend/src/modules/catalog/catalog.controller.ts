@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CatalogService } from './catalog.service';
-import { CreateProductDto, UpdateProductDto, ImportProductsDto } from './dto';
+import { CreateProductDto, UpdateProductDto, ImportProductsDto, AdjustStockDto } from './dto';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -111,6 +111,16 @@ export class CatalogController {
     @Body() dto: UpdateProductDto,
   ) {
     return this.catalogService.update(id, req.user, dto);
+  }
+
+  @Patch(':id/stock')
+  @Roles(...MANAGEMENT_ROLES)
+  async ajustarStock(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: any,
+    @Body() dto: AdjustStockDto,
+  ) {
+    return this.catalogService.ajustarStock(id, req.user, dto);
   }
 
   @Post(':id/duplicate')

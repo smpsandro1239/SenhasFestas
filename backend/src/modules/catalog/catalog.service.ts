@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProductEntity, CategoryEntity, UserEntity, EventEntity, OrderEntity, OrderItemEntity } from '../../entities';
 import { In, ILike } from 'typeorm';
-import { CreateProductDto, UpdateProductDto } from './dto';
+import { CreateProductDto, UpdateProductDto, AdjustStockDto } from './dto';
 import { MembershipService } from '../../common/membership.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class CatalogService {
@@ -20,6 +21,7 @@ export class CatalogService {
     @InjectRepository(OrderItemEntity)
     private readonly orderItemRepository: Repository<OrderItemEntity>,
     private readonly membershipService: MembershipService,
+    private readonly auditService: AuditService,
   ) {}
 
   async findAll(
@@ -204,6 +206,69 @@ export class CatalogService {
       product.category = categoryId === null ? null : ({ id: categoryId } as CategoryEntity);
     }
     return this.productRepository.save(product);
+  }
+
+  // Reabastecimento rápido (+N) e acerto de stock físico (novoValor). O delta
+  // usa lock pessimista para não colidir com os decrementos dos pedidos; o
+  // acerto grava o motivo no audit para reconciliar diferenças no fim da festa.
+  async ajustarStock(
+    id: string,
+    user: UserEntity,
+    dto: AdjustStockDto,
+  ): Promise<ProductEntity> {
+    const temDelta = dto.delta !== undefined;
+    const temNovoValor = dto.novoValor !== undefined;
+    if (temDelta === temNovoValor) {
+      throw new BadRequestException('Indique delta ou novoValor (não ambos)');
+    }
+    if (temDelta && dto.delta === 0) {
+      throw new BadRequestException('Delta tem de ser diferente de zero');
+    }
+
+    const resultado = await this.productRepository.manager.transaction(async (manager) => {
+      const product = await manager.findOne(ProductEntity, {
+        where: { id },
+        relations: { event: true },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!product) {
+        throw new NotFoundException('Produto não encontrado');
+      }
+      if (product.event?.id) {
+        await this.membershipService.assertMember(user, product.event.id);
+      }
+
+      const antes = product.stock ?? null;
+      if (temDelta) {
+        if (product.stock == null) {
+          throw new BadRequestException('Produto sem controlo de stock (reabastecer exige stock definido)');
+        }
+        product.stock = Math.max(0, Number(product.stock) + dto.delta!);
+      } else {
+        product.stock = dto.novoValor!;
+      }
+      const salvo = await manager.save(ProductEntity, product);
+
+      await this.auditService.record({
+        action: 'STOCK_ADJUST',
+        entity: 'product',
+        entityId: product.id,
+        actorId: user?.id,
+        actorRole: user?.role,
+        eventId: product.event?.id,
+        before: { stock: antes },
+        after: { stock: product.stock },
+        details: {
+          delta: temDelta ? dto.delta : undefined,
+          novoValor: temNovoValor ? dto.novoValor : undefined,
+          motivo: dto.motivo,
+        },
+      });
+
+      return salvo;
+    });
+
+    return resultado;
   }
 
   // "Bifana (cópia)" e "Bifana (cópia 2)" reduzem ambos a "Bifana", para que
