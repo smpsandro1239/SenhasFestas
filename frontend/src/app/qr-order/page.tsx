@@ -16,7 +16,8 @@ import { normalizarShortCode } from '@/lib/entrar';
 import { parseQrMesa } from '@/lib/mesa-qr';
 import { eventosPossiveis, requerEntrada, type EventoParaSelecao, type EventoPossivel } from '@/lib/eventos';
 import { lerEventoDoDia, guardarEventoDoDia, limparEventoDoDia } from '@/lib/evento-do-dia';
-import { calcularEstadoPedido } from '@/lib/qr-order-estado';
+import { calcularEstadoPedido, type SaldoOutroEvento } from '@/lib/qr-order-estado';
+import { isEventWindowOpen } from '@/lib/event-window';
 import type { Product, CartItem } from '@/lib/types';
 import { groupProducts } from '@/lib/group-products';
 import { getOrderTotal } from '@/lib/order-total';
@@ -31,7 +32,7 @@ export default function QROrderPageWrapper() {
 
 function QROrderPage() {
   const searchParams = useSearchParams();
-  const { event, events, loading: eventLoading, error: eventError } = useCurrentEvent();
+  const { event, events, loading: eventLoading } = useCurrentEvent();
   const storage = typeof window !== 'undefined' ? window.localStorage : null;
   const [eventoManual, setEventoManual] = useState<string | null>(null);
   const [eventoDoDia, setEventoDoDia] = useState<string>('');
@@ -81,12 +82,21 @@ function QROrderPage() {
 
   const eventId = (urlEvent ?? codigoEvento ?? eventoManual ?? eventoDoDia) || '';
   const initialTableNumber = searchParams.get('mesa') ?? searchParams.get('table') ?? '';
-  const possiveis = eventosPossiveis(eventosMembros, eventosPublicos);
+  // memoizado: o efeito que procura saldo noutros eventos depende desta
+  // referencia. Um array novo a cada render disparava o efeito em ciclo.
+  const possiveis = useMemo(
+    () => eventosPossiveis(eventosMembros, eventosPublicos),
+    [eventosMembros, eventosPublicos],
+  );
   const explicito = urlEvent ?? codigoEvento ?? eventoManual;
   const eventoDisponivelEscolhido = possiveis.some((e) => e.id === eventId);
-  const preciseiEscolha = possiveis.length >= 1 && !eventId;
-  const eventoEscolhido =
-    eventosMembros.find((e) => e.id === eventId) ?? event;
+  // membros primeiro (neles ha status+datas); o corrente é o fallback para
+  // escolhas antigas/arquivadas não presentes na lista de membros.
+  const membroEscolhido = eventosMembros.find((e) => e.id === eventId);
+  const eventoEscolhido = membroEscolhido ?? event;
+  // Só os membros têm datas na payload; os públicos vieram do backend já
+  // filtrados por ativo+janeira, logo a janela deles está sempre aberta.
+  const eventoWindowOpen = membroEscolhido ? isEventWindowOpen(membroEscolhido) : true;
   const [tableNumber, setTableNumber] = useState(initialTableNumber);
   const [showTableModal, setShowTableModal] = useState(!initialTableNumber);
   const [tableDraft, setTableDraft] = useState('');
@@ -97,7 +107,11 @@ function QROrderPage() {
     { id?: string; balance?: number; archivedAt?: string | null } | null
   >(null);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [erroProdutos, setErroProdutos] = useState(false);
+  const [saldoOutro, setSaldoOutro] = useState<SaldoOutroEvento | null>(null);
+  // arranca a true: evita o flash de "menu indisponivel" antes do primeiro
+  // fetch. Sem evento escolhido o estado e sem-evento e ignora este valor.
+  const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [lastOrder, setLastOrder] = useState<CartItem[]>([]);
@@ -202,10 +216,14 @@ function QROrderPage() {
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
+      setErroProdutos(false);
       const data = await getProducts(eventId ? { eventId } : undefined);
       setProducts(Array.isArray(data) ? data : data?.items ?? []);
     } catch {
-      setError('Erro ao carregar produtos');
+      // erro dedicado: o `error` global tambem recolhe falhas de entrar no
+      // evento e de criar pedido, e usar o para dizer "menu nao carregou" dava
+      // mensagem errada.
+      setErroProdutos(true);
     } finally {
       setLoading(false);
     }
@@ -213,6 +231,10 @@ function QROrderPage() {
 
   useEffect(() => {
     if (!eventId || eventLoading) return;
+    // limpar o menu anterior no proprio render do novo evento: sem isto, ao
+    // trocar de evento ficava o menu do antigo visivel ate o fetch acabar.
+    setProducts([]);
+    setErroProdutos(false);
     fetchProducts();
   }, [fetchProducts, eventId, eventLoading]);
 
@@ -250,6 +272,38 @@ function QROrderPage() {
       .catch(() => setBalance(null));
   }, [user, eventId]);
 
+  // Saldo do cliente noutros eventos. So faz sentido procurar quando o evento
+  // actual nao tem saldo: e a informacao que o estado `sem-saldo` mostra
+  // ("tens €X no Magusto, fala com o caixa para usar aqui").
+  useEffect(() => {
+    if (!user || !eventId || possiveis.length <= 1 || (balance?.balance ?? 0) > 0) {
+      setSaldoOutro(null);
+      return;
+    }
+    let ativo = true;
+    const outros = possiveis.filter((e) => e.id !== eventId);
+    Promise.all(
+      outros.map((e) =>
+        getBalance(user.id, e.id)
+          .then((b) => ({ evento: e, saldo: Number(b?.balance ?? 0) }))
+          .catch(() => ({ evento: e, saldo: 0 })),
+      ),
+    ).then((res) => {
+      if (!ativo) return;
+      const comSaldo = res
+        .filter((r) => r.saldo > 0)
+        .sort((a, b) => b.saldo - a.saldo);
+      setSaldoOutro(
+        comSaldo.length > 0
+          ? { saldo: comSaldo[0].saldo, nomeEvento: comSaldo[0].evento.name ?? comSaldo[0].evento.id }
+          : null,
+      );
+    });
+    return () => {
+      ativo = false;
+    };
+  }, [user, eventId, possiveis, balance?.balance]);
+
   const addToCart = (product: Product) => {
     setCart((prev) => {
       const existingItem = prev.find((item) => item.id === product.id);
@@ -276,8 +330,6 @@ function QROrderPage() {
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const usableBalance = Math.min(balance?.balance ?? 0, getCartTotal());
   const produtosCount = products.length;
-  const eventoWindowOpen = true;
-  const erroCarregamento = Boolean(!eventLoading && eventId && error && !products.length && !loading);
 
   const estado = useMemo(
     () =>
@@ -287,17 +339,21 @@ function QROrderPage() {
         eventoWindowOpen,
         saldo: balance?.balance ?? null,
         produtosCount,
-        erroCarregamento,
+        erroCarregamento: erroProdutos,
         eventosPossiveis: possiveis.length,
+        loadingProdutos: loading,
+        saldoOutroEvento: saldoOutro,
       }),
     [
       eventId,
       eventoEscolhido?.status,
+      eventoWindowOpen,
       balance?.balance,
       produtosCount,
-      erroCarregamento,
+      erroProdutos,
       possiveis.length,
-      eventLoading,
+      loading,
+      saldoOutro,
     ],
   );
 
@@ -440,6 +496,11 @@ function QROrderPage() {
             <Alert variant="error" message={scanError} />
           </div>
         )}
+        {error && (
+          <div className="mb-4">
+            <Alert variant="error" message={error} />
+          </div>
+        )}
         {estado.tipo === 'sem-evento' && estado.eventosDisponiveis === 0 ? (
           <Alert variant="info" message="Sem eventos activos de momento. Pede o QR do evento à organização." />
         ) : estado.tipo === 'sem-evento' && estado.eventosDisponiveis >= 1 ? (
@@ -451,10 +512,23 @@ function QROrderPage() {
               Este evento já terminou. Se tens saldo, fala com o caixa para reaver o valor.
             </p>
           </div>
+        ) : estado.tipo === 'carregando' ? (
+          <div className="space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="shimmer h-24 rounded-2xl" />
+            ))}
+          </div>
         ) : estado.tipo === 'sem-saldo' ? (
           <div className="rounded-2xl border border-zinc-800 bg-surface p-8 text-center space-y-4">
             <h2 className="text-2xl font-bold text-zinc-50">Sem saldo para pedir</h2>
-            <Alert variant="info" message="Sem saldo para pedir. Vai ao caixa carregar saldo." />
+            <Alert
+              variant="info"
+              message={
+                estado.saldoOutroEvento
+                  ? `Tens €${estado.saldoOutroEvento.saldo.toFixed(2)} no evento "${estado.saldoOutroEvento.nomeEvento}". Para usar aqui, fala com o caixa para estornar lá e carregar cá.`
+                  : 'Sem saldo para pedir. Vai ao caixa carregar saldo.'
+              }
+            />
             <Button size="lg" className="w-full" onClick={() => router.push('/saldo')}>
               Ver saldo
             </Button>
@@ -481,14 +555,7 @@ function QROrderPage() {
         ) : estado.tipo === 'pronto' && products.length > 0 ? (
           <div className="space-y-6">
             <h2 className="text-lg font-bold text-zinc-100 mb-4">Escolha os seus petiscos</h2>
-            {loading ? (
-              <div className="space-y-3">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="shimmer h-24 rounded-2xl" />
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-6">
+            <div className="space-y-6">
                 {groupedProducts.map((group) => (
                   <section key={group.category?.id ?? 'sem-categoria'} aria-label={group.category?.name ?? 'Outros'}>
                     <div className="flex items-center gap-2 mb-2">
@@ -556,21 +623,8 @@ function QROrderPage() {
                   </section>
                 ))}
               </div>
-            )}
           </div>
-        ) : (
-          <div className="space-y-3">
-            {loading ? (
-              <div className="space-y-3">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="shimmer h-24 rounded-2xl" />
-                ))}
-              </div>
-            ) : (
-              <Alert variant="info" message="O menu deste evento ainda não está disponível. Contacta a organização." />
-            )}
-          </div>
-        )}
+        ) : null}
       </main>
 
       {/* Suggestions: people who ordered this also ordered */}

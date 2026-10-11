@@ -95,4 +95,57 @@ describe('calcularEstadoPedido', () => {
     });
     expect(r).toEqual({ tipo: 'erro-carregamento' });
   });
+
+  it('janela de datas fechada → evento-encerrado mesmo com status active', () => {
+    const r = calcularEstadoPedido({
+      eventId: 'e1',
+      eventoStatus: 'active',
+      eventoWindowOpen: false,
+      saldo: 100,
+      produtosCount: 5,
+      erroCarregamento: false,
+      eventosPossiveis: 1,
+    });
+    expect(r).toEqual({ tipo: 'evento-encerrado' });
+  });
+
+  it('sem-saldo com saldo noutro evento → devolve o campo saldoOutroEvento', () => {
+    const outro = { saldo: 50, nomeEvento: 'Magusto' };
+    const r = calcularEstadoPedido({
+      eventId: 'e1',
+      eventoStatus: 'active',
+      saldo: 0,
+      produtosCount: 5,
+      erroCarregamento: false,
+      eventosPossiveis: 2,
+      saldoOutroEvento: outro,
+    });
+    expect(r).toEqual({ tipo: 'sem-saldo', saldo: 0, saldoOutroEvento: outro });
+  });
+
+  it('sem-saldo sem saldo noutro evento → não inclui o campo', () => {
+    const r = calcularEstadoPedido({
+      eventId: 'e1',
+      eventoStatus: 'active',
+      saldo: 0,
+      produtosCount: 5,
+      erroCarregamento: false,
+      eventosPossiveis: 2,
+      saldoOutroEvento: null,
+    });
+    expect(r).toEqual({ tipo: 'sem-saldo', saldo: 0 });
+  });
+
+  it('com produtos, saldo noutro evento e erro de carregamento → erro (não sem-saldo)', () => {
+    const r = calcularEstadoPedido({
+      eventId: 'e1',
+      eventoStatus: 'active',
+      saldo: 0,
+      produtosCount: 5,
+      erroCarregamento: true,
+      eventosPossiveis: 2,
+      saldoOutroEvento: { saldo: 50, nomeEvento: 'Magusto' },
+    });
+    expect(r).toEqual({ tipo: 'erro-carregamento' });
+  });
 });
