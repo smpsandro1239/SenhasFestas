@@ -569,3 +569,27 @@ export async function importProducts(
     body: JSON.stringify({ sourceEventId, targetEventId, productIds }),
   });
 }
+
+export async function ajustarStock(
+  productId: string,
+  data: { delta?: number; novoValor?: number; motivo?: string },
+): Promise<any> {
+  return apiRequest(`/products/${productId}/stock`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function transferirSaldo(
+  userId: string,
+  data: { fromEventId: string; toEventId: string; amount: number },
+): Promise<any> {
+  return apiRequest(`/balances/${userId}/transfer`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getSaldosPorEvento(userId: string): Promise<any[]> {
+  return apiRequest(`/balances/${userId}/events`);
+}

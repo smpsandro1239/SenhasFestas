@@ -24,6 +24,14 @@ export function esgotado<T extends StockProduto>(produto: T): boolean {
   return produto.stock != null && Number(produto.stock) <= 0;
 }
 
+// Aviso de "stock baixo": ainda há unidades mas vale a pena reabastecer. Só
+// faz sentido com controlo ativo.
+export const STOCK_BAIXO_LIMITE = 5;
+
+export function stockBaixo<T extends StockProduto>(produto: T): boolean {
+  return produto.stock != null && Number(produto.stock) > 0 && Number(produto.stock) <= STOCK_BAIXO_LIMITE;
+}
+
 // Pode-se adicionar mais uma unidade? Sem controlo => sim, sempre. Com
 // controlo => precisa de ficar pelo menos uma disponível.
 export function podeAdicionar<T extends StockProduto>(
