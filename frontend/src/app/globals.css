@@ -52,6 +52,15 @@
     outline-offset: 2px;
     border-radius: 4px;
   }
+
+  /* Native select popup (options list) em dark, sem depender do color-scheme */
+  select {
+    color-scheme: dark;
+  }
+  select option {
+    background-color: #0b0c12;
+    color: #e0e2ef;
+  }
 }
 
 @layer components {
