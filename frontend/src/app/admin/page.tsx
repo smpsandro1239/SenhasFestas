@@ -255,17 +255,28 @@ function AdminPage() {
   const [selectedSourceProductIds, setSelectedSourceProductIds] = useState<string[]>([]);
   const [importingProducts, setImportingProducts] = useState(false);
   const [importSuccessMsg, setImportSuccessMsg] = useState("");
+  const [importError, setImportError] = useState("");
 
   const abrirModalImportacao = () => {
     setShowImportModal(true);
     setSourceEventId("");
     setSourceProducts([]);
     setSelectedSourceProductIds([]);
+    setImportAll(true);
+    setImportSuccessMsg("");
+    setImportError("");
+  };
+
+  const fecharModalImportacao = () => {
+    if (importingProducts) return;
+    setShowImportModal(false);
+    setImportError("");
     setImportSuccessMsg("");
   };
 
   const carregarProdutosOrigem = async (evId: string) => {
     setSourceEventId(evId);
+    setImportSuccessMsg("");
     if (!evId) {
       setSourceProducts([]);
       setSelectedSourceProductIds([]);
@@ -278,32 +289,39 @@ function AdminPage() {
       setSelectedSourceProductIds(list.map((p: any) => p.id));
     } catch {
       setSourceProducts([]);
+      setSelectedSourceProductIds([]);
     }
+  };
+
+  const toggleSourceProduct = (id: string) => {
+    setSelectedSourceProductIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
   };
 
   const handleImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sourceEventId) {
-      setError("Selecione o evento de origem");
+      setImportError("Selecione o evento de origem");
       return;
     }
     if (!activeEventId) {
-      setError("Selecione um evento ativo no topo");
+      setImportError("Selecione um evento ativo no topo");
       return;
     }
     if (sourceEventId === activeEventId) {
-      setError("O evento de origem deve ser diferente do evento de destino");
+      setImportError("O evento de origem deve ser diferente do evento de destino");
       return;
     }
 
     const idsParaImportar = importAll ? undefined : selectedSourceProductIds;
     if (!importAll && (!idsParaImportar || idsParaImportar.length === 0)) {
-      setError("Selecione pelo menos um produto para importar");
+      setImportError("Selecione pelo menos um produto para importar");
       return;
     }
 
     setImportingProducts(true);
-    setError("");
+    setImportError("");
     setImportSuccessMsg("");
 
     try {
@@ -315,7 +333,7 @@ function AdminPage() {
         setImportSuccessMsg("");
       }, 1800);
     } catch (err: any) {
-      setError(err?.message || "Não foi possível importar os produtos");
+      setImportError(err?.message || "Não foi possível importar os produtos");
     } finally {
       setImportingProducts(false);
     }
@@ -1542,6 +1560,14 @@ function AdminPage() {
                     Catálogo de produtos e preços do evento. {productTotal > 0 && `${productTotal} produto${productTotal === 1 ? '' : 's'}.`}
                   </p>
                 </div>
+                <Button
+                  variant="secondary"
+                  onClick={abrirModalImportacao}
+                  disabled={loading}
+                  icon={<CopyIcon className="h-4 w-4" />}
+                >
+                  Importar produtos
+                </Button>
               </div>
 
               <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1906,6 +1932,122 @@ function AdminPage() {
               {productDeleteError && (
                 <Alert variant="error" message={productDeleteError} />
               )}
+            </Dialog>
+
+            <Dialog
+              open={showImportModal}
+              onClose={fecharModalImportacao}
+              title="Importar produtos"
+              description="Copia produtos de outro evento para o evento ativo. As categorias com o mesmo nome são reutilizadas; as novas são criadas."
+              className="max-w-xl"
+            >
+              <form onSubmit={handleImportSubmit} className="space-y-4">
+                {importError && <Alert variant="error" message={importError} />}
+                {importSuccessMsg && <Alert variant="success" message={importSuccessMsg} />}
+
+                {!activeEventId ? (
+                  <Alert
+                    variant="info"
+                    message="Não há evento de destino. Seleciona um evento ativo no seletor no topo da página e volta a abrir esta janela."
+                  />
+                ) : (
+                  <>
+                    <p className="text-sm text-zinc-400">
+                      Destino:{' '}
+                      <span className="text-zinc-200 font-medium">
+                        {activeEvent?.name ?? activeEventId}
+                      </span>
+                    </p>
+
+                    <div className="space-y-1.5">
+                      <label htmlFor="import-source" className="block text-sm font-medium text-zinc-400">
+                        Evento de origem
+                      </label>
+                      <select
+                        id="import-source"
+                        value={sourceEventId}
+                        onChange={(e) => carregarProdutosOrigem(e.target.value)}
+                        disabled={importingProducts}
+                        className="w-full bg-surface-solid border border-border rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40 disabled:opacity-50"
+                      >
+                        <option value="">Escolhe o evento...</option>
+                        {events
+                          .filter((e) => e.id !== activeEventId)
+                          .map((e) => (
+                            <option key={e.id} value={e.id}>
+                              {e.name ?? e.id}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+
+                    {sourceEventId && (
+                      <>
+                        <label className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3 text-sm text-zinc-300 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={importAll}
+                            onChange={(e) => setImportAll(e.target.checked)}
+                            disabled={importingProducts}
+                            className="h-4 w-4 accent-brand"
+                          />
+                          <span>Importar todos os produtos ativos do evento de origem</span>
+                        </label>
+
+                        {!importAll &&
+                          (sourceProducts.length === 0 ? (
+                            <p className="text-sm text-zinc-400">
+                              Este evento não tem produtos ativos para importar.
+                            </p>
+                          ) : (
+                            <div className="max-h-64 overflow-y-auto rounded-xl border border-border divide-y divide-border">
+                              {sourceProducts.map((productSource) => (
+                                <label
+                                  key={productSource.id}
+                                  className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-300 cursor-pointer hover:bg-surface"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedSourceProductIds.includes(productSource.id)}
+                                    onChange={() => toggleSourceProduct(productSource.id)}
+                                    disabled={importingProducts}
+                                    className="h-4 w-4 accent-brand"
+                                  />
+                                  <span className="flex-1">{productSource.name}</span>
+                                  <span className="text-zinc-500">
+                                    €{Number(productSource.price ?? 0).toFixed(2)}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          ))}
+                      </>
+                    )}
+                  </>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={fecharModalImportacao}
+                    disabled={importingProducts}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    loading={importingProducts}
+                    disabled={
+                      !activeEventId ||
+                      !sourceEventId ||
+                      sourceEventId === activeEventId
+                    }
+                  >
+                    Importar
+                  </Button>
+                </div>
+              </form>
             </Dialog>
 
             <Card>

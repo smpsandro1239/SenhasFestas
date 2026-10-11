@@ -856,4 +856,172 @@ describe('CatalogService', () => {
       ]);
     });
   });
+
+  describe('importProducts', () => {
+    const ORIGEM = { id: 'o1', name: 'Origem' };
+    const DESTINO = { id: 'd1', name: 'Destino' };
+    const CAT_SANDES = { id: 'c1', name: 'Sandes' };
+    const PRODUTO = {
+      id: 'p1',
+      name: 'Bifana',
+      description: 'queijo e fiambre',
+      imageUrl: 'https://cdn/bifana.jpg',
+      price: 3.5,
+      availability: 'available',
+      stock: 10,
+      isActive: true,
+      category: CAT_SANDES,
+      options: { tamanho: ['P', 'G'] },
+      modifiers: { extras: ['bacon'] },
+      kitchenName: 'Bifana PF',
+    };
+
+    beforeEach(() => {
+      mockEventRepository.findOne.mockImplementation(async ({ where }: any) => {
+        if (where?.id === ORIGEM.id) return { ...ORIGEM };
+        if (where?.id === DESTINO.id) return { ...DESTINO };
+        return null;
+      });
+      mockProductRepository.find.mockResolvedValue([{ ...PRODUTO }]);
+      mockProductRepository.create.mockImplementation((dto: any) => ({ id: 'novo', ...dto }));
+      mockProductRepository.save.mockImplementation(async (p: any) => p);
+      mockCategoryRepository.find.mockResolvedValue([]);
+      mockCategoryRepository.create.mockImplementation((dto: any) => ({ id: 'cat-novo', ...dto }));
+      mockCategoryRepository.save.mockImplementation(async (c: any) => c);
+    });
+
+    it('membro verifica membership nos dois eventos', async () => {
+      await service.importProducts(MEMBRO, ORIGEM.id, DESTINO.id);
+
+      expect(mockMembershipService.assertMember).toHaveBeenCalledTimes(2);
+      expect(mockMembershipService.assertMember).toHaveBeenNthCalledWith(1, MEMBRO, ORIGEM.id);
+      expect(mockMembershipService.assertMember).toHaveBeenNthCalledWith(2, MEMBRO, DESTINO.id);
+    });
+
+    it('superadmin salta a verificação de membership', async () => {
+      const superadmin = { id: 'u0', role: 'superadmin' } as any;
+
+      await service.importProducts(superadmin, ORIGEM.id, DESTINO.id);
+
+      expect(mockMembershipService.assertMember).not.toHaveBeenCalled();
+    });
+
+    it('evento de origem ou destino inexistente → NotFoundException', async () => {
+      mockEventRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.importProducts(MEMBRO, 'inexistente', DESTINO.id),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('origem sem produtos → devolve zero e não mexe em categorias', async () => {
+      mockProductRepository.find.mockResolvedValue([]);
+
+      const r = await service.importProducts(MEMBRO, ORIGEM.id, DESTINO.id);
+
+      expect(r).toEqual({ importedCount: 0, products: [] });
+      expect(mockCategoryRepository.find).not.toHaveBeenCalled();
+      expect(mockProductRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('com productIds, filtra os produtos a importar por id', async () => {
+      await service.importProducts(MEMBRO, ORIGEM.id, DESTINO.id, ['p1', 'p2']);
+
+      expect(mockProductRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { event: { id: ORIGEM.id }, isActive: true, id: In(['p1', 'p2']) },
+        }),
+      );
+    });
+
+    it('reusa a categoria do destino com o mesmo nome (ignora maiúsculas e espaços)', async () => {
+      mockCategoryRepository.find.mockResolvedValue([{ id: 'c-existente', name: '  sandes ' }]);
+
+      await service.importProducts(MEMBRO, ORIGEM.id, DESTINO.id);
+
+      expect(mockCategoryRepository.create).not.toHaveBeenCalled();
+      expect(mockProductRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ category: { id: 'c-existente', name: '  sandes ' } }),
+      );
+    });
+
+    it('cria categoria nova quando o destino não tem com esse nome', async () => {
+      await service.importProducts(MEMBRO, ORIGEM.id, DESTINO.id);
+
+      expect(mockCategoryRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: { ...DESTINO },
+          name: 'Sandes',
+          isActive: true,
+        }),
+      );
+      expect(mockProductRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          category: expect.objectContaining({ id: 'cat-novo', name: 'Sandes' }),
+        }),
+      );
+    });
+
+    it('copia os campos do produto e aponta para o evento destino', async () => {
+      await service.importProducts(MEMBRO, ORIGEM.id, DESTINO.id);
+
+      const criado = mockProductRepository.create.mock.calls[0][0];
+      expect(criado).toEqual(
+        expect.objectContaining({
+          name: 'Bifana',
+          description: 'queijo e fiambre',
+          imageUrl: 'https://cdn/bifana.jpg',
+          price: 3.5,
+          availability: 'available',
+          stock: 10,
+          isActive: true,
+          kitchenName: 'Bifana PF',
+          event: { ...DESTINO },
+        }),
+      );
+      expect(criado.options).toEqual({ tamanho: ['P', 'G'] });
+      expect(criado.modifiers).toEqual({ extras: ['bacon'] });
+    });
+
+    it('devolve a contagem e os produtos guardados', async () => {
+      mockProductRepository.save.mockImplementation(async (p: any) =>
+        (Array.isArray(p) ? p : [p]).map((x: any) => ({ ...x, id: 'novo' })),
+      );
+
+      const r = await service.importProducts(MEMBRO, ORIGEM.id, DESTINO.id);
+
+      expect(r.importedCount).toBe(1);
+      expect(r.products).toHaveLength(1);
+    });
+  });
+
+  describe('import — rota só para quem gere o catálogo', () => {
+    const impMock = vi.fn();
+    const controller = new CatalogController(
+      { importProducts: impMock } as any,
+      { assertMember: vi.fn() } as any,
+    );
+    const DTO = { sourceEventId: 'o1', targetEventId: 'd1', productIds: ['p1'] };
+
+    beforeEach(() => {
+      impMock.mockResolvedValue({ importedCount: 1, products: [] });
+    });
+
+    it.each(MANAGEMENT_ROLES)('%s chega ao serviço', async (role) => {
+      await expect(
+        controller.importProducts({ user: { id: 'u1', role } } as any, DTO as any),
+      ).resolves.toEqual({ importedCount: 1, products: [] });
+      expect(impMock).toHaveBeenCalledWith(
+        { id: 'u1', role },
+        DTO.sourceEventId,
+        DTO.targetEventId,
+        DTO.productIds,
+      );
+    });
+
+    it('o @Roles da rota é MANAGEMENT_ROLES', () => {
+      const handler = controller.importProducts;
+      expect(Reflect.getMetadata(ROLES_KEY, handler) ?? []).toEqual(MANAGEMENT_ROLES);
+    });
+  });
 });
