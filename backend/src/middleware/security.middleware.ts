@@ -30,6 +30,9 @@ export class SecurityMiddleware implements NestMiddleware {
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-site');
 
     const method = req.method;
     const temCookie = Boolean(req.headers.cookie);
