@@ -4,9 +4,11 @@ import { Client } from 'pg';
 import request from 'supertest';
 import * as bcrypt from 'bcryptjs';
 import { criarAplicacao } from '../src/app.setup';
+import { Redis } from 'ioredis';
 import { UserEntity } from '../src/entities';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { codigoAcessoUnico } from '../src/common/access-code';
+import { REDIS_CLIENT } from '../src/common/redis/redis.service';
 
 const PROBE_TIMEOUT_MS = 5000;
 
@@ -57,6 +59,17 @@ describe('App e2e (Postgres + Redis)', () => {
       await app.close();
     }
   }, 30000);
+
+  beforeEach(async () => {
+    try {
+      const redisClient = app.get<Redis | null>(REDIS_CLIENT, { strict: false });
+      if (redisClient) {
+        await redisClient.flushall();
+      }
+    } catch {
+      // Ignorar se Redis não estiver registado
+    }
+  });
 
   async function criarUtilizadorTeste(email: string): Promise<{ email: string; password: string }> {
     const dataSource = app.get(DataSource);
