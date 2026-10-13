@@ -979,14 +979,12 @@ function AdminPage() {
     if (!plantaEventoId) return;
     const shortCode = events.find((ev: any) => ev.id === plantaEventoId)?.shortCode;
     if (!shortCode) return;
-    setPlanta(parsePlanta(localStorage.getItem(`sf:planta:${shortCode}`)));
+    const carregadas = parsePlanta(localStorage.getItem(`sf:planta:${shortCode}`));
+    plantaEstadoRef.current = carregadas;
+    setPlanta(carregadas);
     setPlantaSel(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plantaEventoId, events]);
-
-  useEffect(() => {
-    plantaEstadoRef.current = planta;
-  }, [planta]);
 
   const gravarLugaresEvento = (mapa: Record<string, number>) => {
     const shortCode = qrEvento?.shortCode;
@@ -1056,6 +1054,7 @@ function AdminPage() {
   };
 
   const definirPlanta = (mesas: Mesa[]) => {
+    plantaEstadoRef.current = mesas;
     setPlanta(mesas);
     gravarPlanta(mesas);
   };
@@ -1095,7 +1094,9 @@ function AdminPage() {
     if (!arrasto || !rect) return;
     const x = encaixarGrelha(((e.clientX - rect.left) / rect.width) * 100);
     const y = encaixarGrelha(((e.clientY - rect.top) / rect.height) * 100);
-    setPlanta((prev) => moverMesa(prev, arrasto.id, x, y));
+    const next = moverMesa(plantaEstadoRef.current, arrasto.id, x, y);
+    plantaEstadoRef.current = next;
+    setPlanta(next);
   };
 
   const onPlantaPointerUp = () => {
@@ -1490,7 +1491,7 @@ function AdminPage() {
                                 {folha.map((mesa) => (
                                   <div key={mesa} className="qr-card">
                                     <QRCodeSVG
-                                      value={montarUrlMesa(window.location.origin, qrEvento.shortCode, mesa)}
+                                      value={montarUrlMesa(window.location.origin, loteShortCode, mesa)}
                                       size={loteTamanho}
                                       level="M"
                                       className="max-w-full h-auto"
@@ -3408,13 +3409,57 @@ function AdminPage() {
                       );
                     })()}
 
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <Button size="sm" onClick={gerarQrsDaPlanta} disabled={!planta.length}>
-                      Gerar QRs das mesas
-                    </Button>
-                    <span className="text-xs text-zinc-400">
-                      Usa o gerador de QRs (tamanho e grelha) para compor a folha A4 e imprimir.
-                    </span>
+                  <div className="mt-4 rounded-xl border border-border p-3">
+                    <div className="flex flex-wrap items-end gap-3">
+                      <label className="block w-40">
+                        <span className="block text-sm font-medium text-zinc-400 mb-1.5">Tamanho</span>
+                        <select
+                          value={loteTamanho}
+                          onChange={(e) => setLoteTamanho(Number(e.target.value))}
+                          className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                        >
+                          <option value={120}>Pequeno</option>
+                          <option value={160}>Médio</option>
+                          <option value={200}>Grande</option>
+                        </select>
+                      </label>
+                      <label className="block w-28">
+                        <span className="block text-sm font-medium text-zinc-400 mb-1.5">Colunas</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="6"
+                          value={loteColunas}
+                          onChange={(e) => setLoteColunas(Math.max(1, Math.min(6, Number(e.target.value) || 1)))}
+                          className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                        />
+                      </label>
+                      <label className="block w-28">
+                        <span className="block text-sm font-medium text-zinc-400 mb-1.5">Linhas</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="8"
+                          value={loteLinhas}
+                          onChange={(e) => setLoteLinhas(Math.max(1, Math.min(8, Number(e.target.value) || 1)))}
+                          className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                        />
+                      </label>
+                      <Button size="sm" onClick={gerarQrsDaPlanta} disabled={!planta.length}>
+                        Gerar QRs das mesas
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => imprimirArea('lote')}
+                        disabled={!loteGerado}
+                      >
+                        Imprimir
+                      </Button>
+                    </div>
+                    <p className="mt-2 text-xs text-zinc-400">
+                      Gera os QRs das mesas da planta e compõe a folha A4 com o tamanho e a grelha acima.
+                    </p>
                   </div>
                 </>
               )}
