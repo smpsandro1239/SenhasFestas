@@ -29,6 +29,18 @@ import {
   MAX_MESAS_LOTE,
   MAX_LUGARES_MESA,
 } from '@/lib/qr-lote';
+import {
+  parsePlanta,
+  criarMesa,
+  moverMesa,
+  adicionarMesa,
+  removerMesa,
+  atualizarMesa,
+  mesasParaQrs,
+  encaixarGrelha,
+  type Mesa,
+  type FormaMesa,
+} from '@/lib/planta';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
   superadmin: 'brand',
@@ -105,6 +117,9 @@ function AdminPage() {
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const copiaTimerRef = useRef<number | null>(null);
   const lugaresPadraoRef = useRef(false);
+  const plantaRef = useRef<HTMLDivElement>(null);
+  const plantaEstadoRef = useRef<Mesa[]>([]);
+  const arrastoRef = useRef<{ id: string } | null>(null);
   const [loteModo, setLoteModo] = useState<'intervalo' | 'nomes'>('intervalo');
   const [loteInicio, setLoteInicio] = useState('1');
   const [loteFim, setLoteFim] = useState('10');
@@ -116,6 +131,11 @@ function AdminPage() {
   const [loteLugaresPadrao, setLoteLugaresPadrao] = useState(8);
   const [loteLugares, setLoteLugares] = useState<Record<string, number>>({});
   const [loteErro, setLoteErro] = useState('');
+  const [loteShortCode, setLoteShortCode] = useState('');
+  const [plantaEventoId, setPlantaEventoId] = useState('');
+  const [planta, setPlanta] = useState<Mesa[]>([]);
+  const [plantaSel, setPlantaSel] = useState<string | null>(null);
+  const [plantaNovoNome, setPlantaNovoNome] = useState('');
   const [eventEditing, setEventEditing] = useState<any>(null);
   const [eventEditForm, setEventEditForm] = useState({ name: '', location: '', startDate: '', endDate: '' });
   const [eventDeleting, setEventDeleting] = useState<any>(null);
@@ -167,6 +187,7 @@ function AdminPage() {
     { id: 'saldos', label: 'Saldos', icon: <WalletIcon className="h-4 w-4" /> },
     { id: 'configuracao', label: 'Configuração', icon: <SettingsIcon className="h-4 w-4" /> },
     { id: 'auditoria', label: 'Auditoria', icon: <ShieldCheckIcon className="h-4 w-4" /> },
+    { id: 'planta', label: 'Planta', icon: <CalendarIcon className="h-4 w-4" /> },
   ];
 
   const loadEvents = async () => {
@@ -708,6 +729,7 @@ function AdminPage() {
     if (activeTab === 'auditoria') loadAudit();
     if (activeTab === 'configuracao') loadEvents();
     if (activeTab === 'saldos') loadEvents();
+    if (activeTab === 'planta') loadEvents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, loadAudit, loadProducts]);
 
@@ -947,6 +969,25 @@ function AdminPage() {
     }
   }, [qrEvento?.shortCode]);
 
+  useEffect(() => {
+    if (plantaEventoId || events.length === 0) return;
+    const alvo = currentEvent?.id || events[0]?.id || '';
+    if (alvo) setPlantaEventoId(alvo);
+  }, [events, currentEvent, plantaEventoId]);
+
+  useEffect(() => {
+    if (!plantaEventoId) return;
+    const shortCode = events.find((ev: any) => ev.id === plantaEventoId)?.shortCode;
+    if (!shortCode) return;
+    setPlanta(parsePlanta(localStorage.getItem(`sf:planta:${shortCode}`)));
+    setPlantaSel(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plantaEventoId, events]);
+
+  useEffect(() => {
+    plantaEstadoRef.current = planta;
+  }, [planta]);
+
   const gravarLugaresEvento = (mapa: Record<string, number>) => {
     const shortCode = qrEvento?.shortCode;
     if (!shortCode) return;
@@ -996,11 +1037,101 @@ function AdminPage() {
       return;
     }
     setLoteGerado(mesas);
+    setLoteShortCode(qrEvento.shortCode);
     setLoteLugares((prev) => {
       const next: Record<string, number> = {};
       for (const mesa of mesas) next[mesa] = prev[mesa] ?? loteLugaresPadrao;
       return next;
     });
+  };
+
+  const plantaShortCode =
+    events.find((ev: any) => ev.id === plantaEventoId)?.shortCode ?? '';
+
+  const gravarPlanta = (mesas: Mesa[]) => {
+    if (!plantaShortCode) return;
+    try {
+      localStorage.setItem(`sf:planta:${plantaShortCode}`, JSON.stringify(mesas));
+    } catch {}
+  };
+
+  const definirPlanta = (mesas: Mesa[]) => {
+    setPlanta(mesas);
+    gravarPlanta(mesas);
+  };
+
+  const adicionarMesaPlanta = () => {
+    if (!plantaEventoId) return;
+    const nome = plantaNovoNome.trim() || `Mesa ${planta.length + 1}`;
+    const col = planta.length % 5;
+    const linha = Math.floor(planta.length / 5);
+    const nova = criarMesa(nome, loteLugaresPadrao, 'redonda', 18 + col * 16, 20 + linha * 16);
+    definirPlanta(adicionarMesa(planta, nova));
+    setPlantaNovoNome('');
+    setPlantaSel(nova.id);
+  };
+
+  const removerMesaPlanta = (id: string) => {
+    definirPlanta(removerMesa(planta, id));
+    setPlantaSel((atual) => (atual === id ? null : atual));
+  };
+
+  const editarMesaPlanta = (id: string, patch: Partial<Omit<Mesa, 'id'>>) => {
+    definirPlanta(atualizarMesa(planta, id, patch));
+  };
+
+  const onMesaPointerDown = (e: React.PointerEvent, mesa: Mesa) => {
+    e.preventDefault();
+    setPlantaSel(mesa.id);
+    arrastoRef.current = { id: mesa.id };
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  const onPlantaPointerMove = (e: React.PointerEvent) => {
+    const arrasto = arrastoRef.current;
+    const rect = plantaRef.current?.getBoundingClientRect();
+    if (!arrasto || !rect) return;
+    const x = encaixarGrelha(((e.clientX - rect.left) / rect.width) * 100);
+    const y = encaixarGrelha(((e.clientY - rect.top) / rect.height) * 100);
+    setPlanta((prev) => moverMesa(prev, arrasto.id, x, y));
+  };
+
+  const onPlantaPointerUp = () => {
+    if (arrastoRef.current) gravarPlanta(plantaEstadoRef.current);
+    arrastoRef.current = null;
+  };
+
+  const onMesaKeyDown = (e: React.KeyboardEvent, mesa: Mesa) => {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      removerMesaPlanta(mesa.id);
+      return;
+    }
+    const passo = e.shiftKey ? 5 : 2;
+    let dx = 0;
+    let dy = 0;
+    if (e.key === 'ArrowLeft') dx = -passo;
+    else if (e.key === 'ArrowRight') dx = passo;
+    else if (e.key === 'ArrowUp') dy = -passo;
+    else if (e.key === 'ArrowDown') dy = passo;
+    else return;
+    e.preventDefault();
+    definirPlanta(moverMesa(planta, mesa.id, mesa.x + dx, mesa.y + dy));
+  };
+
+  const gerarQrsDaPlanta = () => {
+    const { nomes, lugares } = mesasParaQrs(planta);
+    if (!nomes.length) return;
+    setLoteGerado(nomes);
+    setLoteLugares(lugares);
+    setLoteShortCode(plantaShortCode);
+    if (plantaShortCode) {
+      try {
+        localStorage.setItem(`sf:qr-lugares:${plantaShortCode}`, JSON.stringify(lugares));
+      } catch {}
+    }
   };
 
   const descarregarQr = () => {
@@ -3133,10 +3264,168 @@ function AdminPage() {
           )}
         </Dialog>
 
+        {activeTab === 'planta' && (
+          <div className="space-y-6">
+            <Card>
+              <h2 className="text-xl font-bold text-zinc-50 mb-2">Planta das mesas</h2>
+              <p className="text-zinc-400 mb-6 text-sm">
+                Arrasta as mesas para desenhar a disposição do espaço. Guardado neste dispositivo.
+              </p>
+
+              {events.length === 0 ? (
+                <div className="text-sm text-zinc-400 py-4">Cria um evento primeiro.</div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <label className="block min-w-56">
+                      <span className="block text-sm font-medium text-zinc-400 mb-1.5">Evento</span>
+                      <select
+                        value={plantaEventoId}
+                        onChange={(e) => setPlantaEventoId(e.target.value)}
+                        className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                      >
+                        <option value="">Seleciona um evento</option>
+                        {events.map((ev: any) => (
+                          <option key={ev.id} value={ev.id}>
+                            {ev.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block w-48">
+                      <span className="block text-sm font-medium text-zinc-400 mb-1.5">Nova mesa</span>
+                      <input
+                        value={plantaNovoNome}
+                        onChange={(e) => setPlantaNovoNome(e.target.value)}
+                        placeholder="ex: Mesa 1"
+                        className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                      />
+                    </label>
+                    <Button size="sm" onClick={adicionarMesaPlanta} disabled={!plantaEventoId}>
+                      Adicionar mesa
+                    </Button>
+                    {planta.length > 0 && (
+                      <span className="text-xs text-zinc-400">
+                        {planta.length} mesa(s) ·{' '}
+                        {planta.reduce((s, m) => s + normalizarLugares(m.lugares), 0)} lugares
+                      </span>
+                    )}
+                  </div>
+
+                  <div
+                    ref={plantaRef}
+                    onPointerMove={onPlantaPointerMove}
+                    onPointerUp={onPlantaPointerUp}
+                    onPointerLeave={onPlantaPointerUp}
+                    className="relative mt-4 w-full overflow-hidden rounded-2xl border border-border bg-zinc-900/40"
+                    style={{ aspectRatio: '16 / 9', touchAction: 'none' }}
+                  >
+                    {planta.length === 0 && (
+                      <div className="absolute inset-0 flex items-center justify-center text-sm text-zinc-500">
+                        Sem mesas. Adiciona a primeira acima.
+                      </div>
+                    )}
+                    {planta.map((mesa) => {
+                      const sel = plantaSel === mesa.id;
+                      return (
+                        <div
+                          key={mesa.id}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Mesa ${mesa.nome}, ${mesa.lugares} lugares`}
+                          onPointerDown={(e) => onMesaPointerDown(e, mesa)}
+                          onFocus={() => setPlantaSel(mesa.id)}
+                          onKeyDown={(e) => onMesaKeyDown(e, mesa)}
+                          className={cn(
+                            'absolute flex cursor-grab select-none flex-col items-center justify-center text-center outline-none',
+                            mesa.forma === 'quadrada' ? 'rounded-lg' : 'rounded-full',
+                            sel
+                              ? 'bg-brand/20 ring-2 ring-brand'
+                              : 'bg-surface border border-border hover:border-border-hover',
+                          )}
+                          style={{
+                            left: `${mesa.x}%`,
+                            top: `${mesa.y}%`,
+                            width: 76,
+                            height: 76,
+                            transform: 'translate(-50%, -50%)',
+                            touchAction: 'none',
+                          }}
+                        >
+                          <span className="max-w-[68px] truncate text-xs font-semibold text-zinc-100">
+                            {mesa.nome}
+                          </span>
+                          <span className="text-[10px] text-zinc-400">{mesa.lugares} lug.</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {plantaSel &&
+                    (() => {
+                      const mesa = planta.find((m) => m.id === plantaSel);
+                      if (!mesa) return null;
+                      return (
+                        <div className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-border p-3">
+                          <label className="block w-48">
+                            <span className="block text-sm font-medium text-zinc-400 mb-1.5">Nome</span>
+                            <input
+                              value={mesa.nome}
+                              onChange={(e) => editarMesaPlanta(mesa.id, { nome: e.target.value })}
+                              className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                            />
+                          </label>
+                          <label className="block w-28">
+                            <span className="block text-sm font-medium text-zinc-400 mb-1.5">Lugares</span>
+                            <input
+                              type="number"
+                              min="0"
+                              max={MAX_LUGARES_MESA}
+                              value={mesa.lugares}
+                              onChange={(e) =>
+                                editarMesaPlanta(mesa.id, { lugares: normalizarLugares(Number(e.target.value)) })
+                              }
+                              className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                            />
+                          </label>
+                          <label className="block w-40">
+                            <span className="block text-sm font-medium text-zinc-400 mb-1.5">Forma</span>
+                            <select
+                              value={mesa.forma}
+                              onChange={(e) =>
+                                editarMesaPlanta(mesa.id, { forma: e.target.value as FormaMesa })
+                              }
+                              className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                            >
+                              <option value="redonda">Redonda</option>
+                              <option value="quadrada">Quadrada</option>
+                            </select>
+                          </label>
+                          <Button size="sm" variant="outline" onClick={() => removerMesaPlanta(mesa.id)}>
+                            Remover
+                          </Button>
+                        </div>
+                      );
+                    })()}
+
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <Button size="sm" onClick={gerarQrsDaPlanta} disabled={!planta.length}>
+                      Gerar QRs das mesas
+                    </Button>
+                    <span className="text-xs text-zinc-400">
+                      Usa o gerador de QRs (tamanho e grelha) para compor a folha A4 e imprimir.
+                    </span>
+                  </div>
+                </>
+              )}
+            </Card>
+          </div>
+        )}
+
         {error && <div className="mt-4"><Alert variant="error" message={error} /></div>}
       </AppShell>
 
-      {qrEvento?.shortCode && loteGerado && loteGerado.length > 0 && (
+      {loteShortCode && loteGerado && loteGerado.length > 0 && (
         <div className="qr-lote-print">
           {agruparFolhas(loteGerado, loteColunas * loteLinhas).map((folha, fi) => (
             <div
@@ -3147,7 +3436,7 @@ function AdminPage() {
               {folha.map((mesa) => (
                 <div key={mesa} className="qr-card">
                   <QRCodeSVG
-                    value={montarUrlMesa(window.location.origin, qrEvento.shortCode, mesa)}
+                    value={montarUrlMesa(window.location.origin, loteShortCode, mesa)}
                     size={loteTamanho}
                     level="M"
                     className="max-w-full h-auto"
