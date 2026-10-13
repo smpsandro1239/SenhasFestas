@@ -20,7 +20,15 @@ import { importProducts, getEvents, createEvent, updateEvent, updateEventStatus,
 import { stockBaixo, esgotado } from '@/lib/stock';
 import { downloadTextFile } from '@/lib/download';
 import { montarUrlMesa } from '@/lib/mesa-qr';
-import { numerosDeIntervalo, agruparFolhas } from '@/lib/qr-lote';
+import {
+  numerosDeIntervalo,
+  agruparFolhas,
+  normalizarLugares,
+  aplicarLugaresTodas,
+  totalLugares,
+  MAX_MESAS_LOTE,
+  MAX_LUGARES_MESA,
+} from '@/lib/qr-lote';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
   superadmin: 'brand',
@@ -96,6 +104,7 @@ function AdminPage() {
   const [copiadoQr, setCopiadoQr] = useState(false);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const copiaTimerRef = useRef<number | null>(null);
+  const lugaresPadraoRef = useRef(false);
   const [loteModo, setLoteModo] = useState<'intervalo' | 'nomes'>('intervalo');
   const [loteInicio, setLoteInicio] = useState('1');
   const [loteFim, setLoteFim] = useState('10');
@@ -104,6 +113,9 @@ function AdminPage() {
   const [loteColunas, setLoteColunas] = useState(3);
   const [loteLinhas, setLoteLinhas] = useState(4);
   const [loteGerado, setLoteGerado] = useState<string[] | null>(null);
+  const [loteLugaresPadrao, setLoteLugaresPadrao] = useState(8);
+  const [loteLugares, setLoteLugares] = useState<Record<string, number>>({});
+  const [loteErro, setLoteErro] = useState('');
   const [eventEditing, setEventEditing] = useState<any>(null);
   const [eventEditForm, setEventEditForm] = useState({ name: '', location: '', startDate: '', endDate: '' });
   const [eventDeleting, setEventDeleting] = useState<any>(null);
@@ -909,6 +921,40 @@ function AdminPage() {
     window.setTimeout(limpar, 1500);
   };
 
+  useEffect(() => {
+    try {
+      const pad = Number(localStorage.getItem('sf:qr-lugares-padrao'));
+      if (Number.isFinite(pad) && pad > 0) setLoteLugaresPadrao(normalizarLugares(pad));
+    } catch {}
+    lugaresPadraoRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!lugaresPadraoRef.current) return;
+    try {
+      localStorage.setItem('sf:qr-lugares-padrao', String(loteLugaresPadrao));
+    } catch {}
+  }, [loteLugaresPadrao]);
+
+  useEffect(() => {
+    const shortCode = qrEvento?.shortCode;
+    if (!shortCode) return;
+    try {
+      const raw = localStorage.getItem(`sf:qr-lugares:${shortCode}`);
+      setLoteLugares(raw ? JSON.parse(raw) : {});
+    } catch {
+      setLoteLugares({});
+    }
+  }, [qrEvento?.shortCode]);
+
+  const gravarLugaresEvento = (mapa: Record<string, number>) => {
+    const shortCode = qrEvento?.shortCode;
+    if (!shortCode) return;
+    try {
+      localStorage.setItem(`sf:qr-lugares:${shortCode}`, JSON.stringify(mapa));
+    } catch {}
+  };
+
   const ajustarQtdNomes = (valor: string) => {
     const qtd = Math.max(0, Math.min(100, Math.floor(Number(valor) || 0)));
     setLoteNomes((prev) => {
@@ -918,13 +964,43 @@ function AdminPage() {
     });
   };
 
+  const definirLugarMesa = (mesa: string, valor: number) => {
+    setLoteLugares((prev) => {
+      const next = { ...prev, [mesa]: normalizarLugares(valor) };
+      gravarLugaresEvento(next);
+      return next;
+    });
+  };
+
+  const aplicarATodas = () => {
+    if (!loteGerado) return;
+    const next = aplicarLugaresTodas(loteGerado, loteLugaresPadrao);
+    setLoteLugares(next);
+    gravarLugaresEvento(next);
+  };
+
   const gerarLote = () => {
+    setLoteErro('');
     if (!qrEvento?.shortCode) return;
     const mesas =
       loteModo === 'intervalo'
         ? numerosDeIntervalo(Number(loteInicio), Number(loteFim))
         : loteNomes.map((n) => n.trim()).filter(Boolean);
-    setLoteGerado(mesas.length ? mesas : null);
+    if (!mesas.length) {
+      setLoteGerado(null);
+      setLoteErro(
+        loteModo === 'intervalo'
+          ? `Intervalo inválido. Usa mesas a partir da 1 e no máximo ${MAX_MESAS_LOTE} de uma vez.`
+          : 'Preenche pelo menos um nome de mesa.',
+      );
+      return;
+    }
+    setLoteGerado(mesas);
+    setLoteLugares((prev) => {
+      const next: Record<string, number> = {};
+      for (const mesa of mesas) next[mesa] = prev[mesa] ?? loteLugaresPadrao;
+      return next;
+    });
   };
 
   const descarregarQr = () => {
@@ -1207,6 +1283,28 @@ function AdminPage() {
                       />
                     </div>
 
+                    <div className="mt-4 flex flex-wrap items-end gap-3">
+                      <label className="block w-40">
+                        <span className="block text-sm font-medium text-zinc-400 mb-1.5">Lugares por mesa</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max={MAX_LUGARES_MESA}
+                          value={loteLugaresPadrao}
+                          onChange={(e) => setLoteLugaresPadrao(normalizarLugares(Number(e.target.value)))}
+                          className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                        />
+                      </label>
+                      <Button size="sm" variant="outline" onClick={aplicarATodas} disabled={!loteGerado}>
+                        Aplicar a todas
+                      </Button>
+                      {loteGerado && loteGerado.length > 0 && (
+                        <span className="text-xs text-zinc-400">
+                          {loteGerado.length} mesa(s) · {totalLugares(loteGerado, loteLugares)} lugares
+                        </span>
+                      )}
+                    </div>
+
                     <div className="mt-4 flex flex-wrap items-center gap-3">
                       <Button size="sm" onClick={gerarLote} disabled={!qrEvento?.shortCode}>
                         Gerar QRs
@@ -1224,6 +1322,34 @@ function AdminPage() {
                       )}
                     </div>
 
+                    {loteErro && <p className="mt-2 text-xs text-red-400">{loteErro}</p>}
+
+                    {loteGerado && loteGerado.length > 0 && (
+                      <details className="mt-4 rounded-xl border border-border bg-zinc-900/40">
+                        <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-zinc-300">
+                          Ajustar lugares por mesa
+                        </summary>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border-t border-border p-3 max-h-56 overflow-auto">
+                          {loteGerado.map((mesa) => (
+                            <label
+                              key={mesa}
+                              className="flex items-center gap-2 rounded-lg border border-border px-2 py-1.5"
+                            >
+                              <span className="flex-1 truncate text-xs text-zinc-300">{mesa}</span>
+                              <input
+                                type="number"
+                                min="0"
+                                max={MAX_LUGARES_MESA}
+                                value={loteLugares[mesa] ?? ''}
+                                onChange={(e) => definirLugarMesa(mesa, Number(e.target.value))}
+                                className="w-14 rounded-md bg-surface-solid border border-border px-1.5 py-1 text-xs text-right text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+
                     {loteGerado && loteGerado.length > 0 && (
                       <div className="mt-4 max-h-80 overflow-auto rounded-xl border border-border bg-zinc-900/40 p-3">
                         <div className="min-w-max space-y-3">
@@ -1238,7 +1364,7 @@ function AdminPage() {
                                       level="M"
                                       className="max-w-full h-auto"
                                     />
-                                    <span className="qr-card-label">{mesa}</span>
+                                    <span className="qr-card-label">{mesa}{(loteLugares[mesa] ?? 0) > 0 ? ` · ${loteLugares[mesa]} lugares` : ''}</span>
                                   </div>
                                 ))}
                               </div>
@@ -3026,7 +3152,7 @@ function AdminPage() {
                     level="M"
                     className="max-w-full h-auto"
                   />
-                  <span className="qr-card-label">{mesa}</span>
+                  <span className="qr-card-label">{mesa}{(loteLugares[mesa] ?? 0) > 0 ? ` · ${loteLugares[mesa]} lugares` : ''}</span>
                 </div>
               ))}
             </div>
