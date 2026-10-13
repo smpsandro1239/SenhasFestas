@@ -24,11 +24,16 @@ export function encaixarGrelha(valor: number, passo = GRID_PLANTA): number {
   return normalizarPosicao(Math.round(valor / passo) * passo);
 }
 
-let contadorMesa = 0;
-
 export function novoIdMesa(): string {
-  contadorMesa += 1;
-  return `mesa-${Date.now().toString(36)}-${contadorMesa}`;
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === 'function') {
+    try {
+      return `mesa-${c.randomUUID()}`;
+    } catch {
+      // cai no fallback abaixo
+    }
+  }
+  return `mesa-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export function criarMesa(
@@ -89,6 +94,15 @@ export function posicaoParaIndice(indice: number, total: number): { x: number; y
   const x = cols === 1 ? 50 : margem + (col * span) / (cols - 1);
   const y = rows === 1 ? 50 : margem + (row * span) / (rows - 1);
   return { x: normalizarPosicao(x), y: normalizarPosicao(y) };
+}
+
+export function reorganizarMesas(mesas: Mesa[]): Mesa[] {
+  const total = mesas.length;
+  if (total === 0) return mesas;
+  return mesas.map((mesa, i) => {
+    const { x, y } = posicaoParaIndice(i, total);
+    return { ...mesa, x, y };
+  });
 }
 
 export function mesasParaQrs(mesas: Mesa[]): QrsDaPlanta {

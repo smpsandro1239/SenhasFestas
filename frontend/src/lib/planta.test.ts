@@ -8,6 +8,8 @@ import {
   removerMesa,
   atualizarMesa,
   posicaoParaIndice,
+  reorganizarMesas,
+  novoIdMesa,
   mesasParaQrs,
   parsePlanta,
   MAX_MESAS_PLANTA,
@@ -121,6 +123,44 @@ describe('posicaoParaIndice', () => {
       pos.add(`${p.x},${p.y}`);
     }
     expect(pos.size).toBe(12);
+  });
+});
+
+describe('reorganizarMesas', () => {
+  it('não altera uma lista vazia', () => {
+    expect(reorganizarMesas([])).toEqual([]);
+  });
+
+  it('centra uma única mesa', () => {
+    const r = reorganizarMesas([mesa({ id: 'a', x: 3, y: 9 })]);
+    expect(r[0]).toMatchObject({ id: 'a', x: 50, y: 50 });
+  });
+
+  it('reposiciona todas dentro de 0..100 preservando id/nome/lugares', () => {
+    const lista = Array.from({ length: 9 }, (_, i) => mesa({ id: `m${i}`, nome: `Mesa ${i}` }));
+    const r = reorganizarMesas(lista);
+    expect(r).toHaveLength(9);
+    for (const m of r) {
+      expect(m.x).toBeGreaterThanOrEqual(0);
+      expect(m.x).toBeLessThanOrEqual(100);
+      expect(m.y).toBeGreaterThanOrEqual(0);
+      expect(m.y).toBeLessThanOrEqual(100);
+    }
+    expect(r.map((m) => m.id)).toEqual(lista.map((m) => m.id));
+    expect(r[0].nome).toBe('Mesa 0');
+  });
+});
+
+describe('novoIdMesa', () => {
+  it('gera ids únicos e não depende de contador de módulo', () => {
+    const ids = new Set(Array.from({ length: 500 }, () => novoIdMesa()));
+    expect(ids.size).toBe(500);
+  });
+
+  it('não tem espaços e começa por mesa-', () => {
+    const id = novoIdMesa();
+    expect(id.startsWith('mesa-')).toBe(true);
+    expect(id).not.toContain(' ');
   });
 });
 
