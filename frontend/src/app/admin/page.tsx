@@ -37,10 +37,13 @@ import {
   removerMesa,
   atualizarMesa,
   mesasParaQrs,
+  posicaoParaIndice,
+  normalizarPosicao,
   encaixarGrelha,
   type Mesa,
   type FormaMesa,
 } from '@/lib/planta';
+import { QrLoteControlos } from '@/components/admin/qr-lote-controlos';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
   superadmin: 'brand',
@@ -136,6 +139,9 @@ function AdminPage() {
   const [planta, setPlanta] = useState<Mesa[]>([]);
   const [plantaSel, setPlantaSel] = useState<string | null>(null);
   const [plantaNovoNome, setPlantaNovoNome] = useState('');
+  const [plantaSnap, setPlantaSnap] = useState(true);
+  const [plantaAviso, setPlantaAviso] = useState('');
+  const [plantaLimpar, setPlantaLimpar] = useState(false);
   const [eventEditing, setEventEditing] = useState<any>(null);
   const [eventEditForm, setEventEditForm] = useState({ name: '', location: '', startDate: '', endDate: '' });
   const [eventDeleting, setEventDeleting] = useState<any>(null);
@@ -909,14 +915,12 @@ function AdminPage() {
     if (copiaTimerRef.current) window.clearTimeout(copiaTimerRef.current);
     setCopiadoQr(false);
     setLinkQr(`${window.location.origin}/entrar/${evento.shortCode}`);
-    setLoteGerado(null);
     setQrEvento(evento);
   };
 
   const fecharQr = () => {
     if (copiaTimerRef.current) window.clearTimeout(copiaTimerRef.current);
     setCopiadoQr(false);
-    setLoteGerado(null);
     setQrEvento(null);
     delete document.body.dataset.print;
   };
@@ -1061,22 +1065,39 @@ function AdminPage() {
 
   const adicionarMesaPlanta = () => {
     if (!plantaEventoId) return;
-    const nome = plantaNovoNome.trim() || `Mesa ${planta.length + 1}`;
-    const col = planta.length % 5;
-    const linha = Math.floor(planta.length / 5);
-    const nova = criarMesa(nome, loteLugaresPadrao, 'redonda', 18 + col * 16, 20 + linha * 16);
-    definirPlanta(adicionarMesa(planta, nova));
+    const atual = plantaEstadoRef.current;
+    const nome = plantaNovoNome.trim() || `Mesa ${atual.length + 1}`;
+    const { x, y } = posicaoParaIndice(atual.length, atual.length + 1);
+    const nova = criarMesa(nome, loteLugaresPadrao, 'redonda', x, y);
+    definirPlanta(adicionarMesa(atual, nova));
     setPlantaNovoNome('');
     setPlantaSel(nova.id);
   };
 
+  const duplicarMesaPlanta = (id: string) => {
+    const atual = plantaEstadoRef.current;
+    const origem = atual.find((m) => m.id === id);
+    if (!origem) return;
+    const { x, y } = posicaoParaIndice(atual.length, atual.length + 1);
+    const copia = criarMesa(`${origem.nome} (cópia)`, origem.lugares, origem.forma, x, y);
+    definirPlanta(adicionarMesa(atual, copia));
+    setPlantaSel(copia.id);
+  };
+
   const removerMesaPlanta = (id: string) => {
-    definirPlanta(removerMesa(planta, id));
+    definirPlanta(removerMesa(plantaEstadoRef.current, id));
     setPlantaSel((atual) => (atual === id ? null : atual));
   };
 
   const editarMesaPlanta = (id: string, patch: Partial<Omit<Mesa, 'id'>>) => {
-    definirPlanta(atualizarMesa(planta, id, patch));
+    definirPlanta(atualizarMesa(plantaEstadoRef.current, id, patch));
+  };
+
+  const limparPlanta = () => {
+    definirPlanta([]);
+    setPlantaSel(null);
+    setPlantaAviso('');
+    setPlantaLimpar(false);
   };
 
   const onMesaPointerDown = (e: React.PointerEvent, mesa: Mesa) => {
@@ -1092,8 +1113,10 @@ function AdminPage() {
     const arrasto = arrastoRef.current;
     const rect = plantaRef.current?.getBoundingClientRect();
     if (!arrasto || !rect) return;
-    const x = encaixarGrelha(((e.clientX - rect.left) / rect.width) * 100);
-    const y = encaixarGrelha(((e.clientY - rect.top) / rect.height) * 100);
+    const rawX = ((e.clientX - rect.left) / rect.width) * 100;
+    const rawY = ((e.clientY - rect.top) / rect.height) * 100;
+    const x = plantaSnap ? encaixarGrelha(rawX) : normalizarPosicao(rawX);
+    const y = plantaSnap ? encaixarGrelha(rawY) : normalizarPosicao(rawY);
     const next = moverMesa(plantaEstadoRef.current, arrasto.id, x, y);
     plantaEstadoRef.current = next;
     setPlanta(next);
@@ -1119,20 +1142,33 @@ function AdminPage() {
     else if (e.key === 'ArrowDown') dy = passo;
     else return;
     e.preventDefault();
-    definirPlanta(moverMesa(planta, mesa.id, mesa.x + dx, mesa.y + dy));
+    const atual = plantaEstadoRef.current.find((m) => m.id === mesa.id) ?? mesa;
+    definirPlanta(moverMesa(plantaEstadoRef.current, mesa.id, atual.x + dx, atual.y + dy));
   };
 
   const gerarQrsDaPlanta = () => {
-    const { nomes, lugares } = mesasParaQrs(planta);
+    const { nomes, lugares, duplicados } = mesasParaQrs(plantaEstadoRef.current);
     if (!nomes.length) return;
     setLoteGerado(nomes);
     setLoteLugares(lugares);
     setLoteShortCode(plantaShortCode);
+    setPlantaAviso(
+      duplicados.length
+        ? `${duplicados.length} nome(s) de mesa repetido(s) ignorado(s): ${duplicados.join(', ')}.`
+        : '',
+    );
     if (plantaShortCode) {
       try {
         localStorage.setItem(`sf:qr-lugares:${plantaShortCode}`, JSON.stringify(lugares));
       } catch {}
     }
+  };
+
+  const descartarLote = () => {
+    setLoteGerado(null);
+    setLoteLugares({});
+    setLoteShortCode('');
+    setPlantaAviso('');
   };
 
   const descarregarQr = () => {
@@ -1382,38 +1418,15 @@ function AdminPage() {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-3 gap-3 mt-4">
-                      <label className="block">
-                        <span className="block text-sm font-medium text-zinc-400 mb-1.5">Tamanho</span>
-                        <select
-                          value={loteTamanho}
-                          onChange={(e) => {
-                            setLoteTamanho(Number(e.target.value));
-                          }}
-                          className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
-                        >
-                          <option value={120}>Pequeno</option>
-                          <option value={160}>Médio</option>
-                          <option value={200}>Grande</option>
-                        </select>
-                      </label>
-                      <Input
-                        label="Colunas"
-                        type="number"
-                        min="1"
-                        max="6"
-                        value={loteColunas}
-                        onChange={(e) => setLoteColunas(Math.max(1, Math.min(6, Number(e.target.value) || 1)))}
-                      />
-                      <Input
-                        label="Linhas"
-                        type="number"
-                        min="1"
-                        max="8"
-                        value={loteLinhas}
-                        onChange={(e) => setLoteLinhas(Math.max(1, Math.min(8, Number(e.target.value) || 1)))}
-                      />
-                    </div>
+                    <QrLoteControlos
+                      className="mt-4"
+                      tamanho={loteTamanho}
+                      onTamanho={setLoteTamanho}
+                      colunas={loteColunas}
+                      onColunas={setLoteColunas}
+                      linhas={loteLinhas}
+                      onLinhas={setLoteLinhas}
+                    />
 
                     <div className="mt-4 flex flex-wrap items-end gap-3">
                       <label className="block w-40">
@@ -3305,6 +3318,14 @@ function AdminPage() {
                     <Button size="sm" onClick={adicionarMesaPlanta} disabled={!plantaEventoId}>
                       Adicionar mesa
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => setPlantaLimpar(true)}
+                      disabled={!planta.length}
+                    >
+                      Limpar planta
+                    </Button>
                     {planta.length > 0 && (
                       <span className="text-xs text-zinc-400">
                         {planta.length} mesa(s) ·{' '}
@@ -3338,7 +3359,7 @@ function AdminPage() {
                           onFocus={() => setPlantaSel(mesa.id)}
                           onKeyDown={(e) => onMesaKeyDown(e, mesa)}
                           className={cn(
-                            'absolute flex cursor-grab select-none flex-col items-center justify-center text-center outline-none',
+                            'planta-mesa absolute flex cursor-grab select-none flex-col items-center justify-center text-center outline-none',
                             mesa.forma === 'quadrada' ? 'rounded-lg' : 'rounded-full',
                             sel
                               ? 'bg-brand/20 ring-2 ring-brand'
@@ -3347,8 +3368,6 @@ function AdminPage() {
                           style={{
                             left: `${mesa.x}%`,
                             top: `${mesa.y}%`,
-                            width: 76,
-                            height: 76,
                             transform: 'translate(-50%, -50%)',
                             touchAction: 'none',
                           }}
@@ -3402,6 +3421,9 @@ function AdminPage() {
                               <option value="quadrada">Quadrada</option>
                             </select>
                           </label>
+                          <Button size="sm" variant="outline" onClick={() => duplicarMesaPlanta(mesa.id)}>
+                            Duplicar mesa
+                          </Button>
                           <Button size="sm" variant="outline" onClick={() => removerMesaPlanta(mesa.id)}>
                             Remover
                           </Button>
@@ -3410,41 +3432,15 @@ function AdminPage() {
                     })()}
 
                   <div className="mt-4 rounded-xl border border-border p-3">
-                    <div className="flex flex-wrap items-end gap-3">
-                      <label className="block w-40">
-                        <span className="block text-sm font-medium text-zinc-400 mb-1.5">Tamanho</span>
-                        <select
-                          value={loteTamanho}
-                          onChange={(e) => setLoteTamanho(Number(e.target.value))}
-                          className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
-                        >
-                          <option value={120}>Pequeno</option>
-                          <option value={160}>Médio</option>
-                          <option value={200}>Grande</option>
-                        </select>
-                      </label>
-                      <label className="block w-28">
-                        <span className="block text-sm font-medium text-zinc-400 mb-1.5">Colunas</span>
-                        <input
-                          type="number"
-                          min="1"
-                          max="6"
-                          value={loteColunas}
-                          onChange={(e) => setLoteColunas(Math.max(1, Math.min(6, Number(e.target.value) || 1)))}
-                          className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
-                        />
-                      </label>
-                      <label className="block w-28">
-                        <span className="block text-sm font-medium text-zinc-400 mb-1.5">Linhas</span>
-                        <input
-                          type="number"
-                          min="1"
-                          max="8"
-                          value={loteLinhas}
-                          onChange={(e) => setLoteLinhas(Math.max(1, Math.min(8, Number(e.target.value) || 1)))}
-                          className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
-                        />
-                      </label>
+                    <QrLoteControlos
+                      tamanho={loteTamanho}
+                      onTamanho={setLoteTamanho}
+                      colunas={loteColunas}
+                      onColunas={setLoteColunas}
+                      linhas={loteLinhas}
+                      onLinhas={setLoteLinhas}
+                    />
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
                       <Button size="sm" onClick={gerarQrsDaPlanta} disabled={!planta.length}>
                         Gerar QRs das mesas
                       </Button>
@@ -3456,7 +3452,22 @@ function AdminPage() {
                       >
                         Imprimir
                       </Button>
+                      {loteGerado && loteGerado.length > 0 && (
+                        <Button size="sm" variant="ghost" onClick={descartarLote}>
+                          Descartar lote
+                        </Button>
+                      )}
+                      <label className="flex items-center gap-2 text-sm text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={plantaSnap}
+                          onChange={(e) => setPlantaSnap(e.target.checked)}
+                          className="h-4 w-4 accent-brand"
+                        />
+                        Ajustar à grelha
+                      </label>
                     </div>
+                    {plantaAviso && <p className="mt-2 text-xs text-amber-400">{plantaAviso}</p>}
                     <p className="mt-2 text-xs text-zinc-400">
                       Gera os QRs das mesas da planta e compõe a folha A4 com o tamanho e a grelha acima.
                     </p>
@@ -3493,6 +3504,23 @@ function AdminPage() {
           ))}
         </div>
       )}
+
+      <Dialog
+        open={plantaLimpar}
+        onClose={() => setPlantaLimpar(false)}
+        title="Limpar planta"
+        description="Remove todas as mesas da planta deste evento. Esta ação não pode ser desfeita."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setPlantaLimpar(false)}>
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={limparPlanta}>
+              Limpar tudo
+            </Button>
+          </>
+        }
+      />
     </>
   );
 }

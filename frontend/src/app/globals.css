@@ -219,6 +219,13 @@
   max-width: 100%;
 }
 
+/* Mesa da planta: tamanho fluido para não se sobrepor em ecrãs estreitos. */
+.planta-mesa {
+  width: clamp(44px, 11%, 76px);
+  min-width: 44px;
+  aspect-ratio: 1;
+}
+
 @media print {
   body * {
     visibility: hidden;
