@@ -7,14 +7,23 @@ export function parseQrMesa(texto: string): QrMesaParsed | null {
   const path = extraiCaminho(texto);
   if (!path) return null;
   const mesa = path.match(/^\/mesa\/([^/?#]+)\/([^/?#]+)/);
-  if (mesa) return { shortCode: mesa[1], numero: mesa[2] };
+  if (mesa) return { shortCode: descodificar(mesa[1]), numero: descodificar(mesa[2]) };
   const entrar = path.match(/^\/entrar\/([^/?#]+)/);
-  if (entrar) return { shortCode: entrar[1], numero: null };
+  if (entrar) return { shortCode: descodificar(entrar[1]), numero: null };
   return null;
 }
 
 export function montarUrlMesa(origin: string, shortCode: string, numero: string): string {
-  return `${origin.replace(/\/+$/, '')}/mesa/${shortCode}/${numero}`;
+  const base = origin.replace(/\/+$/, '');
+  return `${base}/mesa/${encodeURIComponent(shortCode)}/${encodeURIComponent(numero)}`;
+}
+
+function descodificar(valor: string): string {
+  try {
+    return decodeURIComponent(valor);
+  } catch {
+    return valor;
+  }
 }
 
 function extraiCaminho(texto: string): string | null {

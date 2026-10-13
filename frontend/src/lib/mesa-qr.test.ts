@@ -42,12 +42,32 @@ describe('parseQrMesa', () => {
     expect(parseQrMesa('')).toBeNull();
     expect(parseQrMesa('https://senhasfestas.pt/outros')).toBeNull();
   });
+
+  it('descodifica nomes de mesa com espaços e acentos', () => {
+    expect(parseQrMesa('/mesa/magusto/Mesa%20VIP')).toEqual({
+      shortCode: 'magusto',
+      numero: 'Mesa VIP',
+    });
+    expect(parseQrMesa('/mesa/magusto/Balc%C3%A3o')).toEqual({
+      shortCode: 'magusto',
+      numero: 'Balcão',
+    });
+  });
 });
 
 describe('montarUrlMesa', () => {
   it('constrói URL sem barra duplicada', () => {
     expect(montarUrlMesa('https://senhasfestas.pt/', 'magusto', '12')).toBe(
       'https://senhasfestas.pt/mesa/magusto/12',
+    );
+  });
+
+  it('codifica nomes de mesa com espaços e acentos', () => {
+    expect(montarUrlMesa('https://senhasfestas.pt', 'magusto', 'Mesa VIP')).toBe(
+      'https://senhasfestas.pt/mesa/magusto/Mesa%20VIP',
+    );
+    expect(montarUrlMesa('https://senhasfestas.pt', 'magusto', 'Balcão')).toBe(
+      'https://senhasfestas.pt/mesa/magusto/Balc%C3%A3o',
     );
   });
 });
