@@ -177,18 +177,58 @@
   }
 }
 
-/* Impressão do QR do evento (window.print no dialog do admin): só a área
-   marcada fica visível e centrada, com preto sobre branco. Fora de @layer
-   para ganhar prioridade sobre as utilities do Tailwind. */
+/* Impressão de QRs (window.print no dialog do admin). Há duas áreas
+   imprimíveis, escolhidas pelo atributo data-print no <body>:
+   - "evento": QR único do evento (.qr-print-area), centrado.
+   - "lote":   grelha de QRs por mesa (.qr-lote-print), paginada em A4.
+   Fora de @layer para ganhar prioridade sobre as utilities do Tailwind. */
+@page {
+  size: A4;
+  margin: 8mm;
+}
+
+/* Em ecrã, a área de impressão do lote não ocupa espaço (só existe no print). */
+.qr-lote-print {
+  display: none;
+}
+
+.qr-sheet {
+  display: grid;
+  grid-template-columns: repeat(var(--qr-cols, 3), minmax(0, 1fr));
+  gap: 8px;
+}
+
+.qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #000000;
+  break-inside: avoid;
+}
+
+.qr-card-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  word-break: break-word;
+  max-width: 100%;
+}
+
 @media print {
   body * {
     visibility: hidden;
   }
-  .qr-print-area,
-  .qr-print-area * {
+
+  body[data-print='evento'] .qr-print-area,
+  body[data-print='evento'] .qr-print-area * {
     visibility: visible;
   }
-  .qr-print-area {
+  body[data-print='evento'] .qr-print-area {
     position: fixed;
     left: 0;
     right: 0;
@@ -201,7 +241,28 @@
     padding: 16px;
     border-radius: 16px;
   }
-  .qr-print-area p {
+  body[data-print='evento'] .qr-print-area p {
     color: #000000;
+  }
+
+  body[data-print='lote'] .qr-lote-print,
+  body[data-print='lote'] .qr-lote-print * {
+    visibility: visible;
+  }
+  body[data-print='lote'] .qr-lote-print {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  body[data-print='lote'] .qr-sheet {
+    break-after: page;
+  }
+  body[data-print='lote'] .qr-sheet:last-child {
+    break-after: auto;
+  }
+  body[data-print='lote'] [data-print-hide] {
+    display: none !important;
   }
 }

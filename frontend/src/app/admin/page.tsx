@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useCurrentEvent } from '@/lib/use-current-event';
-import { QRCodeCanvas } from 'qrcode.react';
+import { QRCodeCanvas, QRCodeSVG } from 'qrcode.react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { Card } from '@/components/ui/card';
@@ -20,6 +20,7 @@ import { importProducts, getEvents, createEvent, updateEvent, updateEventStatus,
 import { stockBaixo, esgotado } from '@/lib/stock';
 import { downloadTextFile } from '@/lib/download';
 import { montarUrlMesa } from '@/lib/mesa-qr';
+import { numerosDeIntervalo, agruparFolhas } from '@/lib/qr-lote';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
   superadmin: 'brand',
@@ -93,12 +94,16 @@ function AdminPage() {
   const [qrEvento, setQrEvento] = useState<any>(null);
   const [linkQr, setLinkQr] = useState('');
   const [copiadoQr, setCopiadoQr] = useState(false);
-  const [linkMesaQr, setLinkMesaQr] = useState('');
-  const [mesaQrNumero, setMesaQrNumero] = useState('');
-  const [copiadoMesaQr, setCopiadoMesaQr] = useState(false);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
-  const mesaQrCanvasRef = useRef<HTMLCanvasElement>(null);
   const copiaTimerRef = useRef<number | null>(null);
+  const [loteModo, setLoteModo] = useState<'intervalo' | 'nomes'>('intervalo');
+  const [loteInicio, setLoteInicio] = useState('1');
+  const [loteFim, setLoteFim] = useState('10');
+  const [loteNomes, setLoteNomes] = useState<string[]>([]);
+  const [loteTamanho, setLoteTamanho] = useState(160);
+  const [loteColunas, setLoteColunas] = useState(3);
+  const [loteLinhas, setLoteLinhas] = useState(4);
+  const [loteGerado, setLoteGerado] = useState<string[] | null>(null);
   const [eventEditing, setEventEditing] = useState<any>(null);
   const [eventEditForm, setEventEditForm] = useState({ name: '', location: '', startDate: '', endDate: '' });
   const [eventDeleting, setEventDeleting] = useState<any>(null);
@@ -870,16 +875,16 @@ function AdminPage() {
     if (copiaTimerRef.current) window.clearTimeout(copiaTimerRef.current);
     setCopiadoQr(false);
     setLinkQr(`${window.location.origin}/entrar/${evento.shortCode}`);
-    setMesaQrNumero('');
-    setLinkMesaQr('');
-    setCopiadoMesaQr(false);
+    setLoteGerado(null);
     setQrEvento(evento);
   };
 
   const fecharQr = () => {
     if (copiaTimerRef.current) window.clearTimeout(copiaTimerRef.current);
     setCopiadoQr(false);
+    setLoteGerado(null);
     setQrEvento(null);
+    delete document.body.dataset.print;
   };
 
   const copiarLinkQr = async () => {
@@ -893,30 +898,33 @@ function AdminPage() {
     }
   };
 
-  const gerarQrMesa = () => {
-    const numero = mesaQrNumero.trim();
-    if (!qrEvento?.shortCode || !numero) return;
-    setLinkMesaQr(montarUrlMesa(window.location.origin, qrEvento.shortCode, numero));
+  const imprimirArea = (alvo: 'evento' | 'lote') => {
+    document.body.dataset.print = alvo;
+    const limpar = () => {
+      delete document.body.dataset.print;
+      window.removeEventListener('afterprint', limpar);
+    };
+    window.addEventListener('afterprint', limpar);
+    window.print();
+    window.setTimeout(limpar, 1500);
   };
 
-  const copiarLinkMesaQr = async () => {
-    try {
-      await navigator.clipboard.writeText(linkMesaQr);
-      setCopiadoMesaQr(true);
-      if (copiaTimerRef.current) window.clearTimeout(copiaTimerRef.current);
-      copiaTimerRef.current = window.setTimeout(() => setCopiadoMesaQr(false), 1500);
-    } catch {
-      setCopiadoMesaQr(false);
-    }
+  const ajustarQtdNomes = (valor: string) => {
+    const qtd = Math.max(0, Math.min(100, Math.floor(Number(valor) || 0)));
+    setLoteNomes((prev) => {
+      const proximo = prev.slice(0, qtd);
+      for (let i = proximo.length; i < qtd; i++) proximo.push('');
+      return proximo;
+    });
   };
 
-  const descarregarMesaQr = () => {
-    const canvas = mesaQrCanvasRef.current;
-    if (!canvas || !qrEvento) return;
-    const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png');
-    a.download = `mesa-${qrEvento.shortCode}-${mesaQrNumero.trim()}.png`;
-    a.click();
+  const gerarLote = () => {
+    if (!qrEvento?.shortCode) return;
+    const mesas =
+      loteModo === 'intervalo'
+        ? numerosDeIntervalo(Number(loteInicio), Number(loteFim))
+        : loteNomes.map((n) => n.trim()).filter(Boolean);
+    setLoteGerado(mesas.length ? mesas : null);
   };
 
   const descarregarQr = () => {
@@ -1066,7 +1074,7 @@ function AdminPage() {
                     <p className="text-xs text-zinc-400 break-all text-center">{linkQr}</p>
                   </div>
                   <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                    <Button size="sm" onClick={() => window.print()}>
+                    <Button size="sm" onClick={() => imprimirArea('evento')}>
                       Imprimir
                     </Button>
                     <Button size="sm" variant="outline" onClick={copiarLinkQr}>
@@ -1078,33 +1086,164 @@ function AdminPage() {
                   </div>
 
                   <div className="mt-6 border-t border-border pt-5">
-                    <h3 className="text-sm font-bold text-zinc-100 mb-1">QR por mesa</h3>
+                    <h3 className="text-sm font-bold text-zinc-100 mb-1">QRs por mesa</h3>
                     <p className="text-xs text-zinc-400 mb-3">
-                      Gera um QR individual que, ao ser escaneado, entra direto na mesa sem digitar o número.
+                      Gera QRs para várias mesas de uma vez e imprime numa grelha A4 pronta a recortar.
                     </p>
-                    <div className="flex gap-2">
-                      <Input
-                        value={mesaQrNumero}
-                        onChange={(e) => setMesaQrNumero(e.target.value)}
-                        placeholder="Nº da mesa, ex: 12"
-                        inputMode="numeric"
-                        className="flex-1"
-                      />
-                      <Button onClick={gerarQrMesa}>Gerar</Button>
+
+                    <div
+                      role="group"
+                      aria-label="Modo de criação de mesas"
+                      className="flex gap-1 p-1 rounded-xl bg-surface border border-border mb-4"
+                    >
+                      {(['intervalo', 'nomes'] as const).map((modo) => (
+                        <button
+                          key={modo}
+                          type="button"
+                          onClick={() => {
+                            setLoteModo(modo);
+                            setLoteGerado(null);
+                          }}
+                          aria-pressed={loteModo === modo}
+                          className={cn(
+                            'flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+                            loteModo === modo
+                              ? 'bg-brand/15 text-brand'
+                              : 'text-zinc-400 hover:text-zinc-200',
+                          )}
+                        >
+                          {modo === 'intervalo' ? 'Intervalo (nº a nº)' : 'Nomes personalizados'}
+                        </button>
+                      ))}
                     </div>
-                    {linkMesaQr && (
-                      <div className="mt-4 flex flex-col items-center gap-3">
-                        <div className="rounded-2xl bg-white p-4">
-                          <QRCodeCanvas ref={mesaQrCanvasRef} value={linkMesaQr} size={160} level="M" />
-                        </div>
-                        <p className="text-xs text-zinc-400 break-all text-center">{linkMesaQr}</p>
-                        <div className="flex flex-wrap items-center justify-center gap-2">
-                          <Button size="sm" variant="outline" onClick={copiarLinkMesaQr}>
-                            {copiadoMesaQr ? 'Copiado!' : 'Copiar link'}
+
+                    {loteModo === 'intervalo' ? (
+                      <div className="grid grid-cols-2 gap-3">
+                        <Input
+                          label="Da mesa nº"
+                          value={loteInicio}
+                          onChange={(e) => {
+                            setLoteInicio(e.target.value);
+                            setLoteGerado(null);
+                          }}
+                          inputMode="numeric"
+                          placeholder="1"
+                        />
+                        <Input
+                          label="Até à mesa nº"
+                          value={loteFim}
+                          onChange={(e) => {
+                            setLoteFim(e.target.value);
+                            setLoteGerado(null);
+                          }}
+                          inputMode="numeric"
+                          placeholder="10"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <Input
+                          label="Quantas mesas?"
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={loteNomes.length ? String(loteNomes.length) : ''}
+                          onChange={(e) => {
+                            ajustarQtdNomes(e.target.value);
+                            setLoteGerado(null);
+                          }}
+                          placeholder="ex: 6"
+                        />
+                        {loteNomes.length > 0 && (
+                          <div className="grid grid-cols-2 gap-2">
+                            {loteNomes.map((nome, i) => (
+                              <Input
+                                key={i}
+                                label={`Mesa ${i + 1}`}
+                                value={nome}
+                                onChange={(e) => {
+                                  const valor = e.target.value;
+                                  setLoteNomes((prev) => prev.map((n, j) => (j === i ? valor : n)));
+                                  setLoteGerado(null);
+                                }}
+                                placeholder="ex: Balcão"
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-3 gap-3 mt-4">
+                      <label className="block">
+                        <span className="block text-sm font-medium text-zinc-400 mb-1.5">Tamanho</span>
+                        <select
+                          value={loteTamanho}
+                          onChange={(e) => {
+                            setLoteTamanho(Number(e.target.value));
+                          }}
+                          className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                        >
+                          <option value={120}>Pequeno</option>
+                          <option value={160}>Médio</option>
+                          <option value={200}>Grande</option>
+                        </select>
+                      </label>
+                      <Input
+                        label="Colunas"
+                        type="number"
+                        min="1"
+                        max="6"
+                        value={loteColunas}
+                        onChange={(e) => setLoteColunas(Math.max(1, Math.min(6, Number(e.target.value) || 1)))}
+                      />
+                      <Input
+                        label="Linhas"
+                        type="number"
+                        min="1"
+                        max="8"
+                        value={loteLinhas}
+                        onChange={(e) => setLoteLinhas(Math.max(1, Math.min(8, Number(e.target.value) || 1)))}
+                      />
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      <Button size="sm" onClick={gerarLote} disabled={!qrEvento?.shortCode}>
+                        Gerar QRs
+                      </Button>
+                      {loteGerado && (
+                        <>
+                          <Button size="sm" variant="outline" onClick={() => imprimirArea('lote')}>
+                            Imprimir
                           </Button>
-                          <Button size="sm" variant="outline" onClick={descarregarMesaQr}>
-                            Descarregar PNG
-                          </Button>
+                          <span className="text-xs text-zinc-400">
+                            {loteGerado.length} mesa(s) •{' '}
+                            {agruparFolhas(loteGerado, loteColunas * loteLinhas).length} folha(s)
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {loteGerado && loteGerado.length > 0 && (
+                      <div className="mt-4 max-h-80 overflow-auto rounded-xl border border-border bg-zinc-900/40 p-3">
+                        <div className="min-w-max space-y-3">
+                          {agruparFolhas(loteGerado, loteColunas * loteLinhas).map((folha, fi) => (
+                            <div key={fi}>
+                              <div className="qr-sheet" style={{ ['--qr-cols' as any]: loteColunas }}>
+                                {folha.map((mesa) => (
+                                  <div key={mesa} className="qr-card">
+                                    <QRCodeSVG
+                                      value={montarUrlMesa(window.location.origin, qrEvento.shortCode, mesa)}
+                                      size={loteTamanho}
+                                      level="M"
+                                      className="max-w-full h-auto"
+                                    />
+                                    <span className="qr-card-label">{mesa}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -2870,6 +3009,30 @@ function AdminPage() {
 
         {error && <div className="mt-4"><Alert variant="error" message={error} /></div>}
       </AppShell>
+
+      {qrEvento?.shortCode && loteGerado && loteGerado.length > 0 && (
+        <div className="qr-lote-print">
+          {agruparFolhas(loteGerado, loteColunas * loteLinhas).map((folha, fi) => (
+            <div
+              key={fi}
+              className="qr-sheet"
+              style={{ ['--qr-cols' as any]: loteColunas }}
+            >
+              {folha.map((mesa) => (
+                <div key={mesa} className="qr-card">
+                  <QRCodeSVG
+                    value={montarUrlMesa(window.location.origin, qrEvento.shortCode, mesa)}
+                    size={loteTamanho}
+                    level="M"
+                    className="max-w-full h-auto"
+                  />
+                  <span className="qr-card-label">{mesa}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }
