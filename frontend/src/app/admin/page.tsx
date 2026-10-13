@@ -38,6 +38,7 @@ import {
   atualizarMesa,
   mesasParaQrs,
   posicaoParaIndice,
+  reorganizarMesas,
   normalizarPosicao,
   encaixarGrelha,
   type Mesa,
@@ -956,6 +957,13 @@ function AdminPage() {
   }, []);
 
   useEffect(() => {
+    try {
+      const v = localStorage.getItem('sf:planta-snap');
+      if (v !== null) setPlantaSnap(v !== '0');
+    } catch {}
+  }, []);
+
+  useEffect(() => {
     if (!lugaresPadraoRef.current) return;
     try {
       localStorage.setItem('sf:qr-lugares-padrao', String(loteLugaresPadrao));
@@ -987,6 +995,7 @@ function AdminPage() {
     plantaEstadoRef.current = carregadas;
     setPlanta(carregadas);
     setPlantaSel(null);
+    setPlantaAviso('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plantaEventoId, events]);
 
@@ -1061,6 +1070,19 @@ function AdminPage() {
     plantaEstadoRef.current = mesas;
     setPlanta(mesas);
     gravarPlanta(mesas);
+    setPlantaAviso('');
+  };
+
+  const definirSnap = (valor: boolean) => {
+    setPlantaSnap(valor);
+    try {
+      localStorage.setItem('sf:planta-snap', valor ? '1' : '0');
+    } catch {}
+  };
+
+  const autoOrganizarPlanta = () => {
+    definirPlanta(reorganizarMesas(plantaEstadoRef.current));
+    setPlantaSel(null);
   };
 
   const adicionarMesaPlanta = () => {
@@ -1179,6 +1201,11 @@ function AdminPage() {
     a.download = `qr-${qrEvento.shortCode}.png`;
     a.click();
   };
+
+  const mesasDuplicadas = new Set(mesasParaQrs(planta).duplicados);
+  const eventoDoLote = events.find((ev: any) => ev.shortCode === loteShortCode);
+  const loteDeOutroEvento =
+    !!loteGerado && !!loteShortCode && !!qrEvento && loteShortCode !== qrEvento.shortCode;
 
   return (
     <>
@@ -1328,6 +1355,18 @@ function AdminPage() {
                       Descarregar PNG
                     </Button>
                   </div>
+
+                  {loteDeOutroEvento && (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2">
+                      <span className="text-xs text-amber-300">
+                        O lote ativo é do evento{' '}
+                        <strong>{eventoDoLote?.name ?? loteShortCode}</strong>, não deste.
+                      </span>
+                      <Button size="sm" variant="ghost" onClick={descartarLote}>
+                        Descartar lote
+                      </Button>
+                    </div>
+                  )}
 
                   <div className="mt-6 border-t border-border pt-5">
                     <h3 className="text-sm font-bold text-zinc-100 mb-1">QRs por mesa</h3>
@@ -3326,6 +3365,14 @@ function AdminPage() {
                     >
                       Limpar planta
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={autoOrganizarPlanta}
+                      disabled={planta.length < 2}
+                    >
+                      Auto-organizar
+                    </Button>
                     {planta.length > 0 && (
                       <span className="text-xs text-zinc-400">
                         {planta.length} mesa(s) ·{' '}
@@ -3349,6 +3396,7 @@ function AdminPage() {
                     )}
                     {planta.map((mesa) => {
                       const sel = plantaSel === mesa.id;
+                      const duplicada = mesasDuplicadas.has(mesa.nome.trim());
                       return (
                         <div
                           key={mesa.id}
@@ -3363,7 +3411,9 @@ function AdminPage() {
                             mesa.forma === 'quadrada' ? 'rounded-lg' : 'rounded-full',
                             sel
                               ? 'bg-brand/20 ring-2 ring-brand'
-                              : 'bg-surface border border-border hover:border-border-hover',
+                              : duplicada
+                                ? 'bg-surface border border-amber-400/50 ring-2 ring-amber-400/70'
+                                : 'bg-surface border border-border hover:border-border-hover',
                           )}
                           style={{
                             left: `${mesa.x}%`,
@@ -3461,7 +3511,7 @@ function AdminPage() {
                         <input
                           type="checkbox"
                           checked={plantaSnap}
-                          onChange={(e) => setPlantaSnap(e.target.checked)}
+                          onChange={(e) => definirSnap(e.target.checked)}
                           className="h-4 w-4 accent-brand"
                         />
                         Ajustar à grelha
