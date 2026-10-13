@@ -61,16 +61,16 @@ describe('App e2e (Postgres + Redis)', () => {
     const dataSource = app.get(DataSource);
     const userRepo = dataSource.getRepository(UserEntity);
     const password = 'password123';
-    await userRepo.save(
-      userRepo.create({
-        email,
-        password: await bcrypt.hash(password, 10),
-        name: 'Teste E2E',
-        role: 'client',
-        accessCode: '123456',
-        isActive: true,
-      }),
-    );
+    const user = userRepo.create({
+      email,
+      password: await bcrypt.hash(password, 10),
+      name: 'Teste E2E',
+      role: 'client',
+      isActive: true,
+    });
+    // Forçar accessCode único no e2e para não colidir com unique constraint de outros utilizadores
+    user.accessCode = String(Math.floor(100000 + Math.random() * 900000));
+    await userRepo.save(user);
     return { email, password };
   }
 
@@ -111,6 +111,7 @@ describe('App e2e (Postgres + Redis)', () => {
 
     const response = await request(app.getHttpServer())
       .post('/api/auth/refresh')
+      .set('X-Forwarded-For', '127.0.0.2')
       .set('Cookie', `sf_refresh=${refreshToken}`)
       .set('Content-Type', 'application/json')
       .expect(200);
@@ -128,6 +129,7 @@ describe('App e2e (Postgres + Redis)', () => {
 
     const response = await request(app.getHttpServer())
       .post('/api/auth/logout')
+      .set('X-Forwarded-For', '127.0.0.3')
       .set('Cookie', `sf_refresh=${refreshToken}`)
       .set('Content-Type', 'application/json')
       .expect(200);
@@ -136,6 +138,7 @@ describe('App e2e (Postgres + Redis)', () => {
 
     const reutilizado = await request(app.getHttpServer())
       .post('/api/auth/refresh')
+      .set('X-Forwarded-For', '127.0.0.3')
       .set('Cookie', `sf_refresh=${refreshToken}`)
       .set('Content-Type', 'application/json')
       .expect(401);
@@ -145,6 +148,7 @@ describe('App e2e (Postgres + Redis)', () => {
   it('refresh sem cookie nem body devolve 401 (token em falta), não 400', async () => {
     await request(app.getHttpServer())
       .post('/api/auth/refresh')
+      .set('X-Forwarded-For', '127.0.0.4')
       .set('Content-Type', 'application/json')
       .expect(401);
   });
