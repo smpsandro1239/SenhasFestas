@@ -7,6 +7,7 @@ import {
   adicionarMesa,
   removerMesa,
   atualizarMesa,
+  posicaoParaIndice,
   mesasParaQrs,
   parsePlanta,
   MAX_MESAS_PLANTA,
@@ -96,20 +97,51 @@ describe('atualizarMesa', () => {
   });
 });
 
+describe('posicaoParaIndice', () => {
+  it('mantém uma única posição centrada', () => {
+    expect(posicaoParaIndice(0, 1)).toEqual({ x: 50, y: 50 });
+  });
+
+  it('distribui dentro de 0..100 sem saturar', () => {
+    for (let total = 1; total <= 60; total++) {
+      for (let i = 0; i < total; i++) {
+        const p = posicaoParaIndice(i, total);
+        expect(p.x).toBeGreaterThanOrEqual(0);
+        expect(p.x).toBeLessThanOrEqual(100);
+        expect(p.y).toBeGreaterThanOrEqual(0);
+        expect(p.y).toBeLessThanOrEqual(100);
+      }
+    }
+  });
+
+  it('posições de mesas diferentes não coincidem (total pequeno)', () => {
+    const pos = new Set<string>();
+    for (let i = 0; i < 12; i++) {
+      const p = posicaoParaIndice(i, 12);
+      pos.add(`${p.x},${p.y}`);
+    }
+    expect(pos.size).toBe(12);
+  });
+});
+
 describe('mesasParaQrs', () => {
   it('extrai nomes e lugares', () => {
     const r = mesasParaQrs([mesa({ nome: 'Balcão', lugares: 4 }), mesa({ nome: 'VIP', lugares: 12 })]);
     expect(r.nomes).toEqual(['Balcão', 'VIP']);
     expect(r.lugares).toEqual({ Balcão: 4, VIP: 12 });
+    expect(r.duplicados).toEqual([]);
   });
 
-  it('ignora nomes vazios e duplicados', () => {
+  it('ignora nomes vazios e reporta duplicados', () => {
     const r = mesasParaQrs([
       mesa({ nome: '  ' }),
       mesa({ nome: 'Mesa 1' }),
       mesa({ nome: 'Mesa 1' }),
+      mesa({ nome: 'Mesa 2' }),
+      mesa({ nome: 'Mesa 2' }),
     ]);
-    expect(r.nomes).toEqual(['Mesa 1']);
+    expect(r.nomes).toEqual(['Mesa 1', 'Mesa 2']);
+    expect(r.duplicados).toEqual(['Mesa 1', 'Mesa 2']);
   });
 });
 

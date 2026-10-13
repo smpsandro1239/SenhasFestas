@@ -74,18 +74,40 @@ export function atualizarMesa(
 export interface QrsDaPlanta {
   nomes: string[];
   lugares: Record<string, number>;
+  duplicados: string[];
+}
+
+export function posicaoParaIndice(indice: number, total: number): { x: number; y: number } {
+  const n = Math.max(1, Math.trunc(total));
+  const i = Math.max(0, Math.trunc(indice));
+  const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const col = i % cols;
+  const row = Math.floor(i / cols);
+  const margem = 12;
+  const span = 100 - margem * 2;
+  const x = cols === 1 ? 50 : margem + (col * span) / (cols - 1);
+  const y = rows === 1 ? 50 : margem + (row * span) / (rows - 1);
+  return { x: normalizarPosicao(x), y: normalizarPosicao(y) };
 }
 
 export function mesasParaQrs(mesas: Mesa[]): QrsDaPlanta {
   const nomes: string[] = [];
   const lugares: Record<string, number> = {};
+  const duplicados: string[] = [];
+  const vistos = new Set<string>();
   for (const mesa of mesas) {
     const nome = mesa.nome.trim();
-    if (!nome || lugares[nome] !== undefined) continue;
+    if (!nome) continue;
+    if (vistos.has(nome)) {
+      if (!duplicados.includes(nome)) duplicados.push(nome);
+      continue;
+    }
+    vistos.add(nome);
     nomes.push(nome);
     lugares[nome] = mesa.lugares;
   }
-  return { nomes, lugares };
+  return { nomes, lugares, duplicados };
 }
 
 export function parsePlanta(raw: string | null): Mesa[] {
