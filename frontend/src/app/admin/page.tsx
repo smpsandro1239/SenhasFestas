@@ -38,6 +38,9 @@ import {
   mesasParaQrs,
   posicaoParaIndice,
   reorganizarMesas,
+  reorganizarMesasComZonas,
+  agruparMesasPorZona,
+  renderSvgPlanta,
   normalizarPosicao,
   encaixarGrelha,
   decidirPlantaRemota,
@@ -170,6 +173,7 @@ function AdminPage() {
   const [loteLugares, setLoteLugares] = useState<Record<string, number>>({});
   const [loteErro, setLoteErro] = useState('');
   const [loteShortCode, setLoteShortCode] = useState('');
+  const [loteAgrupar, setLoteAgrupar] = useState<'nenhum' | 'zona'>('nenhum');
   const [plantaEventoId, setPlantaEventoId] = useState('');
   const [planta, setPlanta] = useState<Mesa[]>([]);
   const [plantaZonas, setPlantaZonas] = useState<Zona[]>([]);
@@ -1429,8 +1433,9 @@ function AdminPage() {
   const autoOrganizarPlanta = () => {
     const antes = plantaEstadoRef.current;
     if (antes.length < 2) return;
-    const snapshot = { mesas: antes, zonas: plantaZonasEstadoRef.current };
-    definirPlanta(reorganizarMesas(antes));
+    const zonas = plantaZonasEstadoRef.current;
+    const snapshot = { mesas: antes, zonas };
+    definirPlanta(zonas.length > 0 ? reorganizarMesasComZonas(antes, zonas) : reorganizarMesas(antes));
     oferecerUndo(snapshot, 'Planta organizada');
   };
 
@@ -1614,7 +1619,13 @@ function AdminPage() {
   };
 
   const gerarQrsDaPlanta = () => {
-    const { nomes, lugares } = mesasParaQrs(plantaEstadoRef.current);
+    const mesas =
+      loteAgrupar === 'zona'
+        ? agruparMesasPorZona(plantaEstadoRef.current, plantaZonasEstadoRef.current).flatMap(
+            (grupo) => grupo.mesas,
+          )
+        : plantaEstadoRef.current;
+    const { nomes, lugares } = mesasParaQrs(mesas);
     if (!nomes.length) return;
     setLoteGerado(nomes);
     setLoteLugares(lugares);
@@ -1624,6 +1635,37 @@ function AdminPage() {
         localStorage.setItem(`sf:qr-lugares:${plantaShortCode}`, JSON.stringify(lugares));
       } catch {}
     }
+  };
+
+  const exportarPlantaPng = () => {
+    const svg = renderSvgPlanta({
+      mesas: plantaEstadoRef.current,
+      zonas: plantaZonasEstadoRef.current,
+    });
+    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1600;
+      canvas.height = 1600;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#0b0b0f';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((png) => {
+          if (!png) return;
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(png);
+          a.download = `planta-${plantaShortCode || 'evento'}.png`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+        }, 'image/png');
+      }
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => URL.revokeObjectURL(url);
+    img.src = url;
   };
 
   const descartarLote = () => {
@@ -3839,6 +3881,14 @@ function AdminPage() {
                     >
                       Auto-organizar
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={exportarPlantaPng}
+                      disabled={planta.length === 0 && plantaZonas.length === 0}
+                    >
+                      Exportar PNG
+                    </Button>
                     {planta.length > 0 && (
                       <span className="text-xs text-zinc-400">
                         {planta.length} mesa(s) ·{' '}
@@ -4109,6 +4159,17 @@ function AdminPage() {
                       onLinhas={setLoteLinhas}
                     />
                     <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <label className="flex items-center gap-2 text-sm text-zinc-300">
+                        Agrupar por
+                        <select
+                          value={loteAgrupar}
+                          onChange={(e) => setLoteAgrupar(e.target.value as 'nenhum' | 'zona')}
+                          className="bg-surface-solid border border-border rounded-xl px-2.5 py-1.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                        >
+                          <option value="nenhum">Ordem da planta</option>
+                          <option value="zona">Zona</option>
+                        </select>
+                      </label>
                       <Button size="sm" onClick={gerarQrsDaPlanta} disabled={!planta.length}>
                         Gerar QRs das mesas
                       </Button>
