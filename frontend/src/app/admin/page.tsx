@@ -129,6 +129,12 @@ function AdminPage() {
   const undoTimerRef = useRef<number | null>(null);
   const plantaVersionRef = useRef(0);
   const plantaSaveTimerRef = useRef<number | null>(null);
+  const plantaPendenteRef = useRef<{
+    eventoId: string;
+    shortCode: string;
+    mesas: Mesa[];
+    version: number;
+  } | null>(null);
   const [loteModo, setLoteModo] = useState<'intervalo' | 'nomes'>('intervalo');
   const [loteInicio, setLoteInicio] = useState('1');
   const [loteFim, setLoteFim] = useState('10');
@@ -1010,13 +1016,28 @@ function AdminPage() {
     if (alvo) setPlantaEventoId(alvo);
   }, [events, currentEvent, plantaEventoId]);
 
+  const plantaShortCode =
+    events.find((ev: any) => ev.id === plantaEventoId)?.shortCode ?? '';
+
   useEffect(() => {
-    if (!plantaEventoId) return;
-    const shortCode = events.find((ev: any) => ev.id === plantaEventoId)?.shortCode;
-    if (!shortCode) return;
-    if (plantaSaveTimerRef.current) window.clearTimeout(plantaSaveTimerRef.current);
-    const carregadas = parsePlanta(localStorage.getItem(`sf:planta:${shortCode}`));
-    plantaCarregadaRef.current = shortCode;
+    if (!plantaEventoId || !plantaShortCode) return;
+    // Se mudou de evento, compromete o save pendente do evento anterior em vez de o descartar.
+    if (plantaSaveTimerRef.current) {
+      window.clearTimeout(plantaSaveTimerRef.current);
+      plantaSaveTimerRef.current = null;
+    }
+    const pendente = plantaPendenteRef.current;
+    plantaPendenteRef.current = null;
+    if (pendente && pendente.shortCode !== plantaShortCode) {
+      void enviarPlantaContexto(
+        pendente.eventoId,
+        pendente.shortCode,
+        pendente.mesas,
+        pendente.version,
+      );
+    }
+    const carregadas = parsePlanta(localStorage.getItem(`sf:planta:${plantaShortCode}`));
+    plantaCarregadaRef.current = plantaShortCode;
     plantaEstadoRef.current = carregadas;
     setPlanta(carregadas);
     setPlantaSel(null);
@@ -1024,11 +1045,12 @@ function AdminPage() {
     setPlantaConflito(null);
     setPlantaImportarDisponivel(false);
     setPlantaSync('');
+    const eventoId = plantaEventoId;
     let cancelado = false;
     void (async () => {
       try {
-        const remoto = await getPlanta(plantaEventoId);
-        if (cancelado) return;
+        const remoto = await getPlanta(eventoId);
+        if (cancelado || plantaCarregadaRef.current !== plantaShortCode) return;
         const version = typeof remoto?.version === 'number' ? remoto.version : 0;
         const mesasRemotas: Mesa[] = Array.isArray(remoto?.mesas) ? remoto.mesas : [];
         plantaVersionRef.current = version;
@@ -1040,16 +1062,19 @@ function AdminPage() {
         plantaEstadoRef.current = mesasRemotas;
         setPlanta(mesasRemotas);
         try {
-          localStorage.setItem(`sf:planta:${shortCode}`, JSON.stringify(mesasRemotas));
+          localStorage.setItem(`sf:planta:${plantaShortCode}`, JSON.stringify(mesasRemotas));
         } catch {}
       } catch {
-        if (cancelado) return;
+        if (cancelado || plantaCarregadaRef.current !== plantaShortCode) return;
         // Offline ou servidor indisponível: mantém a cópia local.
         setPlantaSync('offline');
       }
     })();
+    return () => {
+      cancelado = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plantaEventoId, events]);
+  }, [plantaEventoId, plantaShortCode]);
 
   const gravarLugaresEvento = (mapa: Record<string, number>) => {
     const shortCode = qrEvento?.shortCode;
@@ -1108,9 +1133,6 @@ function AdminPage() {
     });
   };
 
-  const plantaShortCode =
-    events.find((ev: any) => ev.id === plantaEventoId)?.shortCode ?? '';
-
   const gravarPlanta = (mesas: Mesa[]) => {
     if (!plantaShortCode) return;
     if (plantaCarregadaRef.current !== plantaShortCode) return;
@@ -1119,22 +1141,27 @@ function AdminPage() {
     } catch {}
   };
 
-  const enviarPlanta = async (mesas: Mesa[]) => {
-    const eventoId = plantaEventoId;
-    const shortCode = plantaShortCode;
+  const enviarPlantaContexto = async (
+    eventoId: string,
+    shortCode: string,
+    mesas: Mesa[],
+    version: number,
+  ) => {
     if (!eventoId || !shortCode) return;
-    if (plantaCarregadaRef.current !== shortCode) return;
-    setPlantaSync('saving');
+    const ativo = () => plantaCarregadaRef.current === shortCode;
+    if (ativo()) setPlantaSync('saving');
     try {
-      const r = await guardarPlanta(eventoId, { mesas, version: plantaVersionRef.current });
-      plantaVersionRef.current =
-        typeof r?.version === 'number' ? r.version : plantaVersionRef.current + 1;
+      const r = await guardarPlanta(eventoId, { mesas, version });
       try {
         localStorage.setItem(`sf:planta:${shortCode}`, JSON.stringify(mesas));
       } catch {}
+      if (!ativo()) return;
+      plantaVersionRef.current =
+        typeof r?.version === 'number' ? r.version : plantaVersionRef.current + 1;
       setPlantaConflito(null);
       setPlantaSync('saved');
     } catch (e) {
+      if (!ativo()) return;
       if (e instanceof ApiError && e.status === 409) {
         const body = e.body ?? {};
         setPlantaConflito({
@@ -1148,12 +1175,36 @@ function AdminPage() {
     }
   };
 
+  const enviarPlanta = (mesas: Mesa[]) => {
+    const eventoId = plantaEventoId;
+    const shortCode = plantaShortCode;
+    if (!eventoId || !shortCode) return;
+    if (plantaCarregadaRef.current !== shortCode) return;
+    void enviarPlantaContexto(eventoId, shortCode, mesas, plantaVersionRef.current);
+  };
+
   const agendarGuardarPlanta = (mesas: Mesa[]) => {
     if (!plantaEventoId || !plantaShortCode) return;
     if (plantaCarregadaRef.current !== plantaShortCode) return;
+    plantaPendenteRef.current = {
+      eventoId: plantaEventoId,
+      shortCode: plantaShortCode,
+      mesas,
+      version: plantaVersionRef.current,
+    };
     if (plantaSaveTimerRef.current) window.clearTimeout(plantaSaveTimerRef.current);
     plantaSaveTimerRef.current = window.setTimeout(() => {
-      void enviarPlanta(mesas);
+      plantaSaveTimerRef.current = null;
+      const pendente = plantaPendenteRef.current;
+      plantaPendenteRef.current = null;
+      if (pendente) {
+        void enviarPlantaContexto(
+          pendente.eventoId,
+          pendente.shortCode,
+          pendente.mesas,
+          pendente.version,
+        );
+      }
     }, 800);
   };
 
