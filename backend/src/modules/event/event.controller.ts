@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Param,
@@ -13,6 +14,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { EventService } from './event.service';
 import { CreateEventDto, UpdateEventDto, UpdateEventStatusDto, AddMemberDto, EventSettingsDto } from './dto';
+import { GuardarPlantaDto } from './planta.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { MANAGEMENT_ROLES } from '../../common/roles';
@@ -71,6 +73,22 @@ export class EventController {
     @Body() dto: EventSettingsDto,
   ) {
     return this.eventService.updateSettings(id, req.user, dto);
+  }
+
+  @Get(':id/planta')
+  @Roles(...MANAGEMENT_ROLES)
+  async obterPlanta(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    return this.eventService.obterPlanta(id, req.user);
+  }
+
+  @Put(':id/planta')
+  @Roles(...MANAGEMENT_ROLES)
+  async guardarPlanta(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: any,
+    @Body() dto: GuardarPlantaDto,
+  ) {
+    return this.eventService.guardarPlanta(id, req.user, dto);
   }
 
   @Get(':id/members')

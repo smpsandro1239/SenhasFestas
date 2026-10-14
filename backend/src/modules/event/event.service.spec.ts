@@ -518,3 +518,98 @@ describe('listEventosPublicos', () => {
     ]);
   });
 });
+
+describe('EventService — planta (optimistic locking)', () => {
+  let service: EventService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    service = new EventService(
+      mockEventRepository as any,
+      mockEventUserRepository as any,
+      mockOrderRepository as any,
+      mockCashClosureRepository as any,
+      mockAuditService as any,
+      mockBalanceRepository as any,
+    );
+    mockEventUserRepository.findOne.mockResolvedValue({ role: 'organizer' });
+  });
+
+  it('obterPlanta devolve mesas e version guardadas', async () => {
+    mockEventRepository.findOne.mockResolvedValue({
+      id: 'evt1',
+      floorPlan: [{ id: 'mesa-1' }],
+      floorPlanVersion: 3,
+    });
+
+    await expect(service.obterPlanta('evt1', ORGANIZADOR)).resolves.toEqual({
+      mesas: [{ id: 'mesa-1' }],
+      version: 3,
+    });
+  });
+
+  it('obterPlanta devolve vazio quando o evento ainda não tem planta', async () => {
+    mockEventRepository.findOne.mockResolvedValue({ id: 'evt1' });
+
+    await expect(service.obterPlanta('evt1', ORGANIZADOR)).resolves.toEqual({
+      mesas: [],
+      version: 0,
+    });
+  });
+
+  it('obterPlanta → 404 se o evento não existir', async () => {
+    mockEventRepository.findOne.mockResolvedValue(null);
+    await expect(service.obterPlanta('naoexiste', ORGANIZADOR)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('guardarPlanta com version correta grava e incrementa a version', async () => {
+    mockEventRepository.findOne.mockResolvedValue({
+      id: 'evt1',
+      floorPlan: [],
+      floorPlanVersion: 3,
+    });
+    mockEventRepository.save.mockImplementation(async (e: any) => e);
+
+    await expect(
+      service.guardarPlanta('evt1', ORGANIZADOR, { mesas: [{ id: 'mesa-1' }], version: 3 } as any),
+    ).resolves.toEqual({ mesas: [{ id: 'mesa-1' }], version: 4 });
+    expect(mockEventRepository.save).toHaveBeenCalled();
+  });
+
+  it('obterPlanta trata floorPlan não-array como vazio', async () => {
+    mockEventRepository.findOne.mockResolvedValue({ id: 'evt1', floorPlan: null });
+    await expect(service.obterPlanta('evt1', ORGANIZADOR)).resolves.toEqual({
+      mesas: [],
+      version: 0,
+    });
+  });
+
+  it('guardarPlanta com version desactualizada → 409 com o estado actual', async () => {
+    mockEventRepository.findOne.mockResolvedValue({
+      id: 'evt1',
+      floorPlan: [{ id: 'mesa-antiga' }],
+      floorPlanVersion: 5,
+    });
+
+    const erro = await service
+      .guardarPlanta('evt1', ORGANIZADOR, { mesas: [{ id: 'mesa-1' }], version: 4 } as any)
+      .catch((e: any) => e);
+
+    expect(erro).toBeInstanceOf(ConflictException);
+    expect(erro.getStatus()).toBe(409);
+    expect(erro.getResponse()).toEqual(
+      expect.objectContaining({ mesas: [{ id: 'mesa-antiga' }], version: 5 }),
+    );
+    expect(mockEventRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('guardarPlanta → 404 se o evento não existir', async () => {
+    mockEventRepository.findOne.mockResolvedValue(null);
+    await expect(
+      service.guardarPlanta('naoexiste', ORGANIZADOR, { mesas: [], version: 0 }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(mockEventRepository.save).not.toHaveBeenCalled();
+  });
+});

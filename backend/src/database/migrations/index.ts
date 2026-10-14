@@ -15,3 +15,4 @@ export { CashClosureUniqueness1789900000000 } from './1789900000000-CashClosureU
 export { BalanceArchiving1790100000000 } from './1790100000000-BalanceArchiving';
 export { AddEventShortCode1790200000000 } from './1790200000000-AddEventShortCode';
 export { BackfillOrphanBalanceMembers1790300000000 } from './1790300000000-BackfillOrphanBalanceMembers';
+export { AddEventFloorPlan1790400000000 } from './1790400000000-AddEventFloorPlan';

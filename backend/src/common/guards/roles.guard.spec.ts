@@ -197,3 +197,44 @@ describe('RolesGuard — 2A: event-role como role efetiva dentro do evento', () 
     await expect(guard.canActivate(context as any)).resolves.toBe(true);
   });
 });
+
+describe('RolesGuard — planta exige MANAGEMENT_ROLES (organizer/superadmin)', () => {
+  beforeEach(() => {
+    membrosDB.length = 0;
+  });
+
+  const planta = (user: any) =>
+    criarContexto(user, MANAGEMENT_ROLES, {
+      params: { id: 'evtX' },
+      route: { path: '/events/:id/planta' },
+    });
+
+  it('organizer com event-role organizer → autorizado', async () => {
+    adicionarMembro('u1', 'evtX', 'organizer');
+    const { guard, context } = planta({ id: 'u1', role: 'organizer' });
+    await expect(guard.canActivate(context as any)).resolves.toBe(true);
+  });
+
+  it('superadmin global → autorizado', async () => {
+    const { guard, context } = planta({ id: 'u1', role: 'superadmin' });
+    await expect(guard.canActivate(context as any)).resolves.toBe(true);
+  });
+
+  it('cashier → 403', async () => {
+    adicionarMembro('u1', 'evtX', 'cashier');
+    const { guard, context } = planta({ id: 'u1', role: 'cashier' });
+    await expect(guard.canActivate(context as any)).rejects.toThrow(ForbiddenException);
+  });
+
+  it('bar → 403', async () => {
+    adicionarMembro('u1', 'evtX', 'bar');
+    const { guard, context } = planta({ id: 'u1', role: 'bar' });
+    await expect(guard.canActivate(context as any)).rejects.toThrow(ForbiddenException);
+  });
+
+  it('client → 403', async () => {
+    adicionarMembro('u1', 'evtX', 'client');
+    const { guard, context } = planta({ id: 'u1', role: 'client' });
+    await expect(guard.canActivate(context as any)).rejects.toThrow(ForbiddenException);
+  });
+});

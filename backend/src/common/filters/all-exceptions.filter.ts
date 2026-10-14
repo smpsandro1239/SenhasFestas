@@ -19,13 +19,25 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const { status, message } = this.classificar(exception);
 
-    const errorResponse = {
+    const errorResponse: Record<string, unknown> = {
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
       method: request.method,
       message: typeof message === 'string' ? message : (message as any).message || message,
     };
+
+    // Campos extra do HttpException (ex.: o 409 da planta traz { mesas, version }
+    // para o cliente reconciliar sem um GET adicional). Só se aplica quando o
+    // handler constrói a resposta como objecto; os erros de string/BD mantêm a
+    // forma mínima que o resto da API já usa.
+    if (message && typeof message === 'object' && !Array.isArray(message)) {
+      const { statusCode: _s, message: _m, error: _e, ...extras } = message as Record<
+        string,
+        unknown
+      >;
+      Object.assign(errorResponse, extras);
+    }
 
     if (status >= 500) {
       this.logger.error(

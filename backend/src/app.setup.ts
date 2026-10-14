@@ -68,7 +68,7 @@ export async function criarAplicacao(opcoes: CriarAplicacaoOpcoes = {}): Promise
     // A6: allowlist explícita (array), não reflete a origem do pedido.
     // Alinhada com o security.middleware e o order.gateway (ambos fazem split).
     origin: corsOrigins,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
   });

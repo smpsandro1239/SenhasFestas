@@ -17,6 +17,7 @@ import {
   BalanceEntity,
 } from '../../entities';
 import { CreateEventDto, UpdateEventDto, AddMemberDto, EventSettingsDto } from './dto';
+import { GuardarPlantaDto } from './planta.dto';
 import { AuditService } from '../audit/audit.service';
 import { eventWindowMessage, isEventWindowOpen } from '../../common/event-window';
 import {
@@ -317,6 +318,47 @@ export class EventService {
     event.settings = { ...(event.settings ?? {}), ...settings };
     await this.eventRepository.save(event);
     return event.settings;
+  }
+
+  /**
+   * Planta de mesas. Ao contrário do resto da operação, edita-se em qualquer
+   * estado do evento (rascunho/encerrado) — o layout não depende da janela.
+   */
+  async obterPlanta(
+    eventId: string,
+    user: UserEntity,
+  ): Promise<{ mesas: any[]; version: number }> {
+    const event = await this.findOne(eventId, user);
+    return {
+      mesas: Array.isArray(event.floorPlan) ? event.floorPlan : [],
+      version: event.floorPlanVersion ?? 0,
+    };
+  }
+
+  /**
+   * Grava a planta com optimistic locking: a `version` enviada tem de bater
+   * certo com a guardada. Sem isso, dois dispositivos a editar em paralelo
+   * sobrepunham-se em silêncio. No conflito devolve o estado actual para o
+   * cliente reconciliar.
+   */
+  async guardarPlanta(
+    eventId: string,
+    user: UserEntity,
+    dto: GuardarPlantaDto,
+  ): Promise<{ mesas: any[]; version: number }> {
+    const event = await this.findOne(eventId, user);
+    const versionAtual = event.floorPlanVersion ?? 0;
+    if (dto.version !== versionAtual) {
+      throw new ConflictException({
+        message: 'A planta foi alterada noutro dispositivo',
+        mesas: Array.isArray(event.floorPlan) ? event.floorPlan : [],
+        version: versionAtual,
+      });
+    }
+    event.floorPlan = dto.mesas;
+    event.floorPlanVersion = versionAtual + 1;
+    await this.eventRepository.save(event);
+    return { mesas: event.floorPlan, version: event.floorPlanVersion };
   }
 
   async addUserRole(eventId: string, userId: string, role: string): Promise<EventUserEntity> {

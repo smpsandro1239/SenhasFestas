@@ -169,3 +169,35 @@ describe('AllExceptionsFilter — comportamento existente preservado', () => {
     expect(json.mock.calls[0][0].message).toBe('Não foi possível gerar um código');
   });
 });
+
+describe('AllExceptionsFilter — campos extra do HttpException', () => {
+  let filter: AllExceptionsFilter;
+
+  beforeEach(() => {
+    filter = new AllExceptionsFilter();
+  });
+
+  it('propaga campos extra do corpo do 409 (mesas/version)', () => {
+    const { host, json } = criarHost();
+    filter.catch(
+      new ConflictException({
+        message: 'A planta foi alterada noutro dispositivo',
+        mesas: [{ id: 'mesa-antiga' }],
+        version: 5,
+      }),
+      host,
+    );
+    const corpo = json.mock.calls[0][0];
+    expect(corpo.message).toBe('A planta foi alterada noutro dispositivo');
+    expect(corpo.mesas).toEqual([{ id: 'mesa-antiga' }]);
+    expect(corpo.version).toBe(5);
+  });
+
+  it('não acrescenta campos extra quando o corpo só tem a mensagem', () => {
+    const { host, json } = criarHost();
+    filter.catch(new ConflictException('Não foi possível gerar um código'), host);
+    expect(Object.keys(json.mock.calls[0][0]).sort()).toEqual(
+      ['message', 'method', 'path', 'statusCode', 'timestamp'].sort(),
+    );
+  });
+});

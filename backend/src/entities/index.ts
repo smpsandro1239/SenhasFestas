@@ -102,6 +102,16 @@ export class EventEntity {
   })
   settings: Record<string, any>;
 
+  // Planta de mesas (layout do salão): lista de mesas posicionadas em grelha
+  // percentual (x/y 0-100). Coexiste com a cópia em localStorage do /admin.
+  @Column({ type: 'jsonb', default: () => `'[]'` })
+  floorPlan: any[];
+
+  // Incrementa a cada gravação da planta; usada para detecção de conflitos
+  // (optimistic locking) entre dispositivos.
+  @Column({ type: 'int', default: 0 })
+  floorPlanVersion: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

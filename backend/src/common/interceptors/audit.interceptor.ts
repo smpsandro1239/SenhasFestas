@@ -36,6 +36,7 @@ const SUFIXOS: Array<[string, string]> = [
   ['/fechar', 'CLOSE'],
   ['/cancel', 'CANCEL'],
   ['/status', 'STATUS'],
+  ['/planta', 'PLANTA'],
   ['/members', 'MEMBER'],
   ['/settings', 'SETTINGS'],
   ['/extend', 'EXTEND'],
