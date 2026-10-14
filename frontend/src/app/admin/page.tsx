@@ -1073,10 +1073,18 @@ function AdminPage() {
     } catch {}
   };
 
+  const limparUndo = () => {
+    if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = null;
+    undoSnapshotRef.current = null;
+    setUndoEtiqueta(null);
+  };
+
   const definirPlanta = (mesas: Mesa[]) => {
     plantaEstadoRef.current = mesas;
     setPlanta(mesas);
     gravarPlanta(mesas);
+    limparUndo();
   };
 
   const definirSnap = (valor: boolean) => {
@@ -1087,9 +1095,9 @@ function AdminPage() {
   };
 
   const oferecerUndo = (mesasAntes: Mesa[], etiqueta: string) => {
+    limparUndo();
     undoSnapshotRef.current = mesasAntes.slice();
     setUndoEtiqueta(etiqueta);
-    if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
     undoTimerRef.current = window.setTimeout(() => {
       undoSnapshotRef.current = null;
       setUndoEtiqueta(null);
@@ -1099,9 +1107,6 @@ function AdminPage() {
   const desfazer = () => {
     const snapshot = undoSnapshotRef.current;
     if (!snapshot) return;
-    if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
-    undoSnapshotRef.current = null;
-    setUndoEtiqueta(null);
     definirPlanta(snapshot);
   };
 
@@ -1143,16 +1148,16 @@ function AdminPage() {
   };
 
   const limparPlanta = () => {
-    if (plantaEstadoRef.current.length > 0) {
-      oferecerUndo(plantaEstadoRef.current, 'Planta limpa');
-    }
+    const antes = plantaEstadoRef.current;
     definirPlanta([]);
     setPlantaSel(null);
     setPlantaLimpar(false);
+    if (antes.length > 0) oferecerUndo(antes, 'Planta limpa');
   };
 
   const onMesaPointerDown = (e: React.PointerEvent, mesa: Mesa) => {
     e.preventDefault();
+    limparUndo();
     setPlantaSel(mesa.id);
     arrastoRef.current = { id: mesa.id };
     try {
