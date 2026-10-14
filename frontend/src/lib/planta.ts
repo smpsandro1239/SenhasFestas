@@ -162,3 +162,18 @@ export function parsePlanta(raw: string | null): Mesa[] {
   }
   return mesas;
 }
+
+export type ResultadoPlantaRemota = 'aplicar' | 'ignorar' | 'oferecer-importacao';
+
+export function decidirPlantaRemota(entrada: {
+  editadoDesdeCarga: boolean;
+  versaoServidor: number;
+  mesasServidor: number;
+  mesasLocais: number;
+}): ResultadoPlantaRemota {
+  if (entrada.editadoDesdeCarga) return 'ignorar';
+  if (entrada.versaoServidor === 0 && entrada.mesasServidor === 0 && entrada.mesasLocais > 0) {
+    return 'oferecer-importacao';
+  }
+  return 'aplicar';
+}

@@ -41,6 +41,7 @@ import {
   reorganizarMesas,
   normalizarPosicao,
   encaixarGrelha,
+  decidirPlantaRemota,
   type Mesa,
   type FormaMesa,
 } from '@/lib/planta';
@@ -135,6 +136,7 @@ function AdminPage() {
     mesas: Mesa[];
     version: number;
   } | null>(null);
+  const plantaEditadaDesdeCargaRef = useRef(false);
   const [loteModo, setLoteModo] = useState<'intervalo' | 'nomes'>('intervalo');
   const [loteInicio, setLoteInicio] = useState('1');
   const [loteFim, setLoteFim] = useState('10');
@@ -158,6 +160,7 @@ function AdminPage() {
     null,
   );
   const [plantaImportarDisponivel, setPlantaImportarDisponivel] = useState(false);
+  const [plantaAviso, setPlantaAviso] = useState<string | null>(null);
   const [plantaLimpar, setPlantaLimpar] = useState(false);
   const [eventEditing, setEventEditing] = useState<any>(null);
   const [eventEditForm, setEventEditForm] = useState({ name: '', location: '', startDate: '', endDate: '' });
@@ -1038,12 +1041,14 @@ function AdminPage() {
     }
     const carregadas = parsePlanta(localStorage.getItem(`sf:planta:${plantaShortCode}`));
     plantaCarregadaRef.current = plantaShortCode;
+    plantaEditadaDesdeCargaRef.current = false;
     plantaEstadoRef.current = carregadas;
     setPlanta(carregadas);
     setPlantaSel(null);
     limparUndo();
     setPlantaConflito(null);
     setPlantaImportarDisponivel(false);
+    setPlantaAviso(null);
     setPlantaSync('');
     const eventoId = plantaEventoId;
     let cancelado = false;
@@ -1051,11 +1056,19 @@ function AdminPage() {
       try {
         const remoto = await getPlanta(eventoId);
         if (cancelado || plantaCarregadaRef.current !== plantaShortCode) return;
-        const version = typeof remoto?.version === 'number' ? remoto.version : 0;
+        const versaoServidor = typeof remoto?.version === 'number' ? remoto.version : 0;
         const mesasRemotas: Mesa[] = Array.isArray(remoto?.mesas) ? remoto.mesas : [];
-        plantaVersionRef.current = version;
-        if (version === 0 && mesasRemotas.length === 0 && carregadas.length > 0) {
-          // Servidor vazio + planta local: oferece importação em vez de apagar.
+        // Actualiza a version base mesmo que não apliquemos as mesas, para o próximo save
+        // não partir de uma version desactualizada.
+        plantaVersionRef.current = versaoServidor;
+        const decisao = decidirPlantaRemota({
+          editadoDesdeCarga: plantaEditadaDesdeCargaRef.current,
+          versaoServidor,
+          mesasServidor: mesasRemotas.length,
+          mesasLocais: carregadas.length,
+        });
+        if (decisao === 'ignorar') return;
+        if (decisao === 'oferecer-importacao') {
           setPlantaImportarDisponivel(true);
           return;
         }
@@ -1161,7 +1174,16 @@ function AdminPage() {
       setPlantaConflito(null);
       setPlantaSync('saved');
     } catch (e) {
-      if (!ativo()) return;
+      if (!ativo()) {
+        // O evento já não está activo (flush ao trocar de evento): não podemos mostrar o
+        // conflito no contexto do evento actual, mas não podemos falhar em silêncio.
+        setPlantaAviso(
+          e instanceof ApiError && e.status === 409
+            ? 'Uma edição do evento anterior não foi gravada por conflito no servidor.'
+            : 'Uma edição do evento anterior não foi gravada por falha de ligação.',
+        );
+        return;
+      }
       if (e instanceof ApiError && e.status === 409) {
         const body = e.body ?? {};
         setPlantaConflito({
@@ -1176,11 +1198,8 @@ function AdminPage() {
   };
 
   const enviarPlanta = (mesas: Mesa[]) => {
-    const eventoId = plantaEventoId;
-    const shortCode = plantaShortCode;
-    if (!eventoId || !shortCode) return;
-    if (plantaCarregadaRef.current !== shortCode) return;
-    void enviarPlantaContexto(eventoId, shortCode, mesas, plantaVersionRef.current);
+    if (plantaCarregadaRef.current !== plantaShortCode) return;
+    void enviarPlantaContexto(plantaEventoId, plantaShortCode, mesas, plantaVersionRef.current);
   };
 
   const agendarGuardarPlanta = (mesas: Mesa[]) => {
@@ -1261,6 +1280,7 @@ function AdminPage() {
 
   const definirPlanta = (mesas: Mesa[]) => {
     plantaEstadoRef.current = mesas;
+    plantaEditadaDesdeCargaRef.current = true;
     setPlanta(mesas);
     gravarPlanta(mesas);
     agendarGuardarPlanta(mesas);
@@ -1355,6 +1375,7 @@ function AdminPage() {
     const y = plantaSnap ? encaixarGrelha(rawY) : normalizarPosicao(rawY);
     const next = moverMesa(plantaEstadoRef.current, arrasto.id, x, y);
     plantaEstadoRef.current = next;
+    plantaEditadaDesdeCargaRef.current = true;
     setPlanta(next);
   };
 
@@ -3545,6 +3566,15 @@ function AdminPage() {
                 Arrasta as mesas para desenhar a disposição do espaço. Guardado automaticamente no
                 servidor, com cópia local para uso offline.
               </p>
+
+              {plantaAviso && (
+                <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                  <span className="text-xs text-amber-200">{plantaAviso}</span>
+                  <Button size="sm" variant="outline" onClick={() => setPlantaAviso(null)}>
+                    Fechar
+                  </Button>
+                </div>
+              )}
 
               {events.length === 0 ? (
                 <div className="text-sm text-zinc-400 py-4">Cria um evento primeiro.</div>

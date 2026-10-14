@@ -12,6 +12,7 @@ import {
   novoIdMesa,
   mesasParaQrs,
   parsePlanta,
+  decidirPlantaRemota,
   MAX_MESAS_PLANTA,
   type Mesa,
 } from './planta';
@@ -215,5 +216,46 @@ describe('parsePlanta', () => {
     expect(parsePlanta(raw)).toEqual([
       { id: 'a', nome: 'Mesa 1', lugares: 8, x: 100, y: 0, forma: 'quadrada' },
     ]);
+  });
+});
+
+describe('decidirPlantaRemota', () => {
+  const base = { editadoDesdeCarga: false, versaoServidor: 3, mesasServidor: 2, mesasLocais: 2 };
+
+  it('ignora quando o utilizador editou desde a carga', () => {
+    expect(decidirPlantaRemota({ ...base, editadoDesdeCarga: true })).toBe('ignorar');
+  });
+
+  it('oferece importação quando o servidor está vazio e há mesas locais', () => {
+    expect(
+      decidirPlantaRemota({ ...base, versaoServidor: 0, mesasServidor: 0, mesasLocais: 5 }),
+    ).toBe('oferecer-importacao');
+  });
+
+  it('aplica quando o servidor tem mesas', () => {
+    expect(
+      decidirPlantaRemota({ ...base, versaoServidor: 0, mesasServidor: 3, mesasLocais: 0 }),
+    ).toBe('aplicar');
+  });
+
+  it('aplica quando ambos estão vazios (nada a importar)', () => {
+    expect(
+      decidirPlantaRemota({ ...base, versaoServidor: 0, mesasServidor: 0, mesasLocais: 0 }),
+    ).toBe('aplicar');
+  });
+
+  it('aplica quando o servidor tem version mas não há mesas locais', () => {
+    expect(decidirPlantaRemota({ ...base, mesasLocais: 0 })).toBe('aplicar');
+  });
+
+  it('a edição local tem prioridade sobre a importação', () => {
+    expect(
+      decidirPlantaRemota({
+        editadoDesdeCarga: true,
+        versaoServidor: 0,
+        mesasServidor: 0,
+        mesasLocais: 5,
+      }),
+    ).toBe('ignorar');
   });
 });
