@@ -163,17 +163,52 @@ export function parsePlanta(raw: string | null): Mesa[] {
   return mesas;
 }
 
-export type ResultadoPlantaRemota = 'aplicar' | 'ignorar' | 'oferecer-importacao';
+export type ResultadoPlantaRemota =
+  | 'aplicar'
+  | 'ignorar'
+  | 'oferecer-importacao'
+  | 'conflito-pendente';
 
 export function decidirPlantaRemota(entrada: {
   editadoDesdeCarga: boolean;
+  temPendente: boolean;
   versaoServidor: number;
   mesasServidor: number;
   mesasLocais: number;
 }): ResultadoPlantaRemota {
   if (entrada.editadoDesdeCarga) return 'ignorar';
+  if (entrada.temPendente) return 'conflito-pendente';
   if (entrada.versaoServidor === 0 && entrada.mesasServidor === 0 && entrada.mesasLocais > 0) {
     return 'oferecer-importacao';
   }
   return 'aplicar';
+}
+
+export interface PlantaPendente {
+  mesas: Mesa[];
+  version: number;
+}
+
+export function chavePlantaPendente(shortCode: string): string {
+  return `sf:planta-pendente:${shortCode}`;
+}
+
+export function parsePlantaPendente(raw: string | null): PlantaPendente | null {
+  if (!raw) return null;
+  let dados: unknown;
+  try {
+    dados = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!dados || typeof dados !== 'object') return null;
+  const d = dados as Record<string, unknown>;
+  if (!Array.isArray(d.mesas)) return null;
+  return {
+    mesas: parsePlanta(JSON.stringify(d.mesas)),
+    version:
+      typeof d.version === 'number' && Number.isFinite(d.version)
+        ? Math.max(0, Math.trunc(d.version))
+        : 0,
+  };
 }

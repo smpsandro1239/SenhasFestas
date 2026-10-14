@@ -13,6 +13,7 @@ import {
   mesasParaQrs,
   parsePlanta,
   decidirPlantaRemota,
+  parsePlantaPendente,
   MAX_MESAS_PLANTA,
   type Mesa,
 } from './planta';
@@ -220,10 +221,44 @@ describe('parsePlanta', () => {
 });
 
 describe('decidirPlantaRemota', () => {
-  const base = { editadoDesdeCarga: false, versaoServidor: 3, mesasServidor: 2, mesasLocais: 2 };
+  const base = {
+    editadoDesdeCarga: false,
+    temPendente: false,
+    versaoServidor: 3,
+    mesasServidor: 2,
+    mesasLocais: 2,
+  };
 
   it('ignora quando o utilizador editou desde a carga', () => {
     expect(decidirPlantaRemota({ ...base, editadoDesdeCarga: true })).toBe('ignorar');
+  });
+
+  it('sinaliza conflito-pendente quando há edição por sincronizar', () => {
+    expect(decidirPlantaRemota({ ...base, temPendente: true })).toBe('conflito-pendente');
+  });
+
+  it('conflito-pendente tem prioridade sobre aplicar', () => {
+    expect(
+      decidirPlantaRemota({ ...base, temPendente: true, versaoServidor: 5, mesasServidor: 4 }),
+    ).toBe('conflito-pendente');
+  });
+
+  it('conflito-pendente tem prioridade sobre oferecer-importacao', () => {
+    expect(
+      decidirPlantaRemota({
+        ...base,
+        temPendente: true,
+        versaoServidor: 0,
+        mesasServidor: 0,
+        mesasLocais: 5,
+      }),
+    ).toBe('conflito-pendente');
+  });
+
+  it('a edição em curso tem prioridade sobre o pendente', () => {
+    expect(
+      decidirPlantaRemota({ ...base, editadoDesdeCarga: true, temPendente: true }),
+    ).toBe('ignorar');
   });
 
   it('oferece importação quando o servidor está vazio e há mesas locais', () => {
@@ -247,15 +282,37 @@ describe('decidirPlantaRemota', () => {
   it('aplica quando o servidor tem version mas não há mesas locais', () => {
     expect(decidirPlantaRemota({ ...base, mesasLocais: 0 })).toBe('aplicar');
   });
+});
 
-  it('a edição local tem prioridade sobre a importação', () => {
-    expect(
-      decidirPlantaRemota({
-        editadoDesdeCarga: true,
-        versaoServidor: 0,
-        mesasServidor: 0,
-        mesasLocais: 5,
-      }),
-    ).toBe('ignorar');
+describe('parsePlantaPendente', () => {
+  it('devolve null para json inválido, nulo ou sem mesas', () => {
+    expect(parsePlantaPendente(null)).toBeNull();
+    expect(parsePlantaPendente('{')).toBeNull();
+    expect(parsePlantaPendente('{"version":2}')).toBeNull();
+    expect(parsePlantaPendente('"x"')).toBeNull();
+  });
+
+  it('lê mesas e version', () => {
+    const raw = JSON.stringify({
+      mesas: [{ id: 'a', nome: 'Mesa 1', lugares: 4, x: 10, y: 20, forma: 'redonda' }],
+      version: 7,
+    });
+    expect(parsePlantaPendente(raw)).toEqual({
+      mesas: [{ id: 'a', nome: 'Mesa 1', lugares: 4, x: 10, y: 20, forma: 'redonda' }],
+      version: 7,
+    });
+  });
+
+  it('normaliza version inválida para 0', () => {
+    expect(parsePlantaPendente(JSON.stringify({ mesas: [], version: -3 }))?.version).toBe(0);
+    expect(parsePlantaPendente(JSON.stringify({ mesas: [] }))?.version).toBe(0);
+    expect(parsePlantaPendente(JSON.stringify({ mesas: [], version: 2.9 }))?.version).toBe(2);
+  });
+
+  it('filtra mesas inválidas via parsePlanta', () => {
+    const raw = JSON.stringify({ mesas: [{ id: 'a', nome: 'Mesa 1' }, { nome: 'sem id' }] });
+    expect(parsePlantaPendente(raw)?.mesas).toEqual([
+      { id: 'a', nome: 'Mesa 1', lugares: 0, x: 0, y: 0, forma: 'redonda' },
+    ]);
   });
 });

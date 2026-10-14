@@ -42,6 +42,8 @@ import {
   normalizarPosicao,
   encaixarGrelha,
   decidirPlantaRemota,
+  parsePlantaPendente,
+  chavePlantaPendente,
   type Mesa,
   type FormaMesa,
 } from '@/lib/planta';
@@ -1039,7 +1041,13 @@ function AdminPage() {
         pendente.version,
       );
     }
-    const carregadas = parsePlanta(localStorage.getItem(`sf:planta:${plantaShortCode}`));
+    let pendenteInicial: ReturnType<typeof parsePlantaPendente> = null;
+    try {
+      pendenteInicial = parsePlantaPendente(localStorage.getItem(chavePlantaPendente(plantaShortCode)));
+    } catch {}
+    const carregadas = pendenteInicial
+      ? pendenteInicial.mesas
+      : parsePlanta(localStorage.getItem(`sf:planta:${plantaShortCode}`));
     plantaCarregadaRef.current = plantaShortCode;
     plantaEditadaDesdeCargaRef.current = false;
     plantaEstadoRef.current = carregadas;
@@ -1063,6 +1071,7 @@ function AdminPage() {
         plantaVersionRef.current = versaoServidor;
         const decisao = decidirPlantaRemota({
           editadoDesdeCarga: plantaEditadaDesdeCargaRef.current,
+          temPendente: pendenteInicial !== null,
           versaoServidor,
           mesasServidor: mesasRemotas.length,
           mesasLocais: carregadas.length,
@@ -1070,6 +1079,12 @@ function AdminPage() {
         if (decisao === 'ignorar') return;
         if (decisao === 'oferecer-importacao') {
           setPlantaImportarDisponivel(true);
+          return;
+        }
+        if (decisao === 'conflito-pendente') {
+          // Há uma edição local por sincronizar: não sobrescrever; oferecer escolha explícita.
+          setPlantaConflito({ mesas: mesasRemotas, version: versaoServidor });
+          setPlantaSync('');
           return;
         }
         plantaEstadoRef.current = mesasRemotas;
@@ -1167,6 +1182,7 @@ function AdminPage() {
       const r = await guardarPlanta(eventoId, { mesas, version });
       try {
         localStorage.setItem(`sf:planta:${shortCode}`, JSON.stringify(mesas));
+        localStorage.removeItem(chavePlantaPendente(shortCode));
       } catch {}
       if (!ativo()) return;
       plantaVersionRef.current =
@@ -1174,13 +1190,17 @@ function AdminPage() {
       setPlantaConflito(null);
       setPlantaSync('saved');
     } catch (e) {
+      // Persiste a edição por sincronizar para não se perder num reload/troca de evento.
+      try {
+        localStorage.setItem(chavePlantaPendente(shortCode), JSON.stringify({ mesas, version }));
+      } catch {}
       if (!ativo()) {
         // O evento já não está activo (flush ao trocar de evento): não podemos mostrar o
-        // conflito no contexto do evento actual, mas não podemos falhar em silêncio.
+        // conflito no contexto do evento actual, mas a edição ficou guardada localmente.
         setPlantaAviso(
           e instanceof ApiError && e.status === 409
-            ? 'Uma edição do evento anterior não foi gravada por conflito no servidor.'
-            : 'Uma edição do evento anterior não foi gravada por falha de ligação.',
+            ? 'Uma edição do evento anterior ficou por sincronizar (conflito no servidor). Volta a esse evento para reconciliar.'
+            : 'Uma edição do evento anterior ficou por sincronizar (falha de ligação). Volta a esse evento para reconciliar.',
         );
         return;
       }
@@ -1238,6 +1258,7 @@ function AdminPage() {
     if (plantaShortCode) {
       try {
         localStorage.setItem(`sf:planta:${plantaShortCode}`, JSON.stringify(conflito.mesas));
+        localStorage.removeItem(chavePlantaPendente(plantaShortCode));
       } catch {}
     }
     setPlantaConflito(null);
@@ -1267,6 +1288,7 @@ function AdminPage() {
     if (plantaShortCode) {
       try {
         localStorage.removeItem(`sf:planta:${plantaShortCode}`);
+        localStorage.removeItem(chavePlantaPendente(plantaShortCode));
       } catch {}
     }
   };
@@ -1460,6 +1482,15 @@ function AdminPage() {
         />
 
         <Tabs items={tabs} activeTab={activeTab} onChange={setActiveTab} className="mb-6" />
+
+        {plantaAviso && (
+          <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+            <span className="text-xs text-amber-200">{plantaAviso}</span>
+            <Button size="sm" variant="outline" onClick={() => setPlantaAviso(null)}>
+              Fechar
+            </Button>
+          </div>
+        )}
 
         {activeTab === 'eventos' && (
           <div className="space-y-6">
@@ -3567,15 +3598,6 @@ function AdminPage() {
                 servidor, com cópia local para uso offline.
               </p>
 
-              {plantaAviso && (
-                <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
-                  <span className="text-xs text-amber-200">{plantaAviso}</span>
-                  <Button size="sm" variant="outline" onClick={() => setPlantaAviso(null)}>
-                    Fechar
-                  </Button>
-                </div>
-              )}
-
               {events.length === 0 ? (
                 <div className="text-sm text-zinc-400 py-4">Cria um evento primeiro.</div>
               ) : (
@@ -3649,7 +3671,8 @@ function AdminPage() {
                   {plantaConflito && (
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
                       <span className="text-xs text-amber-200">
-                        A planta foi alterada noutro dispositivo. Escolhe qual versão manter.
+                        Há uma edição local por sincronizar, ou a planta mudou noutro
+                        dispositivo. Escolhe a versão a manter.
                       </span>
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" onClick={forcarGuardarPlanta}>
