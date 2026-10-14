@@ -14,8 +14,20 @@ const mesa = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+const zona = (over: Record<string, unknown> = {}) => ({
+  id: 'zona-1',
+  nome: 'Esplanada',
+  cor: '#3b82f6',
+  x: 0,
+  y: 0,
+  w: 20,
+  h: 20,
+  ...over,
+});
+
 const payload = (over: Record<string, unknown> = {}) => ({
   mesas: [mesa()],
+  zonas: [],
   version: 0,
   ...over,
 });
@@ -68,5 +80,39 @@ describe('GuardarPlantaDto — validação', () => {
   it('rejeita version negativa', async () => {
     const erros = await validar(payload({ version: -1 }));
     expect(erros.some((e) => e.property === 'version')).toBe(true);
+  });
+
+  it('aceita uma planta sem zonas (compatibilidade)', async () => {
+    expect(await validar({ mesas: [mesa()], version: 0 })).toEqual([]);
+  });
+
+  it('aceita uma zona válida', async () => {
+    expect(await validar(payload({ zonas: [zona()] }))).toEqual([]);
+  });
+
+  it('rejeita w igual a 0', async () => {
+    const erros = await validar(payload({ zonas: [zona({ w: 0 })] }));
+    expect(erros.some((e) => e.property === 'zonas')).toBe(true);
+  });
+
+  it('rejeita h igual a 0', async () => {
+    const erros = await validar(payload({ zonas: [zona({ h: 0 })] }));
+    expect(erros.some((e) => e.property === 'zonas')).toBe(true);
+  });
+
+  it('rejeita x acima de 100', async () => {
+    const erros = await validar(payload({ zonas: [zona({ x: 101 })] }));
+    expect(erros.some((e) => e.property === 'zonas')).toBe(true);
+  });
+
+  it('rejeita cor com mais de 20 caracteres', async () => {
+    const erros = await validar(payload({ zonas: [zona({ cor: 'x'.repeat(21) })] }));
+    expect(erros.some((e) => e.property === 'zonas')).toBe(true);
+  });
+
+  it('rejeita mais de 50 zonas', async () => {
+    const zonas = Array.from({ length: 51 }, (_, i) => zona({ id: `zona-${i}` }));
+    const erros = await validar(payload({ zonas }));
+    expect(erros.some((e) => e.property === 'zonas')).toBe(true);
   });
 });

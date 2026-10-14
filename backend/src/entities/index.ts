@@ -102,10 +102,12 @@ export class EventEntity {
   })
   settings: Record<string, any>;
 
-  // Planta de mesas (layout do salão): lista de mesas posicionadas em grelha
-  // percentual (x/y 0-100). Coexiste com a cópia em localStorage do /admin.
-  @Column({ type: 'jsonb', default: () => `'[]'` })
-  floorPlan: any[];
+  // Planta do salão: documento { mesas: [...], zonas: [...] }. As mesas e zonas
+  // usam coordenadas percentuais (0-100). Coexiste com a cópia em localStorage
+  // do /admin. A migração 1790500000000 converte o formato antigo (array) para
+  // este documento.
+  @Column({ type: 'jsonb', default: () => `'{"mesas": [], "zonas": []}'` })
+  floorPlan: any;
 
   // Incrementa a cada gravação da planta; usada para detecção de conflitos
   // (optimistic locking) entre dispositivos.

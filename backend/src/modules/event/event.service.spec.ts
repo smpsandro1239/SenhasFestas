@@ -535,16 +535,33 @@ describe('EventService — planta (optimistic locking)', () => {
     mockEventUserRepository.findOne.mockResolvedValue({ role: 'organizer' });
   });
 
-  it('obterPlanta devolve mesas e version guardadas', async () => {
+  it('obterPlanta devolve mesas, zonas e version guardadas', async () => {
     mockEventRepository.findOne.mockResolvedValue({
       id: 'evt1',
-      floorPlan: [{ id: 'mesa-1' }],
+      floorPlan: {
+        mesas: [{ id: 'mesa-1' }],
+        zonas: [{ id: 'z1', nome: 'Zona', cor: '#fff', x: 10, y: 10, w: 20, h: 20 }],
+      },
       floorPlanVersion: 3,
     });
 
     await expect(service.obterPlanta('evt1', ORGANIZADOR)).resolves.toEqual({
       mesas: [{ id: 'mesa-1' }],
+      zonas: [{ id: 'z1', nome: 'Zona', cor: '#fff', x: 10, y: 10, w: 20, h: 20 }],
       version: 3,
+    });
+  });
+
+  it('obterPlanta aceita o formato legado (array só de mesas)', async () => {
+    mockEventRepository.findOne.mockResolvedValue({
+      id: 'evt1',
+      floorPlan: [{ id: 'mesa-1' }],
+    });
+
+    await expect(service.obterPlanta('evt1', ORGANIZADOR)).resolves.toEqual({
+      mesas: [{ id: 'mesa-1' }],
+      zonas: [],
+      version: 0,
     });
   });
 
@@ -553,6 +570,7 @@ describe('EventService — planta (optimistic locking)', () => {
 
     await expect(service.obterPlanta('evt1', ORGANIZADOR)).resolves.toEqual({
       mesas: [],
+      zonas: [],
       version: 0,
     });
   });
@@ -564,24 +582,61 @@ describe('EventService — planta (optimistic locking)', () => {
     );
   });
 
-  it('guardarPlanta com version correta grava e incrementa a version', async () => {
+  it('guardarPlanta com version correta grava o documento e incrementa a version', async () => {
     mockEventRepository.findOne.mockResolvedValue({
       id: 'evt1',
-      floorPlan: [],
+      floorPlan: { mesas: [], zonas: [] },
       floorPlanVersion: 3,
     });
     mockEventRepository.save.mockImplementation(async (e: any) => e);
 
     await expect(
-      service.guardarPlanta('evt1', ORGANIZADOR, { mesas: [{ id: 'mesa-1' }], version: 3 } as any),
-    ).resolves.toEqual({ mesas: [{ id: 'mesa-1' }], version: 4 });
+      service.guardarPlanta('evt1', ORGANIZADOR, {
+        mesas: [{ id: 'mesa-1' }],
+        zonas: [],
+        version: 3,
+      } as any),
+    ).resolves.toEqual({ mesas: [{ id: 'mesa-1' }], zonas: [], version: 4 });
     expect(mockEventRepository.save).toHaveBeenCalled();
   });
 
-  it('obterPlanta trata floorPlan não-array como vazio', async () => {
+  it('guardarPlanta aceita payload sem zonas (compatibilidade)', async () => {
+    mockEventRepository.findOne.mockResolvedValue({
+      id: 'evt1',
+      floorPlan: { mesas: [], zonas: [] },
+      floorPlanVersion: 0,
+    });
+    mockEventRepository.save.mockImplementation(async (e: any) => e);
+
+    await expect(
+      service.guardarPlanta('evt1', ORGANIZADOR, { mesas: [], version: 0 } as any),
+    ).resolves.toEqual({ mesas: [], zonas: [], version: 1 });
+  });
+
+  it('guardarPlanta faz clamp da zona para caber em 0-100', async () => {
+    mockEventRepository.findOne.mockResolvedValue({
+      id: 'evt1',
+      floorPlan: { mesas: [], zonas: [] },
+      floorPlanVersion: 0,
+    });
+    mockEventRepository.save.mockImplementation(async (e: any) => e);
+
+    const resultado = await service.guardarPlanta('evt1', ORGANIZADOR, {
+      mesas: [],
+      zonas: [{ id: 'z1', nome: 'Zona', cor: '#fff', x: 90, y: 80, w: 30, h: 40 }],
+      version: 0,
+    } as any);
+
+    expect(resultado.zonas).toEqual([
+      { id: 'z1', nome: 'Zona', cor: '#fff', x: 70, y: 60, w: 30, h: 40 },
+    ]);
+  });
+
+  it('obterPlanta trata floorPlan não-array/não-objeto como vazio', async () => {
     mockEventRepository.findOne.mockResolvedValue({ id: 'evt1', floorPlan: null });
     await expect(service.obterPlanta('evt1', ORGANIZADOR)).resolves.toEqual({
       mesas: [],
+      zonas: [],
       version: 0,
     });
   });
@@ -589,7 +644,7 @@ describe('EventService — planta (optimistic locking)', () => {
   it('guardarPlanta com version desactualizada → 409 com o estado actual', async () => {
     mockEventRepository.findOne.mockResolvedValue({
       id: 'evt1',
-      floorPlan: [{ id: 'mesa-antiga' }],
+      floorPlan: { mesas: [{ id: 'mesa-antiga' }], zonas: [] },
       floorPlanVersion: 5,
     });
 
@@ -600,7 +655,7 @@ describe('EventService — planta (optimistic locking)', () => {
     expect(erro).toBeInstanceOf(ConflictException);
     expect(erro.getStatus()).toBe(409);
     expect(erro.getResponse()).toEqual(
-      expect.objectContaining({ mesas: [{ id: 'mesa-antiga' }], version: 5 }),
+      expect.objectContaining({ mesas: [{ id: 'mesa-antiga' }], zonas: [], version: 5 }),
     );
     expect(mockEventRepository.save).not.toHaveBeenCalled();
   });

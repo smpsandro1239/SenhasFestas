@@ -27,6 +27,53 @@ import {
   escolherShortCode,
 } from '../../common/short-code';
 
+interface ZonaPlantaDoc {
+  id: string;
+  nome: string;
+  cor: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+function clampNumero(valor: unknown, min: number, max: number): number {
+  const n = typeof valor === 'number' ? valor : Number(valor);
+  if (!Number.isFinite(n)) return min;
+  return Math.min(max, Math.max(min, n));
+}
+
+function normalizarZonaPlanta(zona: any): ZonaPlantaDoc {
+  const w = clampNumero(zona?.w, 1, 100);
+  const h = clampNumero(zona?.h, 1, 100);
+  return {
+    id: typeof zona?.id === 'string' ? zona.id : '',
+    nome: typeof zona?.nome === 'string' ? zona.nome : '',
+    cor: typeof zona?.cor === 'string' ? zona.cor : '',
+    x: clampNumero(zona?.x, 0, 100 - w),
+    y: clampNumero(zona?.y, 0, 100 - h),
+    w,
+    h,
+  };
+}
+
+/**
+ * Normaliza o campo `floorPlan` para o documento { mesas, zonas }. Aceita o
+ * formato legado (array só de mesas) para não perder plantas já gravadas.
+ */
+function lerFloorPlan(floorPlan: any): { mesas: any[]; zonas: ZonaPlantaDoc[] } {
+  if (Array.isArray(floorPlan)) {
+    return { mesas: floorPlan, zonas: [] };
+  }
+  if (floorPlan && typeof floorPlan === 'object') {
+    return {
+      mesas: Array.isArray(floorPlan.mesas) ? floorPlan.mesas : [],
+      zonas: Array.isArray(floorPlan.zonas) ? floorPlan.zonas.map(normalizarZonaPlanta) : [],
+    };
+  }
+  return { mesas: [], zonas: [] };
+}
+
 @Injectable()
 export class EventService {
   constructor(
@@ -327,10 +374,12 @@ export class EventService {
   async obterPlanta(
     eventId: string,
     user: UserEntity,
-  ): Promise<{ mesas: any[]; version: number }> {
+  ): Promise<{ mesas: any[]; zonas: any[]; version: number }> {
     const event = await this.findOne(eventId, user);
+    const doc = lerFloorPlan(event.floorPlan);
     return {
-      mesas: Array.isArray(event.floorPlan) ? event.floorPlan : [],
+      mesas: doc.mesas,
+      zonas: doc.zonas,
       version: event.floorPlanVersion ?? 0,
     };
   }
@@ -345,20 +394,23 @@ export class EventService {
     eventId: string,
     user: UserEntity,
     dto: GuardarPlantaDto,
-  ): Promise<{ mesas: any[]; version: number }> {
+  ): Promise<{ mesas: any[]; zonas: any[]; version: number }> {
     const event = await this.findOne(eventId, user);
     const versionAtual = event.floorPlanVersion ?? 0;
     if (dto.version !== versionAtual) {
+      const atual = lerFloorPlan(event.floorPlan);
       throw new ConflictException({
         message: 'A planta foi alterada noutro dispositivo',
-        mesas: Array.isArray(event.floorPlan) ? event.floorPlan : [],
+        mesas: atual.mesas,
+        zonas: atual.zonas,
         version: versionAtual,
       });
     }
-    event.floorPlan = dto.mesas;
+    const zonas = (dto.zonas ?? []).map(normalizarZonaPlanta).slice(0, 50);
+    event.floorPlan = { mesas: dto.mesas, zonas };
     event.floorPlanVersion = versionAtual + 1;
     await this.eventRepository.save(event);
-    return { mesas: event.floorPlan, version: event.floorPlanVersion };
+    return { mesas: event.floorPlan.mesas, zonas: event.floorPlan.zonas, version: event.floorPlanVersion };
   }
 
   async addUserRole(eventId: string, userId: string, role: string): Promise<EventUserEntity> {
