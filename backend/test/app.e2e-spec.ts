@@ -57,17 +57,21 @@ describe('App e2e (Postgres + Redis)', () => {
     }
   }, 30000);
 
-  async function criarUtilizadorTeste(email: string): Promise<{ email: string; password: string }> {
+  async function criarUtilizadorTeste(
+    email: string,
+    accessCode?: string,
+  ): Promise<{ email: string; password: string }> {
     const dataSource = app.get(DataSource);
     const userRepo = dataSource.getRepository(UserEntity);
     const password = 'password123';
+    const code = accessCode || Math.floor(100000 + Math.random() * 900000).toString();
     await userRepo.save(
       userRepo.create({
         email,
         password: await bcrypt.hash(password, 10),
         name: 'Teste E2E',
         role: 'client',
-        accessCode: '123456',
+        accessCode: code,
         isActive: true,
       }),
     );
@@ -97,7 +101,13 @@ describe('App e2e (Postgres + Redis)', () => {
     const totalRequests = Math.min(12, max + 2);
     const statuses: number[] = [];
     for (let i = 0; i < totalRequests; i++) {
-      statuses.push((await request(app.getHttpServer()).get('/api/health/live')).status);
+      statuses.push(
+        (
+          await request(app.getHttpServer())
+            .get('/api/health/live')
+            .set('X-Forwarded-For', '192.0.2.1')
+        ).status,
+      );
     }
     expect(statuses.every((s) => s === 200 || s === 429)).toBe(true);
     if (max < totalRequests) {
