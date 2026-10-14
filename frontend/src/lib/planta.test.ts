@@ -183,6 +183,17 @@ describe('mesasParaQrs', () => {
     expect(r.nomes).toEqual(['Mesa 1', 'Mesa 2']);
     expect(r.duplicados).toEqual(['Mesa 1', 'Mesa 2']);
   });
+
+  it('trata duplicados de forma case-insensitive', () => {
+    const r = mesasParaQrs([
+      mesa({ nome: 'Mesa 1', lugares: 8 }),
+      mesa({ nome: 'mesa 1', lugares: 4 }),
+      mesa({ nome: 'MESA 1', lugares: 2 }),
+    ]);
+    expect(r.nomes).toEqual(['Mesa 1']);
+    expect(r.lugares).toEqual({ 'Mesa 1': 8 });
+    expect(r.duplicados).toEqual(['Mesa 1']);
+  });
 });
 
 describe('parsePlanta', () => {

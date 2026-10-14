@@ -109,15 +109,17 @@ export function mesasParaQrs(mesas: Mesa[]): QrsDaPlanta {
   const nomes: string[] = [];
   const lugares: Record<string, number> = {};
   const duplicados: string[] = [];
-  const vistos = new Set<string>();
+  const porChave = new Map<string, string>();
   for (const mesa of mesas) {
     const nome = mesa.nome.trim();
     if (!nome) continue;
-    if (vistos.has(nome)) {
-      if (!duplicados.includes(nome)) duplicados.push(nome);
+    const chave = nome.toLowerCase();
+    const existente = porChave.get(chave);
+    if (existente !== undefined) {
+      if (!duplicados.includes(existente)) duplicados.push(existente);
       continue;
     }
-    vistos.add(nome);
+    porChave.set(chave, nome);
     nomes.push(nome);
     lugares[nome] = mesa.lugares;
   }
