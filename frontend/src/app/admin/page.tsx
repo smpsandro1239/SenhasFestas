@@ -124,6 +124,8 @@ function AdminPage() {
   const plantaRef = useRef<HTMLDivElement>(null);
   const plantaEstadoRef = useRef<Mesa[]>([]);
   const arrastoRef = useRef<{ id: string } | null>(null);
+  const undoSnapshotRef = useRef<Mesa[] | null>(null);
+  const undoTimerRef = useRef<number | null>(null);
   const [loteModo, setLoteModo] = useState<'intervalo' | 'nomes'>('intervalo');
   const [loteInicio, setLoteInicio] = useState('1');
   const [loteFim, setLoteFim] = useState('10');
@@ -141,7 +143,7 @@ function AdminPage() {
   const [plantaSel, setPlantaSel] = useState<string | null>(null);
   const [plantaNovoNome, setPlantaNovoNome] = useState('');
   const [plantaSnap, setPlantaSnap] = useState(true);
-  const [plantaOrganizar, setPlantaOrganizar] = useState(false);
+  const [undoEtiqueta, setUndoEtiqueta] = useState<string | null>(null);
   const [plantaLimpar, setPlantaLimpar] = useState(false);
   const [eventEditing, setEventEditing] = useState<any>(null);
   const [eventEditForm, setEventEditForm] = useState({ name: '', location: '', startDate: '', endDate: '' });
@@ -964,6 +966,12 @@ function AdminPage() {
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!lugaresPadraoRef.current) return;
     try {
       localStorage.setItem('sf:qr-lugares-padrao', String(loteLugaresPadrao));
@@ -1078,9 +1086,30 @@ function AdminPage() {
     } catch {}
   };
 
+  const oferecerUndo = (mesasAntes: Mesa[], etiqueta: string) => {
+    undoSnapshotRef.current = mesasAntes.slice();
+    setUndoEtiqueta(etiqueta);
+    if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = window.setTimeout(() => {
+      undoSnapshotRef.current = null;
+      setUndoEtiqueta(null);
+    }, 6000);
+  };
+
+  const desfazer = () => {
+    const snapshot = undoSnapshotRef.current;
+    if (!snapshot) return;
+    if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
+    undoSnapshotRef.current = null;
+    setUndoEtiqueta(null);
+    definirPlanta(snapshot);
+  };
+
   const autoOrganizarPlanta = () => {
-    definirPlanta(reorganizarMesas(plantaEstadoRef.current));
-    setPlantaOrganizar(false);
+    const antes = plantaEstadoRef.current;
+    if (antes.length < 2) return;
+    definirPlanta(reorganizarMesas(antes));
+    oferecerUndo(antes, 'Planta organizada');
   };
 
   const adicionarMesaPlanta = () => {
@@ -1114,6 +1143,9 @@ function AdminPage() {
   };
 
   const limparPlanta = () => {
+    if (plantaEstadoRef.current.length > 0) {
+      oferecerUndo(plantaEstadoRef.current, 'Planta limpa');
+    }
     definirPlanta([]);
     setPlantaSel(null);
     setPlantaLimpar(false);
@@ -1195,15 +1227,17 @@ function AdminPage() {
 
   const duplicadosAtuais = useMemo(() => mesasParaQrs(planta).duplicados, [planta]);
   const mesasDuplicadas = useMemo(
-    () => new Set(duplicadosAtuais.map((n) => n.trim().toLowerCase())),
+    () => new Set(duplicadosAtuais.map((d) => d.nome.trim().toLowerCase())),
     [duplicadosAtuais],
   );
   const eventoDoLote = useMemo(
     () => events.find((ev: any) => ev.shortCode === loteShortCode),
     [events, loteShortCode],
   );
-  const loteDeOutroEvento =
-    !!loteGerado && !!loteShortCode && !!qrEvento && loteShortCode !== qrEvento.shortCode;
+  const loteDeOutroEvento = useMemo(
+    () => !!loteGerado && !!loteShortCode && !!qrEvento && loteShortCode !== qrEvento.shortCode,
+    [loteGerado, loteShortCode, qrEvento],
+  );
 
   return (
     <>
@@ -3366,7 +3400,7 @@ function AdminPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setPlantaOrganizar(true)}
+                      onClick={autoOrganizarPlanta}
                       disabled={planta.length < 2}
                     >
                       Auto-organizar
@@ -3378,6 +3412,15 @@ function AdminPage() {
                       </span>
                     )}
                   </div>
+
+                  {undoEtiqueta && (
+                    <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2">
+                      <span className="text-xs text-zinc-300">{undoEtiqueta}.</span>
+                      <Button size="sm" variant="outline" onClick={desfazer}>
+                        Desfazer
+                      </Button>
+                    </div>
+                  )}
 
                   <div
                     ref={plantaRef}
@@ -3431,8 +3474,9 @@ function AdminPage() {
 
                   {duplicadosAtuais.length > 0 && (
                     <p className="mt-2 text-xs text-amber-400">
-                      Nomes de mesa repetidos: {duplicadosAtuais.join(', ')}. Só a primeira ocorrência
-                      de cada nome é usada nos QRs.
+                      Nomes de mesa repetidos:{' '}
+                      {duplicadosAtuais.map((d) => `«${d.nome}» aparece ${d.ocorrencias}×`).join('; ')}.
+                      Só a primeira ocorrência de cada nome é usada nos QRs.
                     </p>
                   )}
 
@@ -3563,7 +3607,7 @@ function AdminPage() {
         open={plantaLimpar}
         onClose={() => setPlantaLimpar(false)}
         title="Limpar planta"
-        description="Remove todas as mesas da planta deste evento. Esta ação não pode ser desfeita."
+        description="Remove todas as mesas da planta deste evento. Podes desfazer durante alguns segundos."
         footer={
           <>
             <Button variant="outline" onClick={() => setPlantaLimpar(false)}>
@@ -3572,21 +3616,6 @@ function AdminPage() {
             <Button variant="danger" onClick={limparPlanta}>
               Limpar tudo
             </Button>
-          </>
-        }
-      />
-
-      <Dialog
-        open={plantaOrganizar}
-        onClose={() => setPlantaOrganizar(false)}
-        title="Auto-organizar planta"
-        description="Reposiciona todas as mesas numa grelha uniforme. As posições atuais são substituídas."
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setPlantaOrganizar(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={autoOrganizarPlanta}>Reorganizar</Button>
           </>
         }
       />
