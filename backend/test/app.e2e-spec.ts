@@ -145,7 +145,13 @@ describe('App e2e (Postgres + Redis)', () => {
     const totalRequests = Math.min(12, max + 2);
     const statuses: number[] = [];
     for (let i = 0; i < totalRequests; i++) {
-      statuses.push((await request(app.getHttpServer()).get('/api/health/live')).status);
+      statuses.push(
+        (
+          await request(app.getHttpServer())
+            .get('/api/health/live')
+            .set('X-Forwarded-For', '192.0.2.1')
+        ).status,
+      );
     }
     expect(statuses.every((s) => s === 200 || s === 429)).toBe(true);
     if (max < totalRequests) {
