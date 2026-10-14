@@ -123,6 +123,7 @@ function AdminPage() {
   const lugaresPadraoRef = useRef(false);
   const plantaRef = useRef<HTMLDivElement>(null);
   const plantaEstadoRef = useRef<Mesa[]>([]);
+  const plantaCarregadaRef = useRef<string>('');
   const arrastoRef = useRef<{ id: string } | null>(null);
   const undoSnapshotRef = useRef<Mesa[] | null>(null);
   const undoTimerRef = useRef<number | null>(null);
@@ -1000,9 +1001,11 @@ function AdminPage() {
     const shortCode = events.find((ev: any) => ev.id === plantaEventoId)?.shortCode;
     if (!shortCode) return;
     const carregadas = parsePlanta(localStorage.getItem(`sf:planta:${shortCode}`));
+    plantaCarregadaRef.current = shortCode;
     plantaEstadoRef.current = carregadas;
     setPlanta(carregadas);
     setPlantaSel(null);
+    limparUndo();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plantaEventoId, events]);
 
@@ -1068,6 +1071,7 @@ function AdminPage() {
 
   const gravarPlanta = (mesas: Mesa[]) => {
     if (!plantaShortCode) return;
+    if (plantaCarregadaRef.current !== plantaShortCode) return;
     try {
       localStorage.setItem(`sf:planta:${plantaShortCode}`, JSON.stringify(mesas));
     } catch {}
