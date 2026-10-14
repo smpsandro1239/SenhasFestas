@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
 import { useCurrentEvent } from '@/lib/use-current-event';
 import { QRCodeCanvas, QRCodeSVG } from 'qrcode.react';
 import { AppShell } from '@/components/layout/app-shell';
@@ -141,7 +141,7 @@ function AdminPage() {
   const [plantaSel, setPlantaSel] = useState<string | null>(null);
   const [plantaNovoNome, setPlantaNovoNome] = useState('');
   const [plantaSnap, setPlantaSnap] = useState(true);
-  const [plantaAviso, setPlantaAviso] = useState('');
+  const [plantaOrganizar, setPlantaOrganizar] = useState(false);
   const [plantaLimpar, setPlantaLimpar] = useState(false);
   const [eventEditing, setEventEditing] = useState<any>(null);
   const [eventEditForm, setEventEditForm] = useState({ name: '', location: '', startDate: '', endDate: '' });
@@ -995,7 +995,6 @@ function AdminPage() {
     plantaEstadoRef.current = carregadas;
     setPlanta(carregadas);
     setPlantaSel(null);
-    setPlantaAviso('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plantaEventoId, events]);
 
@@ -1070,7 +1069,6 @@ function AdminPage() {
     plantaEstadoRef.current = mesas;
     setPlanta(mesas);
     gravarPlanta(mesas);
-    setPlantaAviso('');
   };
 
   const definirSnap = (valor: boolean) => {
@@ -1082,7 +1080,7 @@ function AdminPage() {
 
   const autoOrganizarPlanta = () => {
     definirPlanta(reorganizarMesas(plantaEstadoRef.current));
-    setPlantaSel(null);
+    setPlantaOrganizar(false);
   };
 
   const adicionarMesaPlanta = () => {
@@ -1118,7 +1116,6 @@ function AdminPage() {
   const limparPlanta = () => {
     definirPlanta([]);
     setPlantaSel(null);
-    setPlantaAviso('');
     setPlantaLimpar(false);
   };
 
@@ -1169,16 +1166,11 @@ function AdminPage() {
   };
 
   const gerarQrsDaPlanta = () => {
-    const { nomes, lugares, duplicados } = mesasParaQrs(plantaEstadoRef.current);
+    const { nomes, lugares } = mesasParaQrs(plantaEstadoRef.current);
     if (!nomes.length) return;
     setLoteGerado(nomes);
     setLoteLugares(lugares);
     setLoteShortCode(plantaShortCode);
-    setPlantaAviso(
-      duplicados.length
-        ? `${duplicados.length} nome(s) de mesa repetido(s) ignorado(s): ${duplicados.join(', ')}.`
-        : '',
-    );
     if (plantaShortCode) {
       try {
         localStorage.setItem(`sf:qr-lugares:${plantaShortCode}`, JSON.stringify(lugares));
@@ -1190,7 +1182,6 @@ function AdminPage() {
     setLoteGerado(null);
     setLoteLugares({});
     setLoteShortCode('');
-    setPlantaAviso('');
   };
 
   const descarregarQr = () => {
@@ -1202,8 +1193,15 @@ function AdminPage() {
     a.click();
   };
 
-  const mesasDuplicadas = new Set(mesasParaQrs(planta).duplicados);
-  const eventoDoLote = events.find((ev: any) => ev.shortCode === loteShortCode);
+  const duplicadosAtuais = useMemo(() => mesasParaQrs(planta).duplicados, [planta]);
+  const mesasDuplicadas = useMemo(
+    () => new Set(duplicadosAtuais.map((n) => n.trim().toLowerCase())),
+    [duplicadosAtuais],
+  );
+  const eventoDoLote = useMemo(
+    () => events.find((ev: any) => ev.shortCode === loteShortCode),
+    [events, loteShortCode],
+  );
   const loteDeOutroEvento =
     !!loteGerado && !!loteShortCode && !!qrEvento && loteShortCode !== qrEvento.shortCode;
 
@@ -3368,7 +3366,7 @@ function AdminPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={autoOrganizarPlanta}
+                      onClick={() => setPlantaOrganizar(true)}
                       disabled={planta.length < 2}
                     >
                       Auto-organizar
@@ -3396,7 +3394,7 @@ function AdminPage() {
                     )}
                     {planta.map((mesa) => {
                       const sel = plantaSel === mesa.id;
-                      const duplicada = mesasDuplicadas.has(mesa.nome.trim());
+                      const duplicada = mesasDuplicadas.has(mesa.nome.trim().toLowerCase());
                       return (
                         <div
                           key={mesa.id}
@@ -3430,6 +3428,13 @@ function AdminPage() {
                       );
                     })}
                   </div>
+
+                  {duplicadosAtuais.length > 0 && (
+                    <p className="mt-2 text-xs text-amber-400">
+                      Nomes de mesa repetidos: {duplicadosAtuais.join(', ')}. Só a primeira ocorrência
+                      de cada nome é usada nos QRs.
+                    </p>
+                  )}
 
                   {plantaSel &&
                     (() => {
@@ -3517,7 +3522,6 @@ function AdminPage() {
                         Ajustar à grelha
                       </label>
                     </div>
-                    {plantaAviso && <p className="mt-2 text-xs text-amber-400">{plantaAviso}</p>}
                     <p className="mt-2 text-xs text-zinc-400">
                       Gera os QRs das mesas da planta e compõe a folha A4 com o tamanho e a grelha acima.
                     </p>
@@ -3568,6 +3572,21 @@ function AdminPage() {
             <Button variant="danger" onClick={limparPlanta}>
               Limpar tudo
             </Button>
+          </>
+        }
+      />
+
+      <Dialog
+        open={plantaOrganizar}
+        onClose={() => setPlantaOrganizar(false)}
+        title="Auto-organizar planta"
+        description="Reposiciona todas as mesas numa grelha uniforme. As posições atuais são substituídas."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setPlantaOrganizar(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={autoOrganizarPlanta}>Reorganizar</Button>
           </>
         }
       />
