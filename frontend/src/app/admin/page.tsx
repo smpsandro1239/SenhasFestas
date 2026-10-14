@@ -44,6 +44,8 @@ import {
   decidirPlantaRemota,
   parsePlantaPendente,
   chavePlantaPendente,
+  descreverIdade,
+  pendentesOrfaos,
   type Mesa,
   type FormaMesa,
 } from '@/lib/planta';
@@ -158,9 +160,11 @@ function AdminPage() {
   const [plantaSnap, setPlantaSnap] = useState(true);
   const [undoEtiqueta, setUndoEtiqueta] = useState<string | null>(null);
   const [plantaSync, setPlantaSync] = useState<'' | 'saving' | 'saved' | 'erro' | 'offline'>('');
-  const [plantaConflito, setPlantaConflito] = useState<{ mesas: Mesa[]; version: number } | null>(
-    null,
-  );
+  const [plantaConflito, setPlantaConflito] = useState<{
+    mesas: Mesa[];
+    version: number;
+    pendenteTs?: number;
+  } | null>(null);
   const [plantaImportarDisponivel, setPlantaImportarDisponivel] = useState(false);
   const [plantaAviso, setPlantaAviso] = useState<string | null>(null);
   const [plantaLimpar, setPlantaLimpar] = useState(false);
@@ -1083,7 +1087,11 @@ function AdminPage() {
         }
         if (decisao === 'conflito-pendente') {
           // Há uma edição local por sincronizar: não sobrescrever; oferecer escolha explícita.
-          setPlantaConflito({ mesas: mesasRemotas, version: versaoServidor });
+          setPlantaConflito({
+            mesas: mesasRemotas,
+            version: versaoServidor,
+            pendenteTs: pendenteInicial?.ts ?? 0,
+          });
           setPlantaSync('');
           return;
         }
@@ -1103,6 +1111,16 @@ function AdminPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plantaEventoId, plantaShortCode]);
+
+  useEffect(() => {
+    if (events.length === 0) return;
+    try {
+      const validos = events.map((ev: any) => ev.shortCode).filter(Boolean);
+      for (const chave of pendentesOrfaos(Object.keys(localStorage), validos)) {
+        localStorage.removeItem(chave);
+      }
+    } catch {}
+  }, [events]);
 
   const gravarLugaresEvento = (mapa: Record<string, number>) => {
     const shortCode = qrEvento?.shortCode;
@@ -1192,7 +1210,10 @@ function AdminPage() {
     } catch (e) {
       // Persiste a edição por sincronizar para não se perder num reload/troca de evento.
       try {
-        localStorage.setItem(chavePlantaPendente(shortCode), JSON.stringify({ mesas, version }));
+        localStorage.setItem(
+          chavePlantaPendente(shortCode),
+          JSON.stringify({ mesas, ts: Date.now() }),
+        );
       } catch {}
       if (!ativo()) {
         // O evento já não está activo (flush ao trocar de evento): não podemos mostrar o
@@ -3671,8 +3692,11 @@ function AdminPage() {
                   {plantaConflito && (
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
                       <span className="text-xs text-amber-200">
-                        Há uma edição local por sincronizar, ou a planta mudou noutro
-                        dispositivo. Escolhe a versão a manter.
+                        Há uma edição local por sincronizar
+                        {plantaConflito.pendenteTs
+                          ? ` (${descreverIdade(plantaConflito.pendenteTs)})`
+                          : ''}
+                        , ou a planta mudou noutro dispositivo. Escolhe a versão a manter.
                       </span>
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" onClick={forcarGuardarPlanta}>

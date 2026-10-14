@@ -14,6 +14,9 @@ import {
   parsePlanta,
   decidirPlantaRemota,
   parsePlantaPendente,
+  descreverIdade,
+  pendentesOrfaos,
+  chavePlantaPendente,
   MAX_MESAS_PLANTA,
   type Mesa,
 } from './planta';
@@ -288,25 +291,25 @@ describe('parsePlantaPendente', () => {
   it('devolve null para json inválido, nulo ou sem mesas', () => {
     expect(parsePlantaPendente(null)).toBeNull();
     expect(parsePlantaPendente('{')).toBeNull();
-    expect(parsePlantaPendente('{"version":2}')).toBeNull();
+    expect(parsePlantaPendente('{"ts":2}')).toBeNull();
     expect(parsePlantaPendente('"x"')).toBeNull();
   });
 
-  it('lê mesas e version', () => {
+  it('lê mesas e ts', () => {
     const raw = JSON.stringify({
       mesas: [{ id: 'a', nome: 'Mesa 1', lugares: 4, x: 10, y: 20, forma: 'redonda' }],
-      version: 7,
+      ts: 1700000000000,
     });
     expect(parsePlantaPendente(raw)).toEqual({
       mesas: [{ id: 'a', nome: 'Mesa 1', lugares: 4, x: 10, y: 20, forma: 'redonda' }],
-      version: 7,
+      ts: 1700000000000,
     });
   });
 
-  it('normaliza version inválida para 0', () => {
-    expect(parsePlantaPendente(JSON.stringify({ mesas: [], version: -3 }))?.version).toBe(0);
-    expect(parsePlantaPendente(JSON.stringify({ mesas: [] }))?.version).toBe(0);
-    expect(parsePlantaPendente(JSON.stringify({ mesas: [], version: 2.9 }))?.version).toBe(2);
+  it('normaliza ts inválida para 0', () => {
+    expect(parsePlantaPendente(JSON.stringify({ mesas: [], ts: -3 }))?.ts).toBe(0);
+    expect(parsePlantaPendente(JSON.stringify({ mesas: [] }))?.ts).toBe(0);
+    expect(parsePlantaPendente(JSON.stringify({ mesas: [], ts: 'x' }))?.ts).toBe(0);
   });
 
   it('filtra mesas inválidas via parsePlanta', () => {
@@ -314,5 +317,39 @@ describe('parsePlantaPendente', () => {
     expect(parsePlantaPendente(raw)?.mesas).toEqual([
       { id: 'a', nome: 'Mesa 1', lugares: 0, x: 0, y: 0, forma: 'redonda' },
     ]);
+  });
+});
+
+describe('descreverIdade', () => {
+  const agora = 1_700_000_000_000;
+
+  it('devolve string vazia para ts inválida', () => {
+    expect(descreverIdade(0, agora)).toBe('');
+    expect(descreverIdade(NaN, agora)).toBe('');
+    expect(descreverIdade(-5, agora)).toBe('');
+  });
+
+  it('descreve instantes, minutos, horas e dias', () => {
+    expect(descreverIdade(agora - 5_000, agora)).toBe('há instantes');
+    expect(descreverIdade(agora - 5 * 60_000, agora)).toBe('há 5 min');
+    expect(descreverIdade(agora - 3 * 3_600_000, agora)).toBe('há 3 h');
+    expect(descreverIdade(agora - 2 * 86_400_000, agora)).toBe('há 2 dias');
+    expect(descreverIdade(agora - 86_400_000, agora)).toBe('há 1 dia');
+  });
+});
+
+describe('pendentesOrfaos', () => {
+  it('identifica chaves de eventos inexistentes', () => {
+    const chaves = [
+      chavePlantaPendente('festa'),
+      chavePlantaPendente('apagado'),
+      'sf:planta:festa',
+      'sf:qr-lugares:festa',
+    ];
+    expect(pendentesOrfaos(chaves, ['festa'])).toEqual([chavePlantaPendente('apagado')]);
+  });
+
+  it('devolve [] quando todas são válidas', () => {
+    expect(pendentesOrfaos([chavePlantaPendente('a')], ['a', 'b'])).toEqual([]);
   });
 });

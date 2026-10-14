@@ -186,11 +186,13 @@ export function decidirPlantaRemota(entrada: {
 
 export interface PlantaPendente {
   mesas: Mesa[];
-  version: number;
+  ts: number;
 }
 
+export const PREFIXO_PLANTA_PENDENTE = 'sf:planta-pendente:';
+
 export function chavePlantaPendente(shortCode: string): string {
-  return `sf:planta-pendente:${shortCode}`;
+  return `${PREFIXO_PLANTA_PENDENTE}${shortCode}`;
 }
 
 export function parsePlantaPendente(raw: string | null): PlantaPendente | null {
@@ -206,9 +208,27 @@ export function parsePlantaPendente(raw: string | null): PlantaPendente | null {
   if (!Array.isArray(d.mesas)) return null;
   return {
     mesas: parsePlanta(JSON.stringify(d.mesas)),
-    version:
-      typeof d.version === 'number' && Number.isFinite(d.version)
-        ? Math.max(0, Math.trunc(d.version))
-        : 0,
+    ts: typeof d.ts === 'number' && Number.isFinite(d.ts) ? Math.max(0, d.ts) : 0,
   };
+}
+
+export function descreverIdade(ts: number, agora: number = Date.now()): string {
+  if (!Number.isFinite(ts) || ts <= 0) return '';
+  const segundos = Math.max(0, Math.floor((agora - ts) / 1000));
+  if (segundos < 60) return 'há instantes';
+  const minutos = Math.floor(segundos / 60);
+  if (minutos < 60) return `há ${minutos} min`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) return `há ${horas} h`;
+  const dias = Math.floor(horas / 24);
+  return `há ${dias} dia${dias === 1 ? '' : 's'}`;
+}
+
+export function pendentesOrfaos(chaves: string[], shortCodesValidos: string[]): string[] {
+  const validos = new Set(shortCodesValidos);
+  return chaves.filter(
+    (chave) =>
+      chave.startsWith(PREFIXO_PLANTA_PENDENTE) &&
+      !validos.has(chave.slice(PREFIXO_PLANTA_PENDENTE.length)),
+  );
 }
