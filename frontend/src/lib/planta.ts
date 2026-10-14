@@ -76,10 +76,15 @@ export function atualizarMesa(
   return mesas.map((mesa) => (mesa.id === id ? { ...mesa, ...patch, id: mesa.id } : mesa));
 }
 
+export interface NomeDuplicado {
+  nome: string;
+  ocorrencias: number;
+}
+
 export interface QrsDaPlanta {
   nomes: string[];
   lugares: Record<string, number>;
-  duplicados: string[];
+  duplicados: NomeDuplicado[];
 }
 
 export function posicaoParaIndice(indice: number, total: number): { x: number; y: number } {
@@ -108,20 +113,23 @@ export function reorganizarMesas(mesas: Mesa[]): Mesa[] {
 export function mesasParaQrs(mesas: Mesa[]): QrsDaPlanta {
   const nomes: string[] = [];
   const lugares: Record<string, number> = {};
-  const duplicados: string[] = [];
-  const porChave = new Map<string, string>();
+  const porChave = new Map<string, { nome: string; ocorrencias: number }>();
   for (const mesa of mesas) {
     const nome = mesa.nome.trim();
     if (!nome) continue;
     const chave = nome.toLowerCase();
     const existente = porChave.get(chave);
-    if (existente !== undefined) {
-      if (!duplicados.includes(existente)) duplicados.push(existente);
+    if (existente) {
+      existente.ocorrencias += 1;
       continue;
     }
-    porChave.set(chave, nome);
+    porChave.set(chave, { nome, ocorrencias: 1 });
     nomes.push(nome);
     lugares[nome] = mesa.lugares;
+  }
+  const duplicados: NomeDuplicado[] = [];
+  for (const entrada of porChave.values()) {
+    if (entrada.ocorrencias > 1) duplicados.push({ ...entrada });
   }
   return { nomes, lugares, duplicados };
 }
