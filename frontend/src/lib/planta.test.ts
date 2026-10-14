@@ -337,24 +337,40 @@ describe('parsePlantaPendente', () => {
     });
     expect(parsePlantaPendente(raw)).toEqual({
       mesas: [{ id: 'a', nome: 'Mesa 1', lugares: 4, x: 10, y: 20, forma: 'redonda' }],
+      zonas: [],
       version: 5,
       ts: 1700000000000,
     });
   });
 
+  it('lê as zonas do pendente', () => {
+    const raw = JSON.stringify({
+      mesas: [],
+      zonas: [{ id: 'z1', nome: 'Esplanada', cor: '#10b981', x: 0, y: 0, w: 20, h: 20 }],
+      version: 1,
+      ts: 1,
+    });
+    expect(parsePlantaPendente(raw)?.zonas).toEqual([
+      { id: 'z1', nome: 'Esplanada', cor: '#10b981', x: 0, y: 0, w: 20, h: 20 },
+    ]);
+  });
+
   it('normaliza version e ts inválidas para 0', () => {
     expect(parsePlantaPendente(JSON.stringify({ mesas: [], version: -3, ts: -3 }))).toEqual({
       mesas: [],
+      zonas: [],
       version: 0,
       ts: 0,
     });
     expect(parsePlantaPendente(JSON.stringify({ mesas: [] }))).toEqual({
       mesas: [],
+      zonas: [],
       version: 0,
       ts: 0,
     });
     expect(parsePlantaPendente(JSON.stringify({ mesas: [], version: 2.9, ts: 'x' }))).toEqual({
       mesas: [],
+      zonas: [],
       version: 2,
       ts: 0,
     });

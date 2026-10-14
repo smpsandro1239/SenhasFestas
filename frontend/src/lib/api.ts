@@ -530,7 +530,7 @@ export async function getPlanta(eventId: string): Promise<any> {
 
 export async function guardarPlanta(
   eventId: string,
-  data: { mesas: any[]; version: number },
+  data: { mesas: any[]; zonas?: any[]; version: number },
 ): Promise<any> {
   return apiRequest(`/events/${eventId}/planta`, {
     method: 'PUT',

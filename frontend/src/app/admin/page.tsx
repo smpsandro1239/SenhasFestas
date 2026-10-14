@@ -30,7 +30,6 @@ import {
   MAX_LUGARES_MESA,
 } from '@/lib/qr-lote';
 import {
-  parsePlanta,
   criarMesa,
   moverMesa,
   adicionarMesa,
@@ -46,7 +45,18 @@ import {
   chavePlantaPendente,
   descreverIdade,
   pendentesOrfaos,
+  parseDocumentoPlanta,
+  corZona,
+  criarZona,
+  adicionarZona,
+  removerZona,
+  atualizarZona,
+  moverZona,
+  redimensionarZona,
+  CORES_ZONA,
+  MAX_ZONAS_PLANTA,
   type Mesa,
+  type Zona,
   type FormaMesa,
 } from '@/lib/planta';
 import { QrLoteControlos } from '@/components/admin/qr-lote-controlos';
@@ -128,9 +138,15 @@ function AdminPage() {
   const lugaresPadraoRef = useRef(false);
   const plantaRef = useRef<HTMLDivElement>(null);
   const plantaEstadoRef = useRef<Mesa[]>([]);
+  const plantaZonasEstadoRef = useRef<Zona[]>([]);
   const plantaCarregadaRef = useRef<string>('');
-  const arrastoRef = useRef<{ id: string } | null>(null);
-  const undoSnapshotRef = useRef<Mesa[] | null>(null);
+  const arrastoRef = useRef<
+    | { tipo: 'mesa'; id: string }
+    | { tipo: 'zona'; id: string; dx: number; dy: number }
+    | { tipo: 'zona-resize'; id: string }
+    | null
+  >(null);
+  const undoSnapshotRef = useRef<{ mesas: Mesa[]; zonas: Zona[] } | null>(null);
   const undoTimerRef = useRef<number | null>(null);
   const plantaVersionRef = useRef(0);
   const plantaSaveTimerRef = useRef<number | null>(null);
@@ -138,6 +154,7 @@ function AdminPage() {
     eventoId: string;
     shortCode: string;
     mesas: Mesa[];
+    zonas: Zona[];
     version: number;
   } | null>(null);
   const plantaEditadaDesdeCargaRef = useRef(false);
@@ -155,13 +172,16 @@ function AdminPage() {
   const [loteShortCode, setLoteShortCode] = useState('');
   const [plantaEventoId, setPlantaEventoId] = useState('');
   const [planta, setPlanta] = useState<Mesa[]>([]);
+  const [plantaZonas, setPlantaZonas] = useState<Zona[]>([]);
   const [plantaSel, setPlantaSel] = useState<string | null>(null);
+  const [zonaSel, setZonaSel] = useState<string | null>(null);
   const [plantaNovoNome, setPlantaNovoNome] = useState('');
   const [plantaSnap, setPlantaSnap] = useState(true);
   const [undoEtiqueta, setUndoEtiqueta] = useState<string | null>(null);
   const [plantaSync, setPlantaSync] = useState<'' | 'saving' | 'saved' | 'erro' | 'offline'>('');
   const [plantaConflito, setPlantaConflito] = useState<{
     mesas: Mesa[];
+    zonas: Zona[];
     version: number;
     pendenteTs?: number;
   } | null>(null);
@@ -1042,6 +1062,7 @@ function AdminPage() {
         pendente.eventoId,
         pendente.shortCode,
         pendente.mesas,
+        pendente.zonas,
         pendente.version,
       );
     }
@@ -1049,14 +1070,19 @@ function AdminPage() {
     try {
       pendenteInicial = parsePlantaPendente(localStorage.getItem(chavePlantaPendente(plantaShortCode)));
     } catch {}
-    const carregadas = pendenteInicial
-      ? pendenteInicial.mesas
-      : parsePlanta(localStorage.getItem(`sf:planta:${plantaShortCode}`));
+    const docInicial = pendenteInicial
+      ? { mesas: pendenteInicial.mesas, zonas: pendenteInicial.zonas }
+      : parseDocumentoPlanta(localStorage.getItem(`sf:planta:${plantaShortCode}`));
+    const carregadas = docInicial.mesas;
+    const zonasCarregadas = docInicial.zonas;
     plantaCarregadaRef.current = plantaShortCode;
     plantaEditadaDesdeCargaRef.current = false;
     plantaEstadoRef.current = carregadas;
+    plantaZonasEstadoRef.current = zonasCarregadas;
     setPlanta(carregadas);
+    setPlantaZonas(zonasCarregadas);
     setPlantaSel(null);
+    setZonaSel(null);
     limparUndo();
     setPlantaConflito(null);
     setPlantaImportarDisponivel(false);
@@ -1069,7 +1095,9 @@ function AdminPage() {
         const remoto = await getPlanta(eventoId);
         if (cancelado || plantaCarregadaRef.current !== plantaShortCode) return;
         const versaoServidor = typeof remoto?.version === 'number' ? remoto.version : 0;
-        const mesasRemotas: Mesa[] = Array.isArray(remoto?.mesas) ? remoto.mesas : [];
+        const docRemoto = parseDocumentoPlanta(JSON.stringify(remoto ?? null));
+        const mesasRemotas = docRemoto.mesas;
+        const zonasRemotas = docRemoto.zonas;
         // Actualiza a version base mesmo que não apliquemos as mesas, para o próximo save
         // não partir de uma version desactualizada.
         plantaVersionRef.current = versaoServidor;
@@ -1089,6 +1117,7 @@ function AdminPage() {
           // O servidor mudou desde a edição pendente: não sobrescrever; oferecer escolha.
           setPlantaConflito({
             mesas: mesasRemotas,
+            zonas: zonasRemotas,
             version: versaoServidor,
             pendenteTs: pendenteInicial?.ts ?? 0,
           });
@@ -1098,13 +1127,18 @@ function AdminPage() {
         if (decisao === 'retomar-pendente') {
           // O servidor está intacto desde a falha: reenvia a edição local sem banner.
           plantaEstadoRef.current = carregadas;
-          void enviarPlantaContexto(eventoId, plantaShortCode, carregadas, versaoServidor);
+          void enviarPlantaContexto(eventoId, plantaShortCode, carregadas, zonasCarregadas, versaoServidor);
           return;
         }
         plantaEstadoRef.current = mesasRemotas;
+        plantaZonasEstadoRef.current = zonasRemotas;
         setPlanta(mesasRemotas);
+        setPlantaZonas(zonasRemotas);
         try {
-          localStorage.setItem(`sf:planta:${plantaShortCode}`, JSON.stringify(mesasRemotas));
+          localStorage.setItem(
+            `sf:planta:${plantaShortCode}`,
+            JSON.stringify({ mesas: mesasRemotas, zonas: zonasRemotas }),
+          );
         } catch {}
       } catch {
         if (cancelado || plantaCarregadaRef.current !== plantaShortCode) return;
@@ -1189,7 +1223,10 @@ function AdminPage() {
     if (!plantaShortCode) return;
     if (plantaCarregadaRef.current !== plantaShortCode) return;
     try {
-      localStorage.setItem(`sf:planta:${plantaShortCode}`, JSON.stringify(mesas));
+      localStorage.setItem(
+        `sf:planta:${plantaShortCode}`,
+        JSON.stringify({ mesas, zonas: plantaZonasEstadoRef.current }),
+      );
     } catch {}
   };
 
@@ -1197,15 +1234,16 @@ function AdminPage() {
     eventoId: string,
     shortCode: string,
     mesas: Mesa[],
+    zonas: Zona[],
     version: number,
   ) => {
     if (!eventoId || !shortCode) return;
     const ativo = () => plantaCarregadaRef.current === shortCode;
     if (ativo()) setPlantaSync('saving');
     try {
-      const r = await guardarPlanta(eventoId, { mesas, version });
+      const r = await guardarPlanta(eventoId, { mesas, zonas, version });
       try {
-        localStorage.setItem(`sf:planta:${shortCode}`, JSON.stringify(mesas));
+        localStorage.setItem(`sf:planta:${shortCode}`, JSON.stringify({ mesas, zonas }));
         localStorage.removeItem(chavePlantaPendente(shortCode));
       } catch {}
       if (!ativo()) return;
@@ -1218,7 +1256,7 @@ function AdminPage() {
       try {
         localStorage.setItem(
           chavePlantaPendente(shortCode),
-          JSON.stringify({ mesas, version, ts: Date.now() }),
+          JSON.stringify({ mesas, zonas, version, ts: Date.now() }),
         );
       } catch {}
       if (!ativo()) {
@@ -1233,8 +1271,10 @@ function AdminPage() {
       }
       if (e instanceof ApiError && e.status === 409) {
         const body = e.body ?? {};
+        const doc = parseDocumentoPlanta(JSON.stringify(body));
         setPlantaConflito({
-          mesas: Array.isArray(body.mesas) ? body.mesas : [],
+          mesas: doc.mesas,
+          zonas: doc.zonas,
           version: typeof body.version === 'number' ? body.version : 0,
         });
         setPlantaSync('');
@@ -1246,7 +1286,13 @@ function AdminPage() {
 
   const enviarPlanta = (mesas: Mesa[]) => {
     if (plantaCarregadaRef.current !== plantaShortCode) return;
-    void enviarPlantaContexto(plantaEventoId, plantaShortCode, mesas, plantaVersionRef.current);
+    void enviarPlantaContexto(
+      plantaEventoId,
+      plantaShortCode,
+      mesas,
+      plantaZonasEstadoRef.current,
+      plantaVersionRef.current,
+    );
   };
 
   const agendarGuardarPlanta = (mesas: Mesa[]) => {
@@ -1256,6 +1302,7 @@ function AdminPage() {
       eventoId: plantaEventoId,
       shortCode: plantaShortCode,
       mesas,
+      zonas: plantaZonasEstadoRef.current,
       version: plantaVersionRef.current,
     };
     if (plantaSaveTimerRef.current) window.clearTimeout(plantaSaveTimerRef.current);
@@ -1268,6 +1315,7 @@ function AdminPage() {
           pendente.eventoId,
           pendente.shortCode,
           pendente.mesas,
+          pendente.zonas,
           pendente.version,
         );
       }
@@ -1279,12 +1327,18 @@ function AdminPage() {
     if (!conflito) return;
     plantaVersionRef.current = conflito.version;
     plantaEstadoRef.current = conflito.mesas;
+    plantaZonasEstadoRef.current = conflito.zonas;
     setPlanta(conflito.mesas);
+    setPlantaZonas(conflito.zonas);
     setPlantaSel(null);
+    setZonaSel(null);
     limparUndo();
     if (plantaShortCode) {
       try {
-        localStorage.setItem(`sf:planta:${plantaShortCode}`, JSON.stringify(conflito.mesas));
+        localStorage.setItem(
+          `sf:planta:${plantaShortCode}`,
+          JSON.stringify({ mesas: conflito.mesas, zonas: conflito.zonas }),
+        );
         localStorage.removeItem(chavePlantaPendente(plantaShortCode));
       } catch {}
     }
@@ -1309,8 +1363,11 @@ function AdminPage() {
     setPlantaImportarDisponivel(false);
     plantaVersionRef.current = 0;
     plantaEstadoRef.current = [];
+    plantaZonasEstadoRef.current = [];
     setPlanta([]);
+    setPlantaZonas([]);
     setPlantaSel(null);
+    setZonaSel(null);
     limparUndo();
     if (plantaShortCode) {
       try {
@@ -1327,13 +1384,23 @@ function AdminPage() {
     setUndoEtiqueta(null);
   };
 
-  const definirPlanta = (mesas: Mesa[]) => {
+  const definirDocumento = (mesas: Mesa[], zonas: Zona[]) => {
     plantaEstadoRef.current = mesas;
+    plantaZonasEstadoRef.current = zonas;
     plantaEditadaDesdeCargaRef.current = true;
     setPlanta(mesas);
+    setPlantaZonas(zonas);
     gravarPlanta(mesas);
     agendarGuardarPlanta(mesas);
     limparUndo();
+  };
+
+  const definirPlanta = (mesas: Mesa[]) => {
+    definirDocumento(mesas, plantaZonasEstadoRef.current);
+  };
+
+  const definirZonas = (zonas: Zona[]) => {
+    definirDocumento(plantaEstadoRef.current, zonas);
   };
 
   const definirSnap = (valor: boolean) => {
@@ -1343,9 +1410,9 @@ function AdminPage() {
     } catch {}
   };
 
-  const oferecerUndo = (mesasAntes: Mesa[], etiqueta: string) => {
+  const oferecerUndo = (snapshot: { mesas: Mesa[]; zonas: Zona[] }, etiqueta: string) => {
     limparUndo();
-    undoSnapshotRef.current = mesasAntes.slice();
+    undoSnapshotRef.current = { mesas: snapshot.mesas.slice(), zonas: snapshot.zonas.slice() };
     setUndoEtiqueta(etiqueta);
     undoTimerRef.current = window.setTimeout(() => {
       undoSnapshotRef.current = null;
@@ -1356,14 +1423,15 @@ function AdminPage() {
   const desfazer = () => {
     const snapshot = undoSnapshotRef.current;
     if (!snapshot) return;
-    definirPlanta(snapshot);
+    definirDocumento(snapshot.mesas, snapshot.zonas);
   };
 
   const autoOrganizarPlanta = () => {
     const antes = plantaEstadoRef.current;
     if (antes.length < 2) return;
+    const snapshot = { mesas: antes, zonas: plantaZonasEstadoRef.current };
     definirPlanta(reorganizarMesas(antes));
-    oferecerUndo(antes, 'Planta organizada');
+    oferecerUndo(snapshot, 'Planta organizada');
   };
 
   const adicionarMesaPlanta = () => {
@@ -1398,17 +1466,51 @@ function AdminPage() {
 
   const limparPlanta = () => {
     const antes = plantaEstadoRef.current;
+    const snapshot = { mesas: antes, zonas: plantaZonasEstadoRef.current };
     definirPlanta([]);
     setPlantaSel(null);
     setPlantaLimpar(false);
-    if (antes.length > 0) oferecerUndo(antes, 'Planta limpa');
+    if (antes.length > 0) oferecerUndo(snapshot, 'Planta limpa');
   };
 
   const onMesaPointerDown = (e: React.PointerEvent, mesa: Mesa) => {
     e.preventDefault();
     limparUndo();
     setPlantaSel(mesa.id);
-    arrastoRef.current = { id: mesa.id };
+    setZonaSel(null);
+    arrastoRef.current = { tipo: 'mesa', id: mesa.id };
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  const onZonaPointerDown = (e: React.PointerEvent, zona: Zona) => {
+    e.preventDefault();
+    limparUndo();
+    setZonaSel(zona.id);
+    setPlantaSel(null);
+    const rect = plantaRef.current?.getBoundingClientRect();
+    let dx = 0;
+    let dy = 0;
+    if (rect) {
+      const rawX = ((e.clientX - rect.left) / rect.width) * 100;
+      const rawY = ((e.clientY - rect.top) / rect.height) * 100;
+      dx = rawX - zona.x;
+      dy = rawY - zona.y;
+    }
+    arrastoRef.current = { tipo: 'zona', id: zona.id, dx, dy };
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  const onZonaResizePointerDown = (e: React.PointerEvent, zona: Zona) => {
+    e.preventDefault();
+    e.stopPropagation();
+    limparUndo();
+    setZonaSel(zona.id);
+    setPlantaSel(null);
+    arrastoRef.current = { tipo: 'zona-resize', id: zona.id };
     try {
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     } catch {}
@@ -1420,12 +1522,42 @@ function AdminPage() {
     if (!arrasto || !rect) return;
     const rawX = ((e.clientX - rect.left) / rect.width) * 100;
     const rawY = ((e.clientY - rect.top) / rect.height) * 100;
-    const x = plantaSnap ? encaixarGrelha(rawX) : normalizarPosicao(rawX);
-    const y = plantaSnap ? encaixarGrelha(rawY) : normalizarPosicao(rawY);
-    const next = moverMesa(plantaEstadoRef.current, arrasto.id, x, y);
-    plantaEstadoRef.current = next;
+    if (arrasto.tipo === 'mesa') {
+      const x = plantaSnap ? encaixarGrelha(rawX) : normalizarPosicao(rawX);
+      const y = plantaSnap ? encaixarGrelha(rawY) : normalizarPosicao(rawY);
+      const next = moverMesa(plantaEstadoRef.current, arrasto.id, x, y);
+      plantaEstadoRef.current = next;
+      plantaEditadaDesdeCargaRef.current = true;
+      setPlanta(next);
+      return;
+    }
+    if (arrasto.tipo === 'zona') {
+      const x = rawX - arrasto.dx;
+      const y = rawY - arrasto.dy;
+      const next = moverZona(
+        plantaZonasEstadoRef.current,
+        arrasto.id,
+        plantaSnap ? encaixarGrelha(x) : x,
+        plantaSnap ? encaixarGrelha(y) : y,
+      );
+      plantaZonasEstadoRef.current = next;
+      plantaEditadaDesdeCargaRef.current = true;
+      setPlantaZonas(next);
+      return;
+    }
+    const zona = plantaZonasEstadoRef.current.find((z) => z.id === arrasto.id);
+    if (!zona) return;
+    const w = rawX - zona.x;
+    const h = rawY - zona.y;
+    const next = redimensionarZona(
+      plantaZonasEstadoRef.current,
+      arrasto.id,
+      plantaSnap ? encaixarGrelha(w) : w,
+      plantaSnap ? encaixarGrelha(h) : h,
+    );
+    plantaZonasEstadoRef.current = next;
     plantaEditadaDesdeCargaRef.current = true;
-    setPlanta(next);
+    setPlantaZonas(next);
   };
 
   const onPlantaPointerUp = () => {
@@ -1453,6 +1585,32 @@ function AdminPage() {
     e.preventDefault();
     const atual = plantaEstadoRef.current.find((m) => m.id === mesa.id) ?? mesa;
     definirPlanta(moverMesa(plantaEstadoRef.current, mesa.id, atual.x + dx, atual.y + dy));
+  };
+
+  const adicionarZonaPlanta = () => {
+    if (!plantaEventoId) return;
+    const atual = plantaZonasEstadoRef.current;
+    if (atual.length >= MAX_ZONAS_PLANTA) return;
+    const zona = criarZona(`Zona ${atual.length + 1}`, corZona(atual.length));
+    definirZonas(adicionarZona(atual, zona));
+    setZonaSel(zona.id);
+    setPlantaSel(null);
+  };
+
+  const removerZonaPlanta = (id: string) => {
+    setZonaSel((atual) => (atual === id ? null : atual));
+    definirZonas(removerZona(plantaZonasEstadoRef.current, id));
+  };
+
+  const editarZonaPlanta = (id: string, patch: Partial<Omit<Zona, 'id'>>) => {
+    definirZonas(atualizarZona(plantaZonasEstadoRef.current, id, patch));
+  };
+
+  const onZonaKeyDown = (e: React.KeyboardEvent, zona: Zona) => {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      removerZonaPlanta(zona.id);
+    }
   };
 
   const gerarQrsDaPlanta = () => {
@@ -3659,6 +3817,14 @@ function AdminPage() {
                     </Button>
                     <Button
                       size="sm"
+                      variant="outline"
+                      onClick={adicionarZonaPlanta}
+                      disabled={!plantaEventoId || plantaZonas.length >= MAX_ZONAS_PLANTA}
+                    >
+                      Adicionar zona
+                    </Button>
+                    <Button
+                      size="sm"
                       variant="danger"
                       onClick={() => setPlantaLimpar(true)}
                       disabled={!planta.length}
@@ -3748,11 +3914,53 @@ function AdminPage() {
                     className="relative mt-4 w-full overflow-hidden rounded-2xl border border-border bg-zinc-900/40"
                     style={{ aspectRatio: '16 / 9', touchAction: 'none' }}
                   >
-                    {planta.length === 0 && (
+                    {planta.length === 0 && plantaZonas.length === 0 && (
                       <div className="absolute inset-0 flex items-center justify-center text-sm text-zinc-500">
                         Sem mesas. Adiciona a primeira acima.
                       </div>
                     )}
+                    {plantaZonas.map((zona) => {
+                      const sel = zonaSel === zona.id;
+                      return (
+                        <div
+                          key={zona.id}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Zona ${zona.nome}`}
+                          onPointerDown={(e) => onZonaPointerDown(e, zona)}
+                          onFocus={() => setZonaSel(zona.id)}
+                          onKeyDown={(e) => onZonaKeyDown(e, zona)}
+                          className={cn(
+                            'planta-zona absolute cursor-grab select-none rounded-lg outline-none',
+                            sel ? 'ring-2 ring-white/70' : 'hover:ring-1 hover:ring-white/30',
+                          )}
+                          style={{
+                            left: `${zona.x}%`,
+                            top: `${zona.y}%`,
+                            width: `${zona.w}%`,
+                            height: `${zona.h}%`,
+                            background: `${zona.cor}22`,
+                            border: `1px solid ${zona.cor}`,
+                            touchAction: 'none',
+                          }}
+                        >
+                          <span
+                            className="absolute left-1 top-1 max-w-full truncate px-1 text-[10px] font-medium"
+                            style={{ color: zona.cor }}
+                          >
+                            {zona.nome}
+                          </span>
+                          {sel && (
+                            <span
+                              role="presentation"
+                              aria-hidden="true"
+                              onPointerDown={(e) => onZonaResizePointerDown(e, zona)}
+                              className="absolute bottom-0 right-0 h-3 w-3 translate-x-1/3 translate-y-1/3 cursor-nwse-resize rounded-sm bg-white/80"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                     {planta.map((mesa) => {
                       const sel = plantaSel === mesa.id;
                       const duplicada = mesasDuplicadas.has(mesa.nome.trim().toLowerCase());
@@ -3843,6 +4051,49 @@ function AdminPage() {
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => removerMesaPlanta(mesa.id)}>
                             Remover
+                          </Button>
+                        </div>
+                      );
+                    })()}
+
+                  {zonaSel &&
+                    (() => {
+                      const zona = plantaZonas.find((z) => z.id === zonaSel);
+                      if (!zona) return null;
+                      return (
+                        <div className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-border p-3">
+                          <label className="block w-48">
+                            <span className="block text-sm font-medium text-zinc-400 mb-1.5">
+                              Nome da zona
+                            </span>
+                            <input
+                              value={zona.nome}
+                              onChange={(e) => editarZonaPlanta(zona.id, { nome: e.target.value })}
+                              className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                            />
+                          </label>
+                          <div className="block">
+                            <span className="block text-sm font-medium text-zinc-400 mb-1.5">Cor</span>
+                            <div className="flex gap-1.5">
+                              {CORES_ZONA.map((cor) => (
+                                <button
+                                  key={cor}
+                                  type="button"
+                                  aria-label={`Cor ${cor}`}
+                                  onClick={() => editarZonaPlanta(zona.id, { cor })}
+                                  className={cn(
+                                    'h-7 w-7 rounded-full border',
+                                    zona.cor === cor
+                                      ? 'border-transparent ring-2 ring-white/80'
+                                      : 'border-border',
+                                  )}
+                                  style={{ background: cor }}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                          <Button size="sm" variant="outline" onClick={() => removerZonaPlanta(zona.id)}>
+                            Remover zona
                           </Button>
                         </div>
                       );

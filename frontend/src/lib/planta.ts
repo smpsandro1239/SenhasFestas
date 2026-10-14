@@ -191,6 +191,7 @@ export function decidirPlantaRemota(entrada: {
 
 export interface PlantaPendente {
   mesas: Mesa[];
+  zonas: Zona[];
   version: number;
   ts: number;
 }
@@ -214,6 +215,9 @@ export function parsePlantaPendente(raw: string | null): PlantaPendente | null {
   if (!Array.isArray(d.mesas)) return null;
   return {
     mesas: parsePlanta(JSON.stringify(d.mesas)),
+    zonas: Array.isArray(d.zonas)
+      ? d.zonas.map(parseZona).filter((z): z is Zona => z !== null)
+      : [],
     version:
       typeof d.version === 'number' && Number.isFinite(d.version)
         ? Math.max(0, Math.trunc(d.version))
