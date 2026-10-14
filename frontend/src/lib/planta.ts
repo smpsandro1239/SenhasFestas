@@ -242,3 +242,294 @@ export function pendentesOrfaos(chaves: string[], shortCodesValidos: string[]): 
       !validos.has(chave.slice(PREFIXO_PLANTA_PENDENTE.length)),
   );
 }
+
+export interface Zona {
+  id: string;
+  nome: string;
+  cor: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface DocumentoPlanta {
+  mesas: Mesa[];
+  zonas: Zona[];
+}
+
+export interface GrupoZona {
+  zona: Zona | null;
+  mesas: Mesa[];
+}
+
+export const MAX_ZONAS_PLANTA = 50;
+export const ZONA_MIN = 5;
+export const CORES_ZONA = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+
+export function corZona(indice: number): string {
+  const i = Number.isFinite(indice) ? Math.abs(Math.trunc(indice)) : 0;
+  return CORES_ZONA[i % CORES_ZONA.length];
+}
+
+export function normalizarDimensao(valor: number): number {
+  if (!Number.isFinite(valor)) return ZONA_MIN;
+  if (valor < ZONA_MIN) return ZONA_MIN;
+  if (valor > 100) return 100;
+  return Math.round(valor * 100) / 100;
+}
+
+export function novoIdZona(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === 'function') {
+    try {
+      return `zona-${c.randomUUID()}`;
+    } catch {
+      // cai no fallback abaixo
+    }
+  }
+  return `zona-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function normalizarZona(zona: Zona): Zona {
+  const w = normalizarDimensao(zona.w);
+  const h = normalizarDimensao(zona.h);
+  return {
+    ...zona,
+    x: Math.min(normalizarPosicao(zona.x), 100 - w),
+    y: Math.min(normalizarPosicao(zona.y), 100 - h),
+    w,
+    h,
+  };
+}
+
+export function criarZona(
+  nome: string,
+  cor: string,
+  x = 20,
+  y = 20,
+  w = 30,
+  h = 30,
+): Zona {
+  return normalizarZona({ id: novoIdZona(), nome, cor, x, y, w, h });
+}
+
+export function adicionarZona(zonas: Zona[], zona: Zona): Zona[] {
+  if (zonas.length >= MAX_ZONAS_PLANTA) return zonas;
+  return [...zonas, zona];
+}
+
+export function removerZona(zonas: Zona[], id: string): Zona[] {
+  return zonas.filter((zona) => zona.id !== id);
+}
+
+export function atualizarZona(
+  zonas: Zona[],
+  id: string,
+  patch: Partial<Omit<Zona, 'id'>>,
+): Zona[] {
+  return zonas.map((zona) => (zona.id === id ? normalizarZona({ ...zona, ...patch, id: zona.id }) : zona));
+}
+
+export function moverZona(zonas: Zona[], id: string, x: number, y: number): Zona[] {
+  return zonas.map((zona) => {
+    if (zona.id !== id) return zona;
+    return {
+      ...zona,
+      x: Math.min(normalizarPosicao(x), 100 - zona.w),
+      y: Math.min(normalizarPosicao(y), 100 - zona.h),
+    };
+  });
+}
+
+export function redimensionarZona(zonas: Zona[], id: string, w: number, h: number): Zona[] {
+  return zonas.map((zona) => {
+    if (zona.id !== id) return zona;
+    const nw = normalizarDimensao(w);
+    const nh = normalizarDimensao(h);
+    return {
+      ...zona,
+      w: nw,
+      h: nh,
+      x: Math.min(zona.x, 100 - nw),
+      y: Math.min(zona.y, 100 - nh),
+    };
+  });
+}
+
+export function zonaContemPonto(zona: Zona, x: number, y: number): boolean {
+  return x >= zona.x && x <= zona.x + zona.w && y >= zona.y && y <= zona.y + zona.h;
+}
+
+/**
+ * Zona a que a mesa pertence: a primeira cujo rectângulo contém o centro da
+ * mesa. Em sobreposição vale a ordem de criação (a primeira da lista).
+ */
+export function zonaPrincipal(mesa: Mesa, zonas: Zona[]): Zona | null {
+  for (const zona of zonas) {
+    if (zonaContemPonto(zona, mesa.x, mesa.y)) return zona;
+  }
+  return null;
+}
+
+export function agruparMesasPorZona(mesas: Mesa[], zonas: Zona[]): GrupoZona[] {
+  const grupos: GrupoZona[] = zonas.map((zona) => ({ zona, mesas: [] }));
+  const semZona: Mesa[] = [];
+  for (const mesa of mesas) {
+    const zona = zonaPrincipal(mesa, zonas);
+    if (!zona) {
+      semZona.push(mesa);
+      continue;
+    }
+    const grupo = grupos.find((g) => g.zona?.id === zona.id);
+    if (grupo) grupo.mesas.push(mesa);
+    else semZona.push(mesa);
+  }
+  if (semZona.length > 0) grupos.push({ zona: null, mesas: semZona });
+  return grupos;
+}
+
+export function parseZona(item: unknown): Zona | null {
+  if (!item || typeof item !== 'object') return null;
+  const z = item as Record<string, unknown>;
+  if (typeof z.id !== 'string' || z.id.length === 0) return null;
+  return normalizarZona({
+    id: z.id,
+    nome: typeof z.nome === 'string' ? z.nome : '',
+    cor: typeof z.cor === 'string' && z.cor ? z.cor : corZona(0),
+    x: typeof z.x === 'number' ? z.x : 0,
+    y: typeof z.y === 'number' ? z.y : 0,
+    w: typeof z.w === 'number' ? z.w : ZONA_MIN,
+    h: typeof z.h === 'number' ? z.h : ZONA_MIN,
+  });
+}
+
+export function parseDocumentoPlanta(raw: string | null): DocumentoPlanta {
+  if (!raw) return { mesas: [], zonas: [] };
+  let dados: unknown;
+  try {
+    dados = JSON.parse(raw);
+  } catch {
+    return { mesas: [], zonas: [] };
+  }
+  if (Array.isArray(dados)) {
+    return { mesas: parsePlanta(JSON.stringify(dados)), zonas: [] };
+  }
+  if (!dados || typeof dados !== 'object') return { mesas: [], zonas: [] };
+  const d = dados as Record<string, unknown>;
+  return {
+    mesas: parsePlanta(JSON.stringify(Array.isArray(d.mesas) ? d.mesas : [])),
+    zonas: (Array.isArray(d.zonas) ? d.zonas : [])
+      .map(parseZona)
+      .filter((z): z is Zona => z !== null),
+  };
+}
+
+function preencherNoRect(
+  posicoes: Map<string, { x: number; y: number }>,
+  mesas: Mesa[],
+  rect: { x: number; y: number; w: number; h: number },
+): void {
+  const n = mesas.length;
+  if (n === 0) return;
+  const margem = Math.min(rect.w, rect.h) / 6;
+  const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const largura = Math.max(0, rect.w - margem * 2);
+  const altura = Math.max(0, rect.h - margem * 2);
+  mesas.forEach((mesa, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = cols === 1 ? rect.x + rect.w / 2 : rect.x + margem + (col * largura) / (cols - 1);
+    const y = rows === 1 ? rect.y + rect.h / 2 : rect.y + margem + (row * altura) / (rows - 1);
+    posicoes.set(mesa.id, { x: normalizarPosicao(x), y: normalizarPosicao(y) });
+  });
+}
+
+/**
+ * Auto-organiza as mesas: as que estão dentro de uma zona são distribuídas
+ * dentro dessa zona; as restantes (sem zona) ficam numa faixa no topo.
+ */
+export function reorganizarMesasComZonas(mesas: Mesa[], zonas: Zona[]): Mesa[] {
+  if (mesas.length === 0) return mesas;
+  const posicoes = new Map<string, { x: number; y: number }>();
+  const grupos = agruparMesasPorZona(mesas, zonas);
+  for (const grupo of grupos) {
+    if (!grupo.zona) continue;
+    preencherNoRect(posicoes, grupo.mesas, grupo.zona);
+  }
+  const semZona = mesas.filter((mesa) => !zonaPrincipal(mesa, zonas));
+  if (semZona.length > 0) {
+    const rows = Math.max(1, Math.ceil(semZona.length / Math.ceil(Math.sqrt(semZona.length))));
+    const altura = Math.min(40, rows * 8 + 4);
+    preencherNoRect(posicoes, semZona, { x: 0, y: 0, w: 100, h: altura });
+  }
+  return mesas.map((mesa) => {
+    const p = posicoes.get(mesa.id);
+    return p ? { ...mesa, x: p.x, y: p.y } : mesa;
+  });
+}
+
+export interface OpcoesSvgPlanta {
+  largura?: number;
+  altura?: number;
+  fundo?: string;
+}
+
+export function escaparXml(texto: string): string {
+  return texto
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
+ * Renderiza a planta como SVG standalone (para exportar a PNG no cliente).
+ * Coordenadas 0-100 são o viewBox; o texto é escapado.
+ */
+export function renderSvgPlanta(doc: DocumentoPlanta, opcoes: OpcoesSvgPlanta = {}): string {
+  const largura = opcoes.largura ?? 800;
+  const altura = opcoes.altura ?? 800;
+  const fundo = opcoes.fundo ?? '#0b0b0f';
+  const raio = 4;
+  const out: string[] = [];
+  out.push(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${largura}" height="${altura}" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">`,
+  );
+  out.push(`<rect x="0" y="0" width="100" height="100" fill="${escaparXml(fundo)}"/>`);
+  for (let i = 10; i < 100; i += 10) {
+    out.push(
+      `<line x1="${i}" y1="0" x2="${i}" y2="100" stroke="#27272a" stroke-width="0.2"/>`,
+      `<line x1="0" y1="${i}" x2="100" y2="${i}" stroke="#27272a" stroke-width="0.2"/>`,
+    );
+  }
+  for (const zona of doc.zonas) {
+    const cor = escaparXml(zona.cor);
+    out.push(
+      `<rect x="${zona.x}" y="${zona.y}" width="${zona.w}" height="${zona.h}" rx="1.5" fill="${cor}" fill-opacity="0.16" stroke="${cor}" stroke-width="0.6"/>`,
+    );
+    if (zona.nome) {
+      out.push(
+        `<text x="${zona.x + 1.5}" y="${zona.y + 3.5}" font-family="sans-serif" font-size="3" fill="${cor}">${escaparXml(zona.nome)}</text>`,
+      );
+    }
+  }
+  for (const mesa of doc.mesas) {
+    if (mesa.forma === 'quadrada') {
+      out.push(
+        `<rect x="${mesa.x - raio}" y="${mesa.y - raio * 0.85}" width="${raio * 2}" height="${raio * 1.7}" rx="0.8" fill="#52525b" stroke="#a1a1aa" stroke-width="0.4"/>`,
+      );
+    } else {
+      out.push(
+        `<circle cx="${mesa.x}" cy="${mesa.y}" r="${raio}" fill="#52525b" stroke="#a1a1aa" stroke-width="0.4"/>`,
+      );
+    }
+    out.push(
+      `<text x="${mesa.x}" y="${mesa.y + 1}" font-family="sans-serif" font-size="3" text-anchor="middle" fill="#fafafa">${escaparXml(mesa.nome)}</text>`,
+    );
+  }
+  out.push('</svg>');
+  return out.join('');
+}

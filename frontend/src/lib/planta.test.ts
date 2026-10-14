@@ -18,7 +18,27 @@ import {
   pendentesOrfaos,
   chavePlantaPendente,
   MAX_MESAS_PLANTA,
+  corZona,
+  normalizarDimensao,
+  normalizarZona,
+  criarZona,
+  adicionarZona,
+  removerZona,
+  atualizarZona,
+  moverZona,
+  redimensionarZona,
+  zonaContemPonto,
+  zonaPrincipal,
+  agruparMesasPorZona,
+  parseZona,
+  parseDocumentoPlanta,
+  reorganizarMesasComZonas,
+  renderSvgPlanta,
+  escaparXml,
+  MAX_ZONAS_PLANTA,
+  ZONA_MIN,
   type Mesa,
+  type Zona,
 } from './planta';
 
 function mesa(over: Partial<Mesa> = {}): Mesa {
@@ -381,3 +401,300 @@ describe('pendentesOrfaos', () => {
     expect(pendentesOrfaos([chavePlantaPendente('a')], ['a', 'b'])).toEqual([]);
   });
 });
+
+function zona(over: Partial<Zona> = {}): Zona {
+  return {
+    id: over.id ?? 'z1',
+    nome: over.nome ?? 'Zona 1',
+    cor: over.cor ?? '#3b82f6',
+    x: over.x ?? 10,
+    y: over.y ?? 10,
+    w: over.w ?? 30,
+    h: over.h ?? 30,
+  };
+}
+
+describe('corZona', () => {
+  it('devolve a primeira cor da paleta', () => {
+    expect(corZona(0)).toBe('#3b82f6');
+  });
+
+  it('cicla pela paleta', () => {
+    expect(corZona(6)).toBe(corZona(0));
+    expect(corZona(7)).toBe(corZona(1));
+  });
+
+  it('trata índices negativos ou inválidos', () => {
+    expect(corZona(-1)).toBe(corZona(1));
+    expect(corZona(NaN)).toBe(corZona(0));
+  });
+});
+
+describe('normalizarDimensao', () => {
+  it('impõe um mínimo de ZONA_MIN', () => {
+    expect(normalizarDimensao(3)).toBe(ZONA_MIN);
+    expect(normalizarDimensao(0)).toBe(ZONA_MIN);
+  });
+
+  it('limita a 100', () => {
+    expect(normalizarDimensao(140)).toBe(100);
+  });
+
+  it('valores inválidos dão ZONA_MIN', () => {
+    expect(normalizarDimensao(NaN)).toBe(ZONA_MIN);
+  });
+});
+
+describe('normalizarZona', () => {
+  it('empurra a zona para dentro dos limites', () => {
+    const z = normalizarZona(zona({ x: 99, y: 99, w: 30, h: 30 }));
+    expect(z.x).toBe(70);
+    expect(z.y).toBe(70);
+  });
+
+  it('impõe as dimensões mínimas', () => {
+    const z = normalizarZona(zona({ w: 1, h: 1 }));
+    expect(z.w).toBe(ZONA_MIN);
+    expect(z.h).toBe(ZONA_MIN);
+  });
+});
+
+describe('criarZona', () => {
+  it('cria com id e clampa a posição', () => {
+    const z = criarZona('Esplanada', '#fff', 90, 90, 30, 30);
+    expect(z.id).toMatch(/^zona-/);
+    expect(z.nome).toBe('Esplanada');
+    expect(z.x).toBe(70);
+    expect(z.y).toBe(70);
+  });
+});
+
+describe('adicionarZona / removerZona', () => {
+  it('adiciona zonas', () => {
+    expect(adicionarZona([], zona())).toHaveLength(1);
+  });
+
+  it('não passa de MAX_ZONAS_PLANTA', () => {
+    const cheias = Array.from({ length: MAX_ZONAS_PLANTA }, (_, i) => zona({ id: `z${i}` }));
+    expect(adicionarZona(cheias, zona({ id: 'nova' }))).toHaveLength(MAX_ZONAS_PLANTA);
+  });
+
+  it('remove pelo id', () => {
+    expect(removerZona([zona({ id: 'a' }), zona({ id: 'b' })], 'a')).toEqual([zona({ id: 'b' })]);
+  });
+});
+
+describe('atualizarZona', () => {
+  it('aplica o patch e normaliza', () => {
+    const [z] = atualizarZona([zona()], 'z1', { nome: 'Bar', x: 95, w: 30 });
+    expect(z.nome).toBe('Bar');
+    expect(z.x).toBe(70);
+  });
+
+  it('ignora zonas com outro id', () => {
+    expect(atualizarZona([zona({ id: 'z2' })], 'z1', { nome: 'X' })[0].nome).toBe('Zona 1');
+  });
+});
+
+describe('moverZona', () => {
+  it('limita a posição a 100 - dimensão', () => {
+    const [z] = moverZona([zona({ w: 30, h: 20 })], 'z1', 90, 95);
+    expect(z.x).toBe(70);
+    expect(z.y).toBe(80);
+  });
+
+  it('não deixa mover para negativo', () => {
+    const [z] = moverZona([zona()], 'z1', -10, -10);
+    expect(z.x).toBe(0);
+    expect(z.y).toBe(0);
+  });
+});
+
+describe('redimensionarZona', () => {
+  it('clampa a dimensão e reposiciona', () => {
+    const [z] = redimensionarZona([zona({ x: 70, y: 70, w: 30, h: 30 })], 'z1', 60, 60);
+    expect(z.w).toBe(60);
+    expect(z.h).toBe(60);
+    expect(z.x).toBe(40);
+    expect(z.y).toBe(40);
+  });
+
+  it('não deixa encolher abaixo do mínimo', () => {
+    const [z] = redimensionarZona([zona()], 'z1', 1, 1);
+    expect(z.w).toBe(ZONA_MIN);
+    expect(z.h).toBe(ZONA_MIN);
+  });
+});
+
+describe('zonaContemPonto', () => {
+  const z = zona({ x: 10, y: 10, w: 30, h: 30 });
+
+  it('inclui as fronteiras', () => {
+    expect(zonaContemPonto(z, 10, 10)).toBe(true);
+    expect(zonaContemPonto(z, 40, 40)).toBe(true);
+  });
+
+  it('exclui o exterior', () => {
+    expect(zonaContemPonto(z, 9, 10)).toBe(false);
+    expect(zonaContemPonto(z, 41, 41)).toBe(false);
+  });
+});
+
+describe('zonaPrincipal', () => {
+  it('devolve a primeira zona em sobreposição', () => {
+    const zonas = [
+      zona({ id: 'z1', x: 0, y: 0, w: 60, h: 60 }),
+      zona({ id: 'z2', x: 0, y: 0, w: 60, h: 60 }),
+    ];
+    expect(zonaPrincipal(mesa({ x: 30, y: 30 }), zonas)?.id).toBe('z1');
+  });
+
+  it('devolve null fora de qualquer zona', () => {
+    expect(zonaPrincipal(mesa({ x: 95, y: 95 }), [zona()])).toBeNull();
+  });
+});
+
+describe('agruparMesasPorZona', () => {
+  const zonas = [
+    zona({ id: 'z1', x: 0, y: 0, w: 50, h: 50 }),
+    zona({ id: 'z2', x: 50, y: 0, w: 50, h: 50 }),
+  ];
+
+  it('agrupa por zona e põe as restantes em "sem zona"', () => {
+    const ma = mesa({ id: 'a', x: 10, y: 10 });
+    const mb = mesa({ id: 'b', x: 75, y: 10 });
+    const mc = mesa({ id: 'c', x: 50, y: 90 });
+    const grupos = agruparMesasPorZona([ma, mb, mc], zonas);
+    expect(grupos.map((g) => g.zona?.id ?? null)).toEqual(['z1', 'z2', null]);
+    expect(grupos[0].mesas).toEqual([ma]);
+    expect(grupos[1].mesas).toEqual([mb]);
+    expect(grupos[2].mesas).toEqual([mc]);
+  });
+
+  it('não cria grupo "sem zona" quando todas têm zona', () => {
+    const grupos = agruparMesasPorZona([mesa({ id: 'a', x: 10, y: 10 })], zonas);
+    expect(grupos.map((g) => g.zona?.id)).toEqual(['z1', 'z2']);
+  });
+});
+
+describe('parseZona', () => {
+  it('rejeita itens inválidos', () => {
+    expect(parseZona(null)).toBeNull();
+    expect(parseZona({})).toBeNull();
+  });
+
+  it('preenche predefinições e clampa dimensões', () => {
+    const z = parseZona({ id: 'z1', w: 0 });
+    expect(z).not.toBeNull();
+    expect(z!.nome).toBe('');
+    expect(z!.cor).toBe(corZona(0));
+    expect(z!.w).toBe(ZONA_MIN);
+    expect(z!.h).toBe(ZONA_MIN);
+  });
+});
+
+describe('parseDocumentoPlanta', () => {
+  it('devolve vazio para entrada nula ou inválida', () => {
+    expect(parseDocumentoPlanta(null)).toEqual({ mesas: [], zonas: [] });
+    expect(parseDocumentoPlanta('{')).toEqual({ mesas: [], zonas: [] });
+  });
+
+  it('aceita o formato legado (array só de mesas)', () => {
+    const doc = parseDocumentoPlanta(JSON.stringify([mesa({ id: 'a' })]));
+    expect(doc.mesas).toHaveLength(1);
+    expect(doc.zonas).toEqual([]);
+  });
+
+  it('lê mesas e zonas de um documento', () => {
+    const doc = parseDocumentoPlanta(
+      JSON.stringify({ mesas: [mesa({ id: 'a' })], zonas: [{ id: 'z1', w: 20, h: 20 }] }),
+    );
+    expect(doc.mesas).toHaveLength(1);
+    expect(doc.zonas).toHaveLength(1);
+    expect(doc.zonas[0].id).toBe('z1');
+  });
+
+  it('ignora zonas inválidas', () => {
+    const doc = parseDocumentoPlanta(
+      JSON.stringify({ mesas: [], zonas: [{ sem: 'id' }, { id: 'z1' }] }),
+    );
+    expect(doc.zonas.map((z) => z.id)).toEqual(['z1']);
+  });
+
+  it('trata mesas não-array como vazio', () => {
+    expect(parseDocumentoPlanta(JSON.stringify({ mesas: 'x', zonas: [] })).mesas).toEqual([]);
+  });
+});
+
+describe('reorganizarMesasComZonas', () => {
+  const z = zona({ id: 'z1', x: 10, y: 10, w: 40, h: 40 });
+
+  it('coloca as mesas dentro da sua zona', () => {
+    const mesas = [
+      mesa({ id: 'a', x: 20, y: 20 }),
+      mesa({ id: 'b', x: 25, y: 25 }),
+      mesa({ id: 'c', x: 30, y: 30 }),
+    ];
+    const resultado = reorganizarMesasComZonas(mesas, [z]);
+    for (const m of resultado) {
+      expect(m.x).toBeGreaterThanOrEqual(z.x);
+      expect(m.x).toBeLessThanOrEqual(z.x + z.w);
+      expect(m.y).toBeGreaterThanOrEqual(z.y);
+      expect(m.y).toBeLessThanOrEqual(z.y + z.h);
+    }
+  });
+
+  it('põe as mesas sem zona numa faixa no topo', () => {
+    const mesas = [mesa({ id: 'a', x: 90, y: 90 }), mesa({ id: 'b', x: 95, y: 95 })];
+    const resultado = reorganizarMesasComZonas(mesas, [z]);
+    for (const m of resultado) expect(m.y).toBeLessThanOrEqual(40);
+  });
+
+  it('preserva id, ordem e número de mesas', () => {
+    const mesas = [mesa({ id: 'a', x: 20, y: 20 }), mesa({ id: 'b', x: 90, y: 90 })];
+    const resultado = reorganizarMesasComZonas(mesas, [z]);
+    expect(resultado).toHaveLength(2);
+    expect(resultado.map((m) => m.id)).toEqual(['a', 'b']);
+  });
+
+  it('devolve a lista intacta sem mesas', () => {
+    expect(reorganizarMesasComZonas([], [z])).toEqual([]);
+  });
+});
+
+describe('escaparXml', () => {
+  it('escapa os caracteres sensíveis', () => {
+    expect(escaparXml('<b>&"\'')).toBe('&lt;b&gt;&amp;&quot;&apos;');
+  });
+});
+
+describe('renderSvgPlanta', () => {
+  it('devolve um SVG com a zona e a mesa', () => {
+    const svg = renderSvgPlanta({
+      mesas: [mesa({ id: 'a', x: 20, y: 20, forma: 'redonda' })],
+      zonas: [zona({ id: 'z1', cor: '#10b981' })],
+    });
+    expect(svg.startsWith('<svg')).toBe(true);
+    expect(svg).toContain('</svg>');
+    expect(svg).toContain('#10b981');
+    expect(svg).toContain('<circle');
+  });
+
+  it('desenha as mesas quadradas como rectângulos', () => {
+    const svg = renderSvgPlanta({ mesas: [mesa({ id: 'a', forma: 'quadrada' })], zonas: [] });
+    expect(svg).toContain('<rect');
+    expect(svg).not.toContain('<circle');
+  });
+
+  it('escapa o texto das mesas e zonas', () => {
+    const svg = renderSvgPlanta({
+      mesas: [mesa({ id: 'a', nome: '<b>&"' })],
+      zonas: [zona({ id: 'z1', nome: '<script>' })],
+    });
+    expect(svg).not.toContain('<b>');
+    expect(svg).not.toContain('<script>');
+    expect(svg).toContain('&lt;b&gt;&amp;&quot;');
+    expect(svg).toContain('&lt;script&gt;');
+  });
+});
+
