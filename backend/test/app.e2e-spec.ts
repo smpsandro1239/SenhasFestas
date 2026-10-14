@@ -57,17 +57,21 @@ describe('App e2e (Postgres + Redis)', () => {
     }
   }, 30000);
 
-  async function criarUtilizadorTeste(email: string): Promise<{ email: string; password: string }> {
+  async function criarUtilizadorTeste(
+    email: string,
+    accessCode?: string,
+  ): Promise<{ email: string; password: string }> {
     const dataSource = app.get(DataSource);
     const userRepo = dataSource.getRepository(UserEntity);
     const password = 'password123';
+    const code = accessCode || Math.floor(100000 + Math.random() * 900000).toString();
     await userRepo.save(
       userRepo.create({
         email,
         password: await bcrypt.hash(password, 10),
         name: 'Teste E2E',
         role: 'client',
-        accessCode: '123456',
+        accessCode: code,
         isActive: true,
       }),
     );
@@ -90,19 +94,6 @@ describe('App e2e (Postgres + Redis)', () => {
       .get('/api/health/ready')
       .expect(200);
     expect(response.body.dependencies.database).toBe('healthy');
-  });
-
-  it('deve recusar rate limit com 429 (não 500)', async () => {
-    const max = parseInt(process.env.RATE_LIMIT_MAX || '100', 10);
-    const totalRequests = Math.min(12, max + 2);
-    const statuses: number[] = [];
-    for (let i = 0; i < totalRequests; i++) {
-      statuses.push((await request(app.getHttpServer()).get('/api/health/live')).status);
-    }
-    expect(statuses.every((s) => s === 200 || s === 429)).toBe(true);
-    if (max < totalRequests) {
-      expect(statuses).toContain(429);
-    }
   });
 
   it('refresh aceita cookie httpOnly sem body (contrato de sessão do frontend)', async () => {
@@ -147,5 +138,24 @@ describe('App e2e (Postgres + Redis)', () => {
       .post('/api/auth/refresh')
       .set('Content-Type', 'application/json')
       .expect(401);
+  });
+
+  it('deve recusar rate limit com 429 (não 500)', async () => {
+    const max = parseInt(process.env.RATE_LIMIT_MAX || '100', 10);
+    const totalRequests = Math.min(12, max + 2);
+    const statuses: number[] = [];
+    for (let i = 0; i < totalRequests; i++) {
+      statuses.push(
+        (
+          await request(app.getHttpServer())
+            .get('/api/health/live')
+            .set('X-Forwarded-For', '192.0.2.1')
+        ).status,
+      );
+    }
+    expect(statuses.every((s) => s === 200 || s === 429)).toBe(true);
+    if (max < totalRequests) {
+      expect(statuses).toContain(429);
+    }
   });
 });

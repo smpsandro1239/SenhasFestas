@@ -7,7 +7,7 @@ import { QRCodeService } from '../../services/qr-code.service';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { NotificationService } from '../../services/notification.service';
 import { MovementType } from '../../entities';
-import { centavos, soma, subtrai } from '../../common/money';
+import { centavos, subtrai } from '../../common/money';
 import { reembolsarSaldoEmTransacao, temSaldoParaReembolsar } from '../../common/order-refund';
 import { assertPodeMexerEmSaldo, assertSaldoUtilizavel } from '../../common/balance-guard';
 import { reporStockEmTransacao } from '../../common/order-stock';
