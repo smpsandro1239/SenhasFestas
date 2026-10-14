@@ -167,17 +167,22 @@ export type ResultadoPlantaRemota =
   | 'aplicar'
   | 'ignorar'
   | 'oferecer-importacao'
-  | 'conflito-pendente';
+  | 'conflito-pendente'
+  | 'retomar-pendente';
 
 export function decidirPlantaRemota(entrada: {
   editadoDesdeCarga: boolean;
-  temPendente: boolean;
+  pendenteVersao: number | null;
   versaoServidor: number;
   mesasServidor: number;
   mesasLocais: number;
 }): ResultadoPlantaRemota {
   if (entrada.editadoDesdeCarga) return 'ignorar';
-  if (entrada.temPendente) return 'conflito-pendente';
+  if (entrada.pendenteVersao !== null) {
+    return entrada.versaoServidor === entrada.pendenteVersao
+      ? 'retomar-pendente'
+      : 'conflito-pendente';
+  }
   if (entrada.versaoServidor === 0 && entrada.mesasServidor === 0 && entrada.mesasLocais > 0) {
     return 'oferecer-importacao';
   }
@@ -186,6 +191,7 @@ export function decidirPlantaRemota(entrada: {
 
 export interface PlantaPendente {
   mesas: Mesa[];
+  version: number;
   ts: number;
 }
 
@@ -208,6 +214,10 @@ export function parsePlantaPendente(raw: string | null): PlantaPendente | null {
   if (!Array.isArray(d.mesas)) return null;
   return {
     mesas: parsePlanta(JSON.stringify(d.mesas)),
+    version:
+      typeof d.version === 'number' && Number.isFinite(d.version)
+        ? Math.max(0, Math.trunc(d.version))
+        : 0,
     ts: typeof d.ts === 'number' && Number.isFinite(d.ts) ? Math.max(0, d.ts) : 0,
   };
 }

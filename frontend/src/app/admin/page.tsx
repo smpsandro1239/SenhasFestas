@@ -1075,7 +1075,7 @@ function AdminPage() {
         plantaVersionRef.current = versaoServidor;
         const decisao = decidirPlantaRemota({
           editadoDesdeCarga: plantaEditadaDesdeCargaRef.current,
-          temPendente: pendenteInicial !== null,
+          pendenteVersao: pendenteInicial ? pendenteInicial.version : null,
           versaoServidor,
           mesasServidor: mesasRemotas.length,
           mesasLocais: carregadas.length,
@@ -1086,13 +1086,19 @@ function AdminPage() {
           return;
         }
         if (decisao === 'conflito-pendente') {
-          // Há uma edição local por sincronizar: não sobrescrever; oferecer escolha explícita.
+          // O servidor mudou desde a edição pendente: não sobrescrever; oferecer escolha.
           setPlantaConflito({
             mesas: mesasRemotas,
             version: versaoServidor,
             pendenteTs: pendenteInicial?.ts ?? 0,
           });
           setPlantaSync('');
+          return;
+        }
+        if (decisao === 'retomar-pendente') {
+          // O servidor está intacto desde a falha: reenvia a edição local sem banner.
+          plantaEstadoRef.current = carregadas;
+          void enviarPlantaContexto(eventoId, plantaShortCode, carregadas, versaoServidor);
           return;
         }
         plantaEstadoRef.current = mesasRemotas;
@@ -1212,7 +1218,7 @@ function AdminPage() {
       try {
         localStorage.setItem(
           chavePlantaPendente(shortCode),
-          JSON.stringify({ mesas, ts: Date.now() }),
+          JSON.stringify({ mesas, version, ts: Date.now() }),
         );
       } catch {}
       if (!ativo()) {

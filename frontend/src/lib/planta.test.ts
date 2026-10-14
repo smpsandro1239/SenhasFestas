@@ -226,7 +226,7 @@ describe('parsePlanta', () => {
 describe('decidirPlantaRemota', () => {
   const base = {
     editadoDesdeCarga: false,
-    temPendente: false,
+    pendenteVersao: null as number | null,
     versaoServidor: 3,
     mesasServidor: 2,
     mesasLocais: 2,
@@ -236,21 +236,35 @@ describe('decidirPlantaRemota', () => {
     expect(decidirPlantaRemota({ ...base, editadoDesdeCarga: true })).toBe('ignorar');
   });
 
-  it('sinaliza conflito-pendente quando há edição por sincronizar', () => {
-    expect(decidirPlantaRemota({ ...base, temPendente: true })).toBe('conflito-pendente');
+  it('retoma automaticamente quando a versão do pendente coincide com o servidor', () => {
+    expect(decidirPlantaRemota({ ...base, pendenteVersao: 3, versaoServidor: 3 })).toBe(
+      'retomar-pendente',
+    );
   });
 
-  it('conflito-pendente tem prioridade sobre aplicar', () => {
+  it('sinaliza conflito-pendente quando o servidor mudou desde o pendente', () => {
+    expect(decidirPlantaRemota({ ...base, pendenteVersao: 3, versaoServidor: 5 })).toBe(
+      'conflito-pendente',
+    );
+  });
+
+  it('retomar-pendente tem prioridade sobre oferecer-importacao', () => {
     expect(
-      decidirPlantaRemota({ ...base, temPendente: true, versaoServidor: 5, mesasServidor: 4 }),
-    ).toBe('conflito-pendente');
+      decidirPlantaRemota({
+        ...base,
+        pendenteVersao: 0,
+        versaoServidor: 0,
+        mesasServidor: 0,
+        mesasLocais: 5,
+      }),
+    ).toBe('retomar-pendente');
   });
 
   it('conflito-pendente tem prioridade sobre oferecer-importacao', () => {
     expect(
       decidirPlantaRemota({
         ...base,
-        temPendente: true,
+        pendenteVersao: 4,
         versaoServidor: 0,
         mesasServidor: 0,
         mesasLocais: 5,
@@ -260,7 +274,7 @@ describe('decidirPlantaRemota', () => {
 
   it('a edição em curso tem prioridade sobre o pendente', () => {
     expect(
-      decidirPlantaRemota({ ...base, editadoDesdeCarga: true, temPendente: true }),
+      decidirPlantaRemota({ ...base, editadoDesdeCarga: true, pendenteVersao: 3 }),
     ).toBe('ignorar');
   });
 
@@ -295,21 +309,35 @@ describe('parsePlantaPendente', () => {
     expect(parsePlantaPendente('"x"')).toBeNull();
   });
 
-  it('lê mesas e ts', () => {
+  it('lê mesas, version e ts', () => {
     const raw = JSON.stringify({
       mesas: [{ id: 'a', nome: 'Mesa 1', lugares: 4, x: 10, y: 20, forma: 'redonda' }],
+      version: 5,
       ts: 1700000000000,
     });
     expect(parsePlantaPendente(raw)).toEqual({
       mesas: [{ id: 'a', nome: 'Mesa 1', lugares: 4, x: 10, y: 20, forma: 'redonda' }],
+      version: 5,
       ts: 1700000000000,
     });
   });
 
-  it('normaliza ts inválida para 0', () => {
-    expect(parsePlantaPendente(JSON.stringify({ mesas: [], ts: -3 }))?.ts).toBe(0);
-    expect(parsePlantaPendente(JSON.stringify({ mesas: [] }))?.ts).toBe(0);
-    expect(parsePlantaPendente(JSON.stringify({ mesas: [], ts: 'x' }))?.ts).toBe(0);
+  it('normaliza version e ts inválidas para 0', () => {
+    expect(parsePlantaPendente(JSON.stringify({ mesas: [], version: -3, ts: -3 }))).toEqual({
+      mesas: [],
+      version: 0,
+      ts: 0,
+    });
+    expect(parsePlantaPendente(JSON.stringify({ mesas: [] }))).toEqual({
+      mesas: [],
+      version: 0,
+      ts: 0,
+    });
+    expect(parsePlantaPendente(JSON.stringify({ mesas: [], version: 2.9, ts: 'x' }))).toEqual({
+      mesas: [],
+      version: 2,
+      ts: 0,
+    });
   });
 
   it('filtra mesas inválidas via parsePlanta', () => {
