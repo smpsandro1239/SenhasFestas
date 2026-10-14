@@ -14,11 +14,13 @@ export function getAccessToken(): string | null {
 
 export class ApiError extends Error {
   status: number;
+  body?: any;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, body?: any) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -44,12 +46,12 @@ export function destroySession(redirect = true): void {
   }
 }
 
-async function readErrorBody(response: Response): Promise<string | null> {
+async function readErrorBody(response: Response): Promise<{ message: string | null; body: any }> {
   try {
     const body = (await response.json()) as { message?: string };
-    return body?.message ?? null;
+    return { message: body?.message ?? null, body };
   } catch {
-    return null;
+    return { message: null, body: null };
   }
 }
 
@@ -159,8 +161,8 @@ async function request<T>(
   }
 
   if (!response.ok) {
-    const message = (await readErrorBody(response)) || `Erro na requisição (${response.status})`;
-    throw new ApiError(message, response.status);
+    const { message, body } = await readErrorBody(response);
+    throw new ApiError(message || `Erro na requisição (${response.status})`, response.status, body);
   }
 
   if (response.status === 204) {
@@ -325,8 +327,8 @@ export async function exportOrdensCsv(params?: any): Promise<void> {
     throw new ApiError('Sessão expirada. Inicie sessão novamente.', 401);
   }
   if (!resp.ok) {
-    const msg = (await readErrorBody(resp)) || `Erro na exportação (${resp.status})`;
-    throw new ApiError(msg, resp.status);
+    const { message } = await readErrorBody(resp);
+    throw new ApiError(message || `Erro na exportação (${resp.status})`, resp.status);
   }
   const blob = await resp.blob();
   const url = URL.createObjectURL(blob);
@@ -518,6 +520,20 @@ export async function getEventSettings(eventId: string): Promise<any> {
 export async function updateEventSettings(eventId: string, data: any): Promise<any> {
   return apiRequest(`/events/${eventId}/settings`, {
     method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getPlanta(eventId: string): Promise<any> {
+  return apiRequest(`/events/${eventId}/planta`);
+}
+
+export async function guardarPlanta(
+  eventId: string,
+  data: { mesas: any[]; version: number },
+): Promise<any> {
+  return apiRequest(`/events/${eventId}/planta`, {
+    method: 'PUT',
     body: JSON.stringify(data),
   });
 }

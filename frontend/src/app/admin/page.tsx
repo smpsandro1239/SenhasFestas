@@ -16,7 +16,7 @@ import { Alert } from '@/components/ui/alert';
 import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon, PencilIcon, TrashIcon, CopyIcon, WalletIcon } from '@/components/ui/icons';
 import { Dialog } from '@/components/ui/dialog';
 import { deveAvisarSessao, marcarAvisoSessao } from '@/lib/saldo-aviso';
-import { importProducts, getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, ajustarStock, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances, getReports, extendBalance, unarchiveBalance, markBalanceNotified } from '@/lib/api';
+import { importProducts, getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, ajustarStock, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances, getReports, extendBalance, unarchiveBalance, markBalanceNotified, getPlanta, guardarPlanta, ApiError } from '@/lib/api';
 import { stockBaixo, esgotado } from '@/lib/stock';
 import { downloadTextFile } from '@/lib/download';
 import { montarUrlMesa } from '@/lib/mesa-qr';
@@ -127,6 +127,8 @@ function AdminPage() {
   const arrastoRef = useRef<{ id: string } | null>(null);
   const undoSnapshotRef = useRef<Mesa[] | null>(null);
   const undoTimerRef = useRef<number | null>(null);
+  const plantaVersionRef = useRef(0);
+  const plantaSaveTimerRef = useRef<number | null>(null);
   const [loteModo, setLoteModo] = useState<'intervalo' | 'nomes'>('intervalo');
   const [loteInicio, setLoteInicio] = useState('1');
   const [loteFim, setLoteFim] = useState('10');
@@ -145,6 +147,11 @@ function AdminPage() {
   const [plantaNovoNome, setPlantaNovoNome] = useState('');
   const [plantaSnap, setPlantaSnap] = useState(true);
   const [undoEtiqueta, setUndoEtiqueta] = useState<string | null>(null);
+  const [plantaSync, setPlantaSync] = useState<'' | 'saving' | 'saved' | 'erro' | 'offline'>('');
+  const [plantaConflito, setPlantaConflito] = useState<{ mesas: Mesa[]; version: number } | null>(
+    null,
+  );
+  const [plantaImportarDisponivel, setPlantaImportarDisponivel] = useState(false);
   const [plantaLimpar, setPlantaLimpar] = useState(false);
   const [eventEditing, setEventEditing] = useState<any>(null);
   const [eventEditForm, setEventEditForm] = useState({ name: '', location: '', startDate: '', endDate: '' });
@@ -969,8 +976,15 @@ function AdminPage() {
   useEffect(() => {
     return () => {
       if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
+      if (plantaSaveTimerRef.current) window.clearTimeout(plantaSaveTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (plantaSync !== 'saved') return;
+    const t = window.setTimeout(() => setPlantaSync(''), 1500);
+    return () => window.clearTimeout(t);
+  }, [plantaSync]);
 
   useEffect(() => {
     if (!lugaresPadraoRef.current) return;
@@ -1000,12 +1014,40 @@ function AdminPage() {
     if (!plantaEventoId) return;
     const shortCode = events.find((ev: any) => ev.id === plantaEventoId)?.shortCode;
     if (!shortCode) return;
+    if (plantaSaveTimerRef.current) window.clearTimeout(plantaSaveTimerRef.current);
     const carregadas = parsePlanta(localStorage.getItem(`sf:planta:${shortCode}`));
     plantaCarregadaRef.current = shortCode;
     plantaEstadoRef.current = carregadas;
     setPlanta(carregadas);
     setPlantaSel(null);
     limparUndo();
+    setPlantaConflito(null);
+    setPlantaImportarDisponivel(false);
+    setPlantaSync('');
+    let cancelado = false;
+    void (async () => {
+      try {
+        const remoto = await getPlanta(plantaEventoId);
+        if (cancelado) return;
+        const version = typeof remoto?.version === 'number' ? remoto.version : 0;
+        const mesasRemotas: Mesa[] = Array.isArray(remoto?.mesas) ? remoto.mesas : [];
+        plantaVersionRef.current = version;
+        if (version === 0 && mesasRemotas.length === 0 && carregadas.length > 0) {
+          // Servidor vazio + planta local: oferece importação em vez de apagar.
+          setPlantaImportarDisponivel(true);
+          return;
+        }
+        plantaEstadoRef.current = mesasRemotas;
+        setPlanta(mesasRemotas);
+        try {
+          localStorage.setItem(`sf:planta:${shortCode}`, JSON.stringify(mesasRemotas));
+        } catch {}
+      } catch {
+        if (cancelado) return;
+        // Offline ou servidor indisponível: mantém a cópia local.
+        setPlantaSync('offline');
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plantaEventoId, events]);
 
@@ -1077,6 +1119,88 @@ function AdminPage() {
     } catch {}
   };
 
+  const enviarPlanta = async (mesas: Mesa[]) => {
+    const eventoId = plantaEventoId;
+    const shortCode = plantaShortCode;
+    if (!eventoId || !shortCode) return;
+    if (plantaCarregadaRef.current !== shortCode) return;
+    setPlantaSync('saving');
+    try {
+      const r = await guardarPlanta(eventoId, { mesas, version: plantaVersionRef.current });
+      plantaVersionRef.current =
+        typeof r?.version === 'number' ? r.version : plantaVersionRef.current + 1;
+      try {
+        localStorage.setItem(`sf:planta:${shortCode}`, JSON.stringify(mesas));
+      } catch {}
+      setPlantaConflito(null);
+      setPlantaSync('saved');
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        const body = e.body ?? {};
+        setPlantaConflito({
+          mesas: Array.isArray(body.mesas) ? body.mesas : [],
+          version: typeof body.version === 'number' ? body.version : 0,
+        });
+        setPlantaSync('');
+      } else {
+        setPlantaSync('erro');
+      }
+    }
+  };
+
+  const agendarGuardarPlanta = (mesas: Mesa[]) => {
+    if (!plantaEventoId || !plantaShortCode) return;
+    if (plantaCarregadaRef.current !== plantaShortCode) return;
+    if (plantaSaveTimerRef.current) window.clearTimeout(plantaSaveTimerRef.current);
+    plantaSaveTimerRef.current = window.setTimeout(() => {
+      void enviarPlanta(mesas);
+    }, 800);
+  };
+
+  const recarregarPlantaRemota = () => {
+    const conflito = plantaConflito;
+    if (!conflito) return;
+    plantaVersionRef.current = conflito.version;
+    plantaEstadoRef.current = conflito.mesas;
+    setPlanta(conflito.mesas);
+    setPlantaSel(null);
+    limparUndo();
+    if (plantaShortCode) {
+      try {
+        localStorage.setItem(`sf:planta:${plantaShortCode}`, JSON.stringify(conflito.mesas));
+      } catch {}
+    }
+    setPlantaConflito(null);
+    setPlantaSync('');
+  };
+
+  const forcarGuardarPlanta = () => {
+    const conflito = plantaConflito;
+    if (!conflito) return;
+    plantaVersionRef.current = conflito.version;
+    setPlantaConflito(null);
+    void enviarPlanta(plantaEstadoRef.current);
+  };
+
+  const importarPlantaLocal = () => {
+    setPlantaImportarDisponivel(false);
+    void enviarPlanta(plantaEstadoRef.current);
+  };
+
+  const descartarPlantaLocal = () => {
+    setPlantaImportarDisponivel(false);
+    plantaVersionRef.current = 0;
+    plantaEstadoRef.current = [];
+    setPlanta([]);
+    setPlantaSel(null);
+    limparUndo();
+    if (plantaShortCode) {
+      try {
+        localStorage.removeItem(`sf:planta:${plantaShortCode}`);
+      } catch {}
+    }
+  };
+
   const limparUndo = () => {
     if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
     undoTimerRef.current = null;
@@ -1088,6 +1212,7 @@ function AdminPage() {
     plantaEstadoRef.current = mesas;
     setPlanta(mesas);
     gravarPlanta(mesas);
+    agendarGuardarPlanta(mesas);
     limparUndo();
   };
 
@@ -1183,7 +1308,10 @@ function AdminPage() {
   };
 
   const onPlantaPointerUp = () => {
-    if (arrastoRef.current) gravarPlanta(plantaEstadoRef.current);
+    if (arrastoRef.current) {
+      gravarPlanta(plantaEstadoRef.current);
+      agendarGuardarPlanta(plantaEstadoRef.current);
+    }
     arrastoRef.current = null;
   };
 
@@ -3363,7 +3491,8 @@ function AdminPage() {
             <Card>
               <h2 className="text-xl font-bold text-zinc-50 mb-2">Planta das mesas</h2>
               <p className="text-zinc-400 mb-6 text-sm">
-                Arrasta as mesas para desenhar a disposição do espaço. Guardado neste dispositivo.
+                Arrasta as mesas para desenhar a disposição do espaço. Guardado automaticamente no
+                servidor, com cópia local para uso offline.
               </p>
 
               {events.length === 0 ? (
@@ -3420,7 +3549,53 @@ function AdminPage() {
                         {planta.reduce((s, m) => s + normalizarLugares(m.lugares), 0)} lugares
                       </span>
                     )}
+                    {plantaSync === 'saving' && (
+                      <span className="text-xs text-zinc-400">A guardar…</span>
+                    )}
+                    {plantaSync === 'saved' && (
+                      <span className="text-xs text-emerald-400">Guardado</span>
+                    )}
+                    {plantaSync === 'erro' && (
+                      <span className="text-xs text-amber-400">
+                        Sem ligação — planta só neste dispositivo
+                      </span>
+                    )}
+                    {plantaSync === 'offline' && (
+                      <span className="text-xs text-zinc-400">Modo offline</span>
+                    )}
                   </div>
+
+                  {plantaConflito && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                      <span className="text-xs text-amber-200">
+                        A planta foi alterada noutro dispositivo. Escolhe qual versão manter.
+                      </span>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={forcarGuardarPlanta}>
+                          Manter a minha
+                        </Button>
+                        <Button size="sm" onClick={recarregarPlantaRemota}>
+                          Recarregar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {plantaImportarDisponivel && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand/40 bg-brand/10 px-3 py-2">
+                      <span className="text-xs text-zinc-200">
+                        Tens uma planta local para este evento. Importar para o servidor?
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" onClick={importarPlantaLocal}>
+                          Importar
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={descartarPlantaLocal}>
+                          Descartar local
+                        </Button>
+                      </div>
+                    </div>
+                  )}
 
                   {undoEtiqueta && (
                     <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2">
