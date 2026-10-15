@@ -1,0 +1,4 @@
+## 2026-10-15 - Timing-Safe Secret Verification via Fixed-Length Hashing
+**Vulnerability:** Hand-rolled character-by-character string comparisons for secret tokens (such as cron authorization keys) can be vulnerable to subtle timing attacks or edge cases in length validation. Direct use of `crypto.timingSafeEqual` with raw inputs throws a `RangeError` if byte lengths differ.
+**Learning:** Computing SHA-256 digests (`crypto.createHash('sha256').update(str).digest()`) for strings before passing them to `crypto.timingSafeEqual` produces fixed-length 32-byte buffers. This allows constant-time secret comparison without throwing exceptions when input lengths vary.
+**Prevention:** Always convert variable-length secrets to fixed-length cryptographic hashes (e.g. SHA-256 digests) prior to constant-time comparisons with `crypto.timingSafeEqual`.
