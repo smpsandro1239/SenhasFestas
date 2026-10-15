@@ -128,6 +128,40 @@ imagem, em 4 commits.
 
 ---
 
+---
+
+## 2026-10-11 — Melhorias #1–#10 + dropdown
+
+**Objectivo**: entregar o conjunto de melhorias de UX/operação (#1 a #10).
+
+**Feito**
+- Backend #1/#3/#6/#8 + auditoria.
+- POS #4/#5/#7, caixa #8, cozinha (stock baixo + rejeitar), dropdown qr-order.
+- `color-scheme: dark`, popup de `<select>` em dark.
+
+**Decisões tomadas**
+- Helper `reporStockEmTransacao` partilhado entre `order.service` e `kitchen.service`.
+- Transferência de saldo: `CANCEL` na origem, `LOAD` no destino, numa transação.
+- `color-scheme: dark` global em `globals.css`.
+
+**Commits**
+- `7179aea` refactor(backend): helper partilhado reporStockEmTransacao
+- `e305d64` feat(catalog): ajuste manual de stock com registo de auditoria
+- `97e213d` feat(balance): transferencia de saldo entre eventos + auditoria
+- `eb7bb78` feat(frontend): helpers de ajuste de stock e transferencia de saldo
+- `be66e90` feat(admin): reabastecer stock rapido, acerto manual e alerta de stock baixo
+- `5228778` feat(cozinha): alerta de stock baixo e rejeicao de pedidos repoe stock
+- `4518c3c` feat(pos): mesas, pagamento em dinheiro com troco e pedidos em aberto
+- `f215455` feat(caixa): transferir saldo entre eventos
+- `4100efe` fix(styles): popup nativa de select em dark
+- `dd07d3d` fix(select): dropdown qr-order
+- `d3b6d32` feat: dropdown evento custom
+
+**Pendente**
+- Auditoria sem `before` — registado como dívida #1 no `PLAN.md`.
+
+---
+
 ## Template para nova entrada
 
 ```markdown
