@@ -122,6 +122,10 @@ mesa e relatórios financeiros.
 10. **Dimensões reais (metros)** — impressão à escala.
 11. **Multi-planta** — salão + esplanada por evento.
 12. **Planta em realtime (WebSocket)** — em vez de polling + PUT manual.
+13. **Bump periódico do `chrome-devtools-mcp`** — está pinado em `1.11.0` (o
+    `@latest` dava superfície de ferramentas não-determinística: 30 numa execução,
+    32 noutra). O pin exige bump manual para receber correcções de bugs e
+    ferramentas novas; sem isto a versão fica presa.
 
 ---
 
