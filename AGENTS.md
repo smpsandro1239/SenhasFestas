@@ -10,6 +10,8 @@ Antes de qualquer trabalho neste repositório, lê:
 
 No fim de cada batch: actualiza `PROGRESS.md`; se houver dívida nova, actualiza `PLAN.md`.
 
+As revisões de batch seguem o formato de quatro secções de `REVIEW.md` (o que está bem / a verificar / a acrescentar / veredicto) e aplicam os gates obrigatórios definidos em `REVIEW.md`.
+
 ## Regras de processo
 
 - **Nunca encadear `git commit` com `git push` num só comando.** São dois passos separados: o push é sempre uma decisão explícita e autorizada.
@@ -27,10 +29,11 @@ Config global em `~/.config/opencode/opencode.jsonc`:
 ```json
 "cdt": {
   "type": "local",
-  "command": ["npx", "-y", "chrome-devtools-mcp@latest", "--isolated", "--no-usage-statistics"]
+  "command": ["npx", "-y", "chrome-devtools-mcp@1.11.0", "--isolated", "--no-usage-statistics"]
 }
 ```
 
+- **Versão pinada (`@1.11.0`)**: `@latest` deu 30 tools numa execução e 32 noutra (entraram `screencast_start`/`screencast_stop`), tornando a superfície de ferramentas não-determinística. Pinar a versão fixa a superfície disponível.
 - **`--isolated`**: cria um perfil temporário do Chrome, limpo ao fechar. Vantagem: não toca no perfil pessoal (a ferramenta expõe todo o conteúdo do browser). Custo: **sem login persistente** — para testar o `/admin` tens de fazer login em cada arranque.
 - **`--no-usage-statistics`**: não envia telemetria para a Google.
 - Requer **restart do opencode** após alterar a config — os servidores MCP só carregam no arranque.
