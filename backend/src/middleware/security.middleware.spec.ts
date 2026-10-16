@@ -1,5 +1,29 @@
-import { describe, it, expect } from 'vitest';
-import { hostConfiavel } from './security.middleware';
+import { describe, it, expect, vi } from 'vitest';
+import { hostConfiavel, SecurityMiddleware } from './security.middleware';
+
+describe('SecurityMiddleware', () => {
+  it('configura os cabeçalhos de segurança HTTP em cada resposta', () => {
+    const middleware = new SecurityMiddleware();
+    const headers: Record<string, string> = {};
+    const res = {
+      setHeader: vi.fn((key: string, value: string) => {
+        headers[key] = value;
+      }),
+    } as any;
+    const req = { method: 'GET', headers: {} } as any;
+    const next = vi.fn();
+
+    middleware.use(req, res, next);
+
+    expect(headers['X-Content-Type-Options']).toBe('nosniff');
+    expect(headers['X-Frame-Options']).toBe('DENY');
+    expect(headers['X-XSS-Protection']).toBe('1; mode=block');
+    expect(headers['Strict-Transport-Security']).toBe('max-age=31536000; includeSubDomains');
+    expect(headers['Referrer-Policy']).toBe('strict-origin-when-cross-origin');
+    expect(headers['X-Permitted-Cross-Domain-Policies']).toBe('none');
+    expect(next).toHaveBeenCalled();
+  });
+});
 
 describe('hostConfiavel (A6: open redirect via Host header)', () => {
   const confiaveis = new Set([
