@@ -34,6 +34,7 @@ describe('App e2e (Postgres + Redis)', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
+    process.env.RATE_LIMIT_MAX = '1000';
     try {
       await verificarBaseDadosDisponivel();
     } catch (error) {
