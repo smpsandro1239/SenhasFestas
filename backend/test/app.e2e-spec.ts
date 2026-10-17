@@ -6,6 +6,7 @@ import * as bcrypt from 'bcryptjs';
 import { criarAplicacao } from '../src/app.setup';
 import { UserEntity } from '../src/entities';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { gerarCodigoAcesso } from '../src/common/access-code';
 
 const PROBE_TIMEOUT_MS = 5000;
 
@@ -61,13 +62,17 @@ describe('App e2e (Postgres + Redis)', () => {
     const dataSource = app.get(DataSource);
     const userRepo = dataSource.getRepository(UserEntity);
     const password = 'password123';
+    let accessCode = gerarCodigoAcesso();
+    while (await userRepo.findOne({ where: { accessCode } })) {
+      accessCode = gerarCodigoAcesso();
+    }
     await userRepo.save(
       userRepo.create({
         email,
         password: await bcrypt.hash(password, 10),
         name: 'Teste E2E',
         role: 'client',
-        accessCode: '123456',
+        accessCode,
         isActive: true,
       }),
     );
@@ -97,7 +102,9 @@ describe('App e2e (Postgres + Redis)', () => {
     const totalRequests = Math.min(12, max + 2);
     const statuses: number[] = [];
     for (let i = 0; i < totalRequests; i++) {
-      statuses.push((await request(app.getHttpServer()).get('/api/health/live')).status);
+      statuses.push(
+        (await request(app.getHttpServer()).get('/api/health/live').set('X-Forwarded-For', '192.0.2.99')).status,
+      );
     }
     expect(statuses.every((s) => s === 200 || s === 429)).toBe(true);
     if (max < totalRequests) {
