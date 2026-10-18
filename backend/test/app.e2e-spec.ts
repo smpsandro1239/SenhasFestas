@@ -6,6 +6,7 @@ import * as bcrypt from 'bcryptjs';
 import { criarAplicacao } from '../src/app.setup';
 import { UserEntity } from '../src/entities';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { RedisService } from '../src/common/redis/redis.service';
 
 const PROBE_TIMEOUT_MS = 5000;
 
@@ -56,6 +57,18 @@ describe('App e2e (Postgres + Redis)', () => {
       await app.close();
     }
   }, 30000);
+
+  beforeEach(async () => {
+    if (app) {
+      const redisService = app.get(RedisService, { strict: false });
+      if (redisService && redisService.isEnabled) {
+        await redisService.del('rl:ip:::ffff:127.0.0.1');
+        await redisService.del('rl:ip:127.0.0.1');
+        await redisService.del('rl:ip:::1');
+        await redisService.del('rl:ip:unknown');
+      }
+    }
+  });
 
   async function criarUtilizadorTeste(email: string): Promise<{ email: string; password: string }> {
     const dataSource = app.get(DataSource);
