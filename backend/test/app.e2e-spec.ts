@@ -6,6 +6,7 @@ import * as bcrypt from 'bcryptjs';
 import { criarAplicacao } from '../src/app.setup';
 import { UserEntity } from '../src/entities';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { RedisService } from '../src/common/redis/redis.service';
 
 const PROBE_TIMEOUT_MS = 5000;
 
@@ -57,17 +58,30 @@ describe('App e2e (Postgres + Redis)', () => {
     }
   }, 30000);
 
+  beforeEach(async () => {
+    if (app) {
+      const redisService = app.get(RedisService, { strict: false });
+      if (redisService && redisService.isEnabled) {
+        await redisService.del('rl:ip:::ffff:127.0.0.1');
+        await redisService.del('rl:ip:127.0.0.1');
+        await redisService.del('rl:ip:::1');
+        await redisService.del('rl:ip:unknown');
+      }
+    }
+  });
+
   async function criarUtilizadorTeste(email: string): Promise<{ email: string; password: string }> {
     const dataSource = app.get(DataSource);
     const userRepo = dataSource.getRepository(UserEntity);
     const password = 'password123';
+    const accessCode = Math.floor(100000 + Math.random() * 900000).toString();
     await userRepo.save(
       userRepo.create({
         email,
         password: await bcrypt.hash(password, 10),
         name: 'Teste E2E',
         role: 'client',
-        accessCode: '123456',
+        accessCode,
         isActive: true,
       }),
     );
@@ -90,19 +104,6 @@ describe('App e2e (Postgres + Redis)', () => {
       .get('/api/health/ready')
       .expect(200);
     expect(response.body.dependencies.database).toBe('healthy');
-  });
-
-  it('deve recusar rate limit com 429 (não 500)', async () => {
-    const max = parseInt(process.env.RATE_LIMIT_MAX || '100', 10);
-    const totalRequests = Math.min(12, max + 2);
-    const statuses: number[] = [];
-    for (let i = 0; i < totalRequests; i++) {
-      statuses.push((await request(app.getHttpServer()).get('/api/health/live')).status);
-    }
-    expect(statuses.every((s) => s === 200 || s === 429)).toBe(true);
-    if (max < totalRequests) {
-      expect(statuses).toContain(429);
-    }
   });
 
   it('refresh aceita cookie httpOnly sem body (contrato de sessão do frontend)', async () => {
@@ -147,5 +148,18 @@ describe('App e2e (Postgres + Redis)', () => {
       .post('/api/auth/refresh')
       .set('Content-Type', 'application/json')
       .expect(401);
+  });
+
+  it('deve recusar rate limit com 429 (não 500)', async () => {
+    const max = parseInt(process.env.RATE_LIMIT_MAX || '100', 10);
+    const totalRequests = Math.min(12, max + 2);
+    const statuses: number[] = [];
+    for (let i = 0; i < totalRequests; i++) {
+      statuses.push((await request(app.getHttpServer()).get('/api/health/live')).status);
+    }
+    expect(statuses.every((s) => s === 200 || s === 429)).toBe(true);
+    if (max < totalRequests) {
+      expect(statuses).toContain(429);
+    }
   });
 });
