@@ -46,7 +46,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Instalar dependências (npm ci)
         working-directory: backend
@@ -76,7 +76,6 @@ jobs:
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: ci-secret-nao-usado-em-producao
           FRONTEND_URL: http://localhost:3001
-          RATE_LIMIT_MAX: 5
         run: npm run test:e2e
 
   frontend:
@@ -90,7 +89,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Instalar dependências (npm ci)
         working-directory: frontend
