@@ -1598,19 +1598,25 @@ function AdminPage() {
     if (!plantaEventoId) return;
     const atual = plantaZonasEstadoRef.current;
     if (atual.length >= MAX_ZONAS_PLANTA) return;
+    const snapshot = { mesas: plantaEstadoRef.current, zonas: atual };
     const zona = criarZona(`Zona ${atual.length + 1}`, corZona(atual.length));
     definirZonas(adicionarZona(atual, zona));
     setZonaSel(zona.id);
     setPlantaSel(null);
+    oferecerUndo(snapshot, 'Zona adicionada');
   };
 
   const removerZonaPlanta = (id: string) => {
+    const snapshot = { mesas: plantaEstadoRef.current, zonas: plantaZonasEstadoRef.current };
     setZonaSel((atual) => (atual === id ? null : atual));
     definirZonas(removerZona(plantaZonasEstadoRef.current, id));
+    oferecerUndo(snapshot, 'Zona removida');
   };
 
   const editarZonaPlanta = (id: string, patch: Partial<Omit<Zona, 'id'>>) => {
+    const snapshot = { mesas: plantaEstadoRef.current, zonas: plantaZonasEstadoRef.current };
     definirZonas(atualizarZona(plantaZonasEstadoRef.current, id, patch));
+    oferecerUndo(snapshot, 'Zona editada');
   };
 
   const onZonaKeyDown = (e: React.KeyboardEvent, zona: Zona) => {
