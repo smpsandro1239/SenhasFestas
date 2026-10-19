@@ -1,10 +1,13 @@
-import { Controller, Get, Inject, Logger } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Inject, Logger, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import { Response } from 'express';
 import { REDIS_CLIENT } from '../common/redis/redis.service';
 import { Redis } from 'ioredis';
+
+type EstadoDependencia = 'healthy' | 'unhealthy' | 'disabled';
 
 @ApiTags('Health')
 @Controller('health')
@@ -30,18 +33,23 @@ export class HealthController {
   }
 
   @Get('ready')
-  async ready() {
-    const dbStatus = await this.checkDatabase();
-    const redisStatus = this.checkRedis();
-    const allHealthy = dbStatus && redisStatus;
+  async ready(@Res({ passthrough: true }) res: Response) {
+    const dependencies: { database: EstadoDependencia; redis: EstadoDependencia } = {
+      database: (await this.checkDatabase()) ? 'healthy' : 'unhealthy',
+      redis: this.checkRedis(),
+    };
+    // A base de dados é obrigatória; o Redis é opcional (degradação segura quando
+    // não configurado), mas se estiver configurado e não estiver pronto a aplicação
+    // não pode garantir os fluxos que dependem dele (rate limit, sockets).
+    const ready = dependencies.database === 'healthy' && dependencies.redis !== 'unhealthy';
+    if (!ready) {
+      res.status(HttpStatus.SERVICE_UNAVAILABLE);
+    }
 
     return {
-      status: allHealthy ? 'ready' : 'unhealthy',
+      status: ready ? 'ready' : 'unhealthy',
       timestamp: new Date().toISOString(),
-      dependencies: {
-        database: dbStatus ? 'healthy' : 'unhealthy',
-        redis: redisStatus ? 'healthy' : 'unhealthy',
-      },
+      dependencies,
     };
   }
 
@@ -63,10 +71,10 @@ export class HealthController {
     }
   }
 
-  private checkRedis(): boolean {
+  private checkRedis(): EstadoDependencia {
     if (!this.redisClient) {
-      return false;
+      return 'disabled';
     }
-    return this.redisClient.status === 'ready';
+    return this.redisClient.status === 'ready' ? 'healthy' : 'unhealthy';
   }
 }

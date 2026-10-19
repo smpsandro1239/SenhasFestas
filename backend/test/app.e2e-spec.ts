@@ -86,10 +86,17 @@ describe('App e2e (Postgres + Redis)', () => {
   });
 
   it('deve reportar a base de dados saudável', async () => {
-    const response = await request(app.getHttpServer())
-      .get('/api/health/ready')
-      .expect(200);
+    const response = await request(app.getHttpServer()).get('/api/health/ready');
     expect(response.body.dependencies.database).toBe('healthy');
+  });
+
+  it('ready devolve 503 se alguma dependência estiver unhealthy (200 caso contrário)', async () => {
+    const response = await request(app.getHttpServer()).get('/api/health/ready');
+    const deps = response.body.dependencies as Record<string, string>;
+    const indisponivel = Object.values(deps).includes('unhealthy');
+
+    expect(response.status).toBe(indisponivel ? 503 : 200);
+    expect(response.body.status).toBe(indisponivel ? 'unhealthy' : 'ready');
   });
 
   it('deve recusar rate limit com 429 (não 500)', async () => {
