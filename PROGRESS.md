@@ -13,6 +13,52 @@
 
 ---
 
+## 2026-10-19 — Versão-base da planta passa a ser por evento (dívida #12)
+
+**Objectivo**: dívida #12, descoberta ao validar a #5 — `plantaVersionRef` era um
+ref único, escrito só quando um GET resolvia. Ao trocar de evento e editar antes de
+a resposta do novo evento chegar, o PUT levava a versão do evento anterior → **409**
+e painel de conflito espúrio (sem perda de dados: a edição ficava em `pendente`).
+
+**Feito**
+- `plantaVersionRef` substituída por `plantaVersoesRef` (`Record<shortCode, number>`)
+  e `plantaGravarAdiadoRef` (`Record<shortCode, true>`).
+- `enviarPlantaContexto` deixa de receber `version`: lê-a do mapa por `shortCode`.
+  Sem versão conhecida, a gravação é **adiada** (marca em `plantaGravarAdiadoRef`,
+  mostra «A guardar…» se o evento estiver activo, retorna) em vez de enviar a versão
+  errada. No sucesso, grava `r.version ?? version + 1` no mapa do evento.
+- Efeito de carga: `plantaVersoesRef.current[plantaShortCode] = versaoServidor` e, se
+  havia gravação adiada, limpa a marca e chama `agendarGuardarPlanta(...)` (debounce
+  de 800 ms) com o estado actual.
+- Flush de pendente cross-evento semeia o mapa com a versão guardada, condicional
+  (`version?: number` no tipo de `plantaPendenteRef` — versão desconhecida é válida).
+- Se o GET falhar (offline), a gravação adiada é registada como `pendente` para o
+  aviso de outros eventos.
+- `registarPendentePlanta(shortCode, mesas, zonas, version?)` centraliza a escrita da
+  chave `sf:planta-pendente:*` (usada na falha de gravação e no caminho offline).
+- Handlers de conflito escrevem o mapa (`recarregarPlantaRemota`/`forcarGuardarPlanta`
+  = `conflito.version`; `descartarPlantaLocal` = 0).
+
+**Verificação (browser, Playwright)**: cache local semeada com uma mesa e o GET do
+evento retido à mão; arrasto antes da resposta (nenhum PUT, sem conflito); resposta do
+servidor (v27) libertada → PUT imediato **com `version: 27` → 200**, indicador
+«Guardado», sem painel de conflito. Antes da correcção este PUT levava a versão do
+outro evento → 409.
+
+**Incidente e recuperação**: a cache semeada tinha só 1 mesa e o PUT substituiu o
+documento todo → as Mesas B e C do evento de teste desapareceram (Mesa A voltou com
+id sintético). Restaurado **exactamente** a partir do `before` da auditoria
+(`/api/audit/:id`, entrada PLANTA das 18:22:10): 3 mesas com ids originais, zonas e
+dimensões intactas (v30). Confirma o valor prático do `before` (dívida #1).
+
+**Gates**: `tsc` 0 erros · vitest **268/268** · `lint` limpo · `build` OK
+(`Compiled successfully`). **Pendente**: repor após cada verificação que mexe no
+documento inteiro; a auditoria já provou servir de rede.
+
+**Commits**: (fix) `frontend: versão-base da planta por evento (dívida #12)`.
+
+---
+
 ## 2026-10-19 — Flag de edições da planta passa a ser limpa (dívida #5)
 
 **Objectivo**: dívida #5 — `plantaEditadaDesdeCargaRef` só era reposta a `false` no
