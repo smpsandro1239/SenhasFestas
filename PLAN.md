@@ -139,6 +139,8 @@ mesa e relatórios financeiros.
    - **Estado**: concluído 2026-10-19 — helper `paresDeSobreposicao` (fracção da
      menor zona ≥ 20%) + aviso `text-amber` sob a planta. Só avisa: sobreposição
      intencional (ex.: palco sobre zona) continua permitida.
+   - **Verificação**: Playwright com Chrome real em `festa-teste-2026` — 3 zonas
+     sobrepostas → aviso com os 3 pares (ver `PROGRESS.md`).
 
 7. **Aumentar `MAX_ZONAS_PLANTA`** de 50 para 100 (salões grandes).
    - **Estado**: concluído 2026-10-19 — constante partilhada no DTO

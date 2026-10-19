@@ -43,10 +43,15 @@
 **Gates**: backend `tsc` limpo, 390/390, build ok, lint 4 warnings pré-existentes;
 frontend `tsc` limpo, **238/238**, build ok, lint sem warnings.
 
-**Verificação (browser, Playwright + Chrome real)**: login admin → `/admin` →
-tab Planta → `festa-teste-2026`; "Adicionar zona" 2× → 2 zonas no canvas e aviso
-`Zonas sobrepostas: Zona 1 × Zona 2. Confirma se é intencional.` visível.
-Único erro de rede: `401 /api/auth/refresh` pré-login (benigno, habitual).
+**Verificação (browser)**
+- Playwright + Chrome real contra `festa-teste-2026`: 1 zona antes; "Adicionar
+  zona" 2× → 3 zonas e aviso `Zonas sobrepostas: Zona 1 × Zona 2; Zona 1 ×
+  Zona 3; Zona 2 × Zona 3. Confirma se é intencional.`
+- Sem `pageerror` nem `console.error` (401 pré-login do refresh ignorado).
+- Screenshot: `C:\Users\smpsa\AppData\Local\Temp\opencode\shots\zonas-sobrepostas.png`
+- **Sem artefactos no servidor**: as zonas novas só existiram em estado local —
+  GET da planta e auditoria confirmam `version: 4` e última escrita `PLANTA` às
+  13:21 (antes do teste). Nada a limpar no evento.
 
 **Pendente**: push dos commits locais — só com autorização explícita.
 
