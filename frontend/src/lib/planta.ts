@@ -321,6 +321,23 @@ export function pendentesOrfaos(chaves: string[], shortCodesValidos: string[]): 
   );
 }
 
+// Uma chave de pendente só existe depois de uma gravação ter falhado (é removida
+// em cada sucesso), por isso qualquer pendente de outro evento é trabalho por
+// sincronizar. Derivar do armazenamento em vez de guardar em estado evita que o
+// aviso se perca num reload ou num re-render.
+export function pendentesDeOutrosEventos(
+  chaves: string[],
+  shortCodeAtual: string,
+): string[] {
+  const outros = new Set<string>();
+  for (const chave of chaves) {
+    if (!chave.startsWith(PREFIXO_PLANTA_PENDENTE)) continue;
+    const shortCode = chave.slice(PREFIXO_PLANTA_PENDENTE.length);
+    if (shortCode && shortCode !== shortCodeAtual) outros.add(shortCode);
+  }
+  return [...outros].sort();
+}
+
 export interface Zona {
   id: string;
   nome: string;

@@ -13,6 +13,59 @@
 
 ---
 
+## 2026-10-19 — Aviso de pendentes derivado do armazenamento + idade do conflito viva (dívidas #3 e #4)
+
+**Objectivo**: dívida #3 — o `plantaAviso` (edição de um evento anterior ficou por
+sincronizar) era limpo no arranque de cada carga e nunca sobrevivia a um reload;
+dívida #4 — a idade do pendente no painel de conflito ficava congelada no render.
+
+**Feito**
+- **#3**: substituído o estado `plantaAviso` por `plantaPendentesOutros`, derivado
+  do armazenamento com `pendentesDeOutrosEventos(chaves, shortCodeAtual)` (novo
+  helper puro em `lib/planta.ts`). Como a chave `sf:planta-pendente:*` só existe
+  depois de uma falha de gravação (é removida em cada sucesso), a lista é sempre
+  verdadeira; recalcula-se na carga do evento, após limpeza de órfãos e após cada
+  tentativa de gravação (sucesso ou falha). O banner lista os eventos pelo nome e
+  cada um tem botão **«Ir para <evento>»** que muda o evento — a carga desse evento
+  oferece ou reenvia o pendente. Removido o botão «Fechar» (o aviso resolve-se ao
+  reconciliar, não se dispensa).
+- **#4**: `agoraIdade` (estado) + intervalo de 30 s **activo só enquanto o painel
+  de conflito estiver aberto**; `descreverIdade(ts, agora)` passa a receber o
+  instante actual, pelo que a idade acompanha o tempo real.
+- 3 testes novos para `pendentesDeOutrosEventos` (com/sem pendente de outro evento,
+  ordenação, chaves sem shortCode).
+
+**Decisões**
+- Derivar o aviso do `localStorage` em vez de o guardar em estado: um aviso
+  transiente perde-se em reload/re-render e não é verificável; derivado, o estado
+  é o próprio armazenamento (uma única fonte de verdade).
+- Sem botão de dispensar: o pendente continua por sincronizar, logo esconder o
+  aviso seria mentir ao utilizador. O caminho é reconciliar.
+- Intervalo só com o painel aberto (não um tick global): nada corre quando não é
+  preciso.
+
+**Commit**: `fix(planta): aviso de pendentes derivado do armazenamento e idade do conflito viva` (feature + testes)
+
+**Gates**: frontend `tsc` limpo, **265/265** (262 + 3), build ok, lint sem warnings.
+
+**Verificação (browser, Chrome real)**
+- #3: com os PUT da planta bloqueados, editar o Magusto deixa
+  `sf:planta-pendente:magusto`; ao mudar para o outro evento aparece
+  «Edições por sincronizar noutros eventos: Magusto. Abre o evento para reconciliar.»
+  com botão «Ir para Magusto»; **sobrevive a F5**; depois de desbloquear e clicar
+  no botão, o evento é reconciliado (servidor recebe a mesa), o banner desaparece e
+  a chave pendente é removida. Screenshots `pendentes-1-outro-evento.png`,
+  `pendentes-2-reload.png`, `pendentes-3-reconciliado.png`.
+- #4: com o painel de conflito aberto (edição pendente + planta alterada «noutro
+  dispositivo»), a idade vai de «(há instantes)» para «(há 2 min)» com avanço do
+  relógio da página; «Recarregar» fecha o painel e remove o pendente. Screenshots
+  `conflito-idade-0.png`, `conflito-idade-2min.png`.
+- Sem `pageerror`; documento do Magusto reposto no fim (conteúdo original). O
+  browser com relógio virtual precisa de `clock.fastForward` para o debounce de
+  800 ms disparar.
+
+---
+
 ## 2026-10-19 — Rótulos acessíveis sem prefixo duplicado (dívida #11)
 
 **Objectivo**: leitores de ecrã ouviam «Mesa Mesa A, 8 lugares» / «Zona Zona 1» no

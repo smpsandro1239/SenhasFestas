@@ -55,6 +55,7 @@ import {
   chavePlantaPendente,
   descreverIdade,
   pendentesOrfaos,
+  pendentesDeOutrosEventos,
   parseDocumentoPlanta,
   corZona,
   criarZona,
@@ -152,6 +153,7 @@ function AdminPage() {
   const plantaZonasEstadoRef = useRef<Zona[]>([]);
   const plantaDimensoesRef = useRef<Dimensoes | null>(null);
   const plantaCarregadaRef = useRef<string>('');
+  const plantaShortCodeRef = useRef<string>('');
   const arrastoRef = useRef<
     | { tipo: 'mesa'; id: string }
     | { tipo: 'zona'; id: string; dx: number; dy: number }
@@ -212,7 +214,8 @@ function AdminPage() {
     pendenteTs?: number;
   } | null>(null);
   const [plantaImportarDisponivel, setPlantaImportarDisponivel] = useState(false);
-  const [plantaAviso, setPlantaAviso] = useState<string | null>(null);
+  const [plantaPendentesOutros, setPlantaPendentesOutros] = useState<string[]>([]);
+  const [agoraIdade, setAgoraIdade] = useState(() => Date.now());
   const [plantaLimpar, setPlantaLimpar] = useState(false);
   const [eventEditing, setEventEditing] = useState<any>(null);
   const [eventEditForm, setEventEditForm] = useState({ name: '', location: '', startDate: '', endDate: '' });
@@ -1073,6 +1076,24 @@ function AdminPage() {
 
   const plantaShortCode =
     events.find((ev: any) => ev.id === plantaEventoId)?.shortCode ?? '';
+  plantaShortCodeRef.current = plantaShortCode;
+
+  const atualizarPendentesPlanta = () => {
+    try {
+      setPlantaPendentesOutros(
+        pendentesDeOutrosEventos(Object.keys(localStorage), plantaShortCodeRef.current),
+      );
+    } catch {}
+  };
+
+  useEffect(() => {
+    // A idade mostrada no painel de conflito envelhece com o tempo: recalcula-a
+    // enquanto esse painel estiver aberto.
+    if (!plantaConflito?.pendenteTs) return;
+    setAgoraIdade(Date.now());
+    const t = window.setInterval(() => setAgoraIdade(Date.now()), 30000);
+    return () => window.clearInterval(t);
+  }, [plantaConflito?.pendenteTs]);
 
   useEffect(() => {
     if (!plantaEventoId || !plantaShortCode) return;
@@ -1115,7 +1136,7 @@ function AdminPage() {
     limparUndo();
     setPlantaConflito(null);
     setPlantaImportarDisponivel(false);
-    setPlantaAviso(null);
+    atualizarPendentesPlanta();
     setPlantaSync('');
     const eventoId = plantaEventoId;
     let cancelado = false;
@@ -1196,6 +1217,7 @@ function AdminPage() {
       for (const chave of pendentesOrfaos(Object.keys(localStorage), validos)) {
         localStorage.removeItem(chave);
       }
+      atualizarPendentesPlanta();
     } catch {}
   }, [events]);
 
@@ -1298,6 +1320,7 @@ function AdminPage() {
         localStorage.setItem(`sf:planta:${shortCode}`, JSON.stringify(docCache));
         localStorage.removeItem(chavePlantaPendente(shortCode));
       } catch {}
+      atualizarPendentesPlanta();
       if (!ativo()) return;
       plantaVersionRef.current =
         typeof r?.version === 'number' ? r.version : plantaVersionRef.current + 1;
@@ -1313,12 +1336,9 @@ function AdminPage() {
       } catch {}
       if (!ativo()) {
         // O evento já não está activo (flush ao trocar de evento): não podemos mostrar o
-        // conflito no contexto do evento actual, mas a edição ficou guardada localmente.
-        setPlantaAviso(
-          e instanceof ApiError && e.status === 409
-            ? 'Uma edição do evento anterior ficou por sincronizar (conflito no servidor). Volta a esse evento para reconciliar.'
-            : 'Uma edição do evento anterior ficou por sincronizar (falha de ligação). Volta a esse evento para reconciliar.',
-        );
+        // conflito no contexto do evento actual, mas a edição ficou guardada localmente e o
+        // aviso de pendentes de outros eventos (derivado do armazenamento) mostra-a.
+        atualizarPendentesPlanta();
         return;
       }
       if (e instanceof ApiError && e.status === 409) {
@@ -1850,12 +1870,29 @@ function AdminPage() {
 
         <Tabs items={tabs} activeTab={activeTab} onChange={setActiveTab} className="mb-6" />
 
-        {plantaAviso && (
-          <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
-            <span className="text-xs text-amber-200">{plantaAviso}</span>
-            <Button size="sm" variant="outline" onClick={() => setPlantaAviso(null)}>
-              Fechar
-            </Button>
+        {plantaPendentesOutros.length > 0 && (
+          <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+            <span className="text-xs text-amber-200">
+              Edições por sincronizar noutros eventos:{' '}
+              {plantaPendentesOutros
+                .map((sc) => events.find((ev: any) => ev.shortCode === sc)?.name ?? sc)
+                .join(', ')}
+              . Abre o evento para reconciliar.
+            </span>
+            {plantaPendentesOutros.map((sc) => {
+              const ev = events.find((x: any) => x.shortCode === sc);
+              if (!ev) return null;
+              return (
+                <Button
+                  key={sc}
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPlantaEventoId(ev.id)}
+                >
+                  Ir para {ev.name}
+                </Button>
+              );
+            })}
           </div>
         )}
 
@@ -4102,7 +4139,7 @@ function AdminPage() {
                       <span className="text-xs text-amber-200">
                         Há uma edição local por sincronizar
                         {plantaConflito.pendenteTs
-                          ? ` (${descreverIdade(plantaConflito.pendenteTs)})`
+                          ? ` (${descreverIdade(plantaConflito.pendenteTs, agoraIdade)})`
                           : ''}
                         , ou a planta mudou noutro dispositivo. Escolhe a versão a manter.
                       </span>

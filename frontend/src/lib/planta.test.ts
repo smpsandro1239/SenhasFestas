@@ -18,6 +18,7 @@ import {
   parsePlantaPendente,
   descreverIdade,
   pendentesOrfaos,
+  pendentesDeOutrosEventos,
   chavePlantaPendente,
   MAX_MESAS_PLANTA,
   corZona,
@@ -496,6 +497,32 @@ describe('pendentesOrfaos', () => {
 
   it('devolve [] quando todas são válidas', () => {
     expect(pendentesOrfaos([chavePlantaPendente('a')], ['a', 'b'])).toEqual([]);
+  });
+});
+
+describe('pendentesDeOutrosEventos', () => {
+  it('devolve os shortCodes por reconciliar, sem o evento actual', () => {
+    const chaves = [
+      chavePlantaPendente('magusto'),
+      chavePlantaPendente('festa'),
+      chavePlantaPendente('magusto'),
+      'sf:planta:festa',
+      'sf:qr-lugares:outro',
+    ];
+    expect(pendentesDeOutrosEventos(chaves, 'festa')).toEqual(['magusto']);
+  });
+
+  it('devolve [] quando só o evento actual tem pendente', () => {
+    expect(pendentesDeOutrosEventos([chavePlantaPendente('festa')], 'festa')).toEqual([]);
+  });
+
+  it('ordena e ignora chaves sem shortCode', () => {
+    const chaves = [
+      chavePlantaPendente('zulu'),
+      chavePlantaPendente('alfa'),
+      chavePlantaPendente(''),
+    ];
+    expect(pendentesDeOutrosEventos(chaves, '')).toEqual(['alfa', 'zulu']);
   });
 });
 

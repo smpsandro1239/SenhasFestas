@@ -176,8 +176,8 @@ mesa e relatórios financeiros.
 |---|---|---|---|
 | 1 | Auditoria do interceptor só captura `after` — suporte a `before` **adicionado 2026-10-19**; o PUT da planta passa-o, **outras rotas ainda não** | `audit.interceptor.ts` | Rotas sem `before` continuam sem estado anterior |
 | 2 | ~~Undo não cobre zonas~~ **Resolvido 2026-10-19** | `admin/page.tsx` | Adicionar/editar/remover zona agora oferecem undo de 6 s |
-| 3 | `plantaAviso` limpo no arranque da carga | `admin/page.tsx` | Aviso pode não ser visto |
-| 4 | `pendenteTs` congelado no render | `admin/page.tsx` | Idade desactualizada |
+| 3 | ~~`plantaAviso` limpo no arranque da carga~~ **Resolvido 2026-10-19** | `admin/page.tsx`, `lib/planta.ts` (`pendentesDeOutrosEventos`) | O aviso de edições por sincronizar passou a ser **derivado** das chaves `sf:planta-pendente:*` (que só existem após uma falha), sobrevive a reload e não é apagado pela carga. Cada evento pendente tem botão «Ir para …» |
+| 4 | ~~`pendenteTs` congelado no render~~ **Resolvido 2026-10-19** | `admin/page.tsx` | O painel de conflito re-renderiza a cada 30 s (`agoraIdade` + intervalo activo só com o painel aberto), passando o `agora` a `descreverIdade` |
 | 5 | `plantaEditadaDesdeCargaRef` nunca resetada no sucesso | `admin/page.tsx` | Futuros GETs ignorados até trocar de evento (documentado) |
 | 6 | `renderSvgPlanta` assume hex de 6 dígitos | `lib/planta.ts` | Frágil a mudanças de paleta |
 | 7 | ~~Export PNG sem feedback de erro~~ **Resolvido 2026-10-19** | `admin/page.tsx` | Estado `exportarEstado` + `try/catch` + mensagem de falha; verificado no browser |
@@ -227,7 +227,10 @@ mesa e relatórios financeiros.
 - **409** devolve `{ message, mesas, zonas, version }` (mais `dimensoes` quando
   existem); o cliente reconcilia.
 - **Pendente por evento** em `localStorage` (`sf:planta-pendente:<shortCode>`) com
-  `{mesas, zonas, version, ts}`.
+  `{mesas, zonas, version, ts}`. **Só existe após uma gravação falhada** (é removida
+  em cada sucesso), logo é a fonte de verdade do aviso «edições por sincronizar
+  noutros eventos» — `pendentesDeOutrosEventos` deriva-o das chaves, em vez de o
+  guardar em estado (sobrevive a reload/re-render).
 - **Rotação**: `Mesa.rotacao` em graus inteiros 0–359 (opcional no DTO; ausente
   = 0). Roda a **forma** em torno do centro, não o rótulo. `Mesa.forma='redonda'`
   é invariante à rotação (círculo); só a quadrada (rectângulo 1:0.85, igual no
