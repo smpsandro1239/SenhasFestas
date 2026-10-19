@@ -24,6 +24,9 @@ ficava inerte porque a CSP bloqueava o `eval` do webpack e o React não hidratav
 - Verificação end-to-end: backend (`:3000`) + frontend dev (`:3001`); Playwright
   **sem `bypassCSP`** → `HIDRATADO: true`, sem erro de CSP/eval. (1 erro benigno:
   `401` pré-login em `/api/auth/refresh`.)
+- Headers confirmados por `curl` nos dois modos: **dev** `script-src 'self'
+  'unsafe-inline' 'unsafe-eval'`; **prod** (`next start`) `script-src 'self'
+  'unsafe-inline'` — produção fica estrita, como pretendido.
 
 **Gates (frontend)**
 - `tsc --noEmit` limpo; `vitest run` 227/227; `lint` sem warnings; `build` OK.
