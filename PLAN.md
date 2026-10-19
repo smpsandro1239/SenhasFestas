@@ -108,6 +108,7 @@ mesa e relatórios financeiros.
    - **Porquê**: drag de zonas, sobreposição mesa-zona, resize — nada disto é
      testável unitariamente.
    - **Estado**: MCP instalado (`cdt`), precisa de restart + app a correr.
+     Alvo definido: evento `festa-teste-2026` (aceite polir evento existente).
 
 6. **Validação de sobreposição de zonas**
    - Avisar quando duas zonas se sobrepõem significativamente.

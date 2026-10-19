@@ -50,11 +50,19 @@ do teste visual da planta (MCP `cdt`).
 **Gates**
 - Só docs; sem alterações ao código da app. BD apenas com `SELECT`.
 
+**Decisões (2026-10-19, após revisão)**
+- `/health/ready` a devolver 200 com dependência unhealthy: **não corrigir agora**
+  — fica como dívida técnica (row 9 do `PLAN.md`).
+- Teste visual da planta: **aceite polir evento existente**, usando o evento
+  `festa-teste-2026` (é claramente de teste; único par viável com `magusto`).
+- Reinstalar `@next/swc-win32-x64-msvc`: **depois** do teste visual.
+- `d1ee9f4` fica local, sem push.
+
 **Pendente**
-- Confirmar bug do `/ready` (corrigir para 503) — a aguardar decisão.
-- Decidir alvo do teste visual: evento dedicado, BD de dev, ou aceitar poluir.
-- Reinstalar `@next/swc-win32-x64-msvc`.
-- Confirmar se o cron corre em produção; se não, mover para cron externo.
+- Teste visual da planta via `cdt` — requer restart do opencode (MCP só carrega no
+  arranque) + backend/frontend a correr + login admin manual na janela do Chrome.
+- Reinstalar `@next/swc-win32-x64-msvc@15.5.24` (ficheiro truncado).
+- Confirmar se o cron corre em produção; se não, mover para cron externo (`/api/cron/*`).
 
 ---
 
