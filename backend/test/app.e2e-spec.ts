@@ -6,6 +6,7 @@ import * as bcrypt from 'bcryptjs';
 import { criarAplicacao } from '../src/app.setup';
 import { UserEntity } from '../src/entities';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { codigoAcessoUnico } from '../src/common/access-code';
 
 const PROBE_TIMEOUT_MS = 5000;
 
@@ -61,13 +62,16 @@ describe('App e2e (Postgres + Redis)', () => {
     const dataSource = app.get(DataSource);
     const userRepo = dataSource.getRepository(UserEntity);
     const password = 'password123';
+    const accessCode = await codigoAcessoUnico(async (c) =>
+      Boolean(await userRepo.findOne({ where: { accessCode: c } })),
+    );
     await userRepo.save(
       userRepo.create({
         email,
         password: await bcrypt.hash(password, 10),
         name: 'Teste E2E',
         role: 'client',
-        accessCode: '123456',
+        accessCode,
         isActive: true,
       }),
     );
