@@ -152,6 +152,11 @@ mesa e relatórios financeiros.
    respectivas mesas.
 9. **Rotação de mesas** — útil para layouts não-alinhados.
 10. **Dimensões reais (metros)** — impressão à escala.
+    - **Estado**: concluído 2026-10-19 — `dimensoes: {larguraM, alturaM}` opcional
+      no documento da planta (1–200 m, uma casa decimal); inputs no admin, canvas
+      com a proporção real e export PNG a 100 px/m com barra de escala. O serviço
+      preserva as dimensões guardadas quando o payload as omite (drag de mesas
+      não as apaga).
 11. **Multi-planta** — salão + esplanada por evento.
 12. **Planta em realtime (WebSocket)** — em vez de polling + PUT manual.
 13. **Bump periódico do `chrome-devtools-mcp`** — está pinado em `1.11.0` (o
@@ -198,16 +203,24 @@ mesa e relatórios financeiros.
 ## Decisões arquitecturais fixadas
 
 ### Planta
-- **Documento jsonb** `{ mesas, zonas }` no `EventEntity.floorPlan`, com
-  `floorPlanVersion` para optimistic locking.
+- **Documento jsonb** `{ mesas, zonas, dimensoes? }` no `EventEntity.floorPlan`,
+  com `floorPlanVersion` para optimistic locking.
 - **Pertença derivada**: mesa pertence à zona cujo rectângulo contém o seu centro
   (primeira em sobreposição). Sem `Mesa.zonaId`.
 - **Coordenadas em %**: `Mesa.x/y` = centro; `Zona.x/y` = canto superior esquerdo.
   Escala com o ecrã.
+- **Dimensões reais** (opcional): `dimensoes: {larguraM, alturaM}` (1–200 m, 1
+  decimal) vive no próprio documento — viaja com import/export e com o 409. O
+  serviço **preserva** as dimensões guardadas quando o payload as omite (saves de
+  mesas/zonas e clientes antigos não as apagam). Com dimensões: canvas usa a
+  proporção `larguraM/alturaM` (sem elas, 16:9) e o export PNG sai a 100 px/m com
+  barra de escala (25% da largura = `larguraM/4`), limitado a 6000 px por lado.
+  Sem dimensões o export mantém 1600×1600.
 - **Limites**: `MAX_MESAS_PLANTA=200`, `MAX_ZONAS_PLANTA=100`, `MAX_LUGARES_MESA=99`,
   `ZONA_MIN=5`.
 - **Paleta fixa** de 6 cores (não cor livre).
-- **409** devolve `{ message, mesas, zonas, version }`; o cliente reconcilia.
+- **409** devolve `{ message, mesas, zonas, version }` (mais `dimensoes` quando
+  existem); o cliente reconcilia.
 - **Pendente por evento** em `localStorage` (`sf:planta-pendente:<shortCode>`) com
   `{mesas, zonas, version, ts}`.
 - **`decidirPlantaRemota`**: `editadoDesdeCarga` → `ignorar`;

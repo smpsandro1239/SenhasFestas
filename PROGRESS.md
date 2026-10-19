@@ -13,6 +13,77 @@
 
 ---
 
+## 2026-10-19 — Dimensões reais da planta (metros) e export à escala
+
+**Objectivo**: roadmap prioridade baixa #10 — dimensões reais em metros para
+impressão à escala.
+
+**Feito**
+- **Backend**: `DimensoesPlantaDto` (`larguraM`/`alturaM`, `@IsNumber({maxDecimalPlaces:1})`,
+  `@Min(1)`, `@Max(200)`) opcional em `GuardarPlantaDto`; `normalizarDimensoes`
+  (clamp 1–200, arredonda a 0.1, `null` se inválido); `lerFloorPlan` devolve
+  `dimensoes`; `obterPlanta`/409/callback só a incluem quando existem (mantém os
+  `toEqual` antigos verdes); `guardarPlanta` faz merge
+  `dto.dimensoes ? normalizar : atual.dimensoes` — **preserva** as dimensões
+  quando o payload as omite.
+- **Frontend**: `Dimensoes` no `DocumentoPlanta` + `normalizarDimensoes`,
+  `proporcaoPlanta` (fallback 16/9), `dimensoesExport` (100 px/m, cap 6000 px por
+  lado), `formatarMetros` (vírgula, 1 decimal); `parseDocumentoPlanta` lê
+  dimensões; `renderSvgPlanta` usa `viewBox "0 0 100 H"` com `H = 100·alturaM/larguraM`
+  (unidades isotrópicas: círculos continuam círculos) e desenha barra de escala
+  (`larguraM/4`) + legenda `larguraM × alturaM`; `admin/page.tsx` com inputs
+  Largura/Altura (guardar em `onBlur`/Enter), canvas com a proporção real e export
+  com `larguraPx/alturaPx` do helper; dimensões viajam no save pendente/offline e
+  no caminho de conflito.
+- Testes: 8 novos no backend (4 DTO + 4 serviço: obter, gravar, preservar,
+  409 com dimensões); 13 novos no frontend (helpers, parsing, SVG com/sem
+  dimensões e barra de escala).
+
+**Decisões**
+- Dimensões dentro do documento da planta (não em `settings`): viajam com
+  import/export local e com o 409, e mantêm-se coerentes com as mesas.
+- Serviço preserva quando omitidas — evita que arrastar uma mesa (payload sem
+  dimensões) as apague e mantém compatibilidade com clientes antigos.
+- Ao sair de um campo de dimensão sem o par completo, repõe-se **só o campo
+  inválido** (o outro mantém-se para o utilizador completar o par). Descoberto na
+  verificação: a primeira versão repunha ambos e tornava impossível preencher os
+  dois campos por tabulação.
+- Barra de escala com 25% da largura (= `larguraM/4`) para caber em qualquer
+  proporção; sem dimensões o export mantém-se quadrado a 1600 px.
+
+**Commits**
+- `8faebf7 feat(planta): dimensoes reais em metros no documento da planta`
+- `c1d78f6 feat(planta): dimensoes reais em metros com export a escala`
+- `docs: registar dimensoes reais e export a escala` (PLAN.md + este)
+
+**Gates**: backend `tsc` limpo, **398/398** (390 + 8), build ok, lint 4 warnings
+pré-existentes (o de `event.service` mudou da linha 365 para 385); frontend `tsc`
+limpo, **251/251** (238 + 13), build ok, lint sem warnings.
+
+**Verificação (browser)**
+- Playwright + Chrome real contra `festa-teste-2026`: 25×15 → `PUT ... /planta`
+  200; canvas `aspect-ratio: 1.66667 / 1`; export PNG lido no IHDR = **2500×1500**
+  (100 px/m); após reload inputs 25/15; sem `pageerror` nem `console.error` (401
+  pré-login do refresh ignorado).
+- Preservação confirmada por API: `PUT` com `{mesas:[], zonas:[], version}` (sem
+  `dimensoes`) devolveu as dimensões guardadas intactas (`25×15`).
+- Screenshots: `planta-dimensoes-ui.png` e `planta-dimensoes.png` em
+  `C:\Users\smpsa\AppData\Local\Temp\opencode\shots`.
+
+**Incidente e recuperação**
+- O teste de preservação acima enviou `mesas: []`, **apagando as 3 mesas** do
+  evento de teste. Recuperadas a partir da auditoria (`GET /api/audit/:id`, campo
+  `after` do último `PLANTA`, versão 5) e restauradas via `PUT`: 3 mesas (Mesa
+  A/B/C) + Zona 1 + `25×15` (versão final 7). Sem perda de dados.
+- Lição: nos testes por API, reenviar sempre o documento lido — nunca um payload
+  mínimo — e verificar a auditoria antes de escrever.
+
+**Pendente**: push dos commits locais — só com autorização explícita. A lógica de
+`guardarDimensoesPlanta` (repõe o campo inválido) vive no componente e não tem
+teste unitário; coberta só pela verificação no browser.
+
+---
+
 ## 2026-10-19 — Aviso de sobreposição de zonas + limite 100
 
 **Objectivo**: roadmap prioridade média #6 e #7.
