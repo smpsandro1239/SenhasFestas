@@ -42,6 +42,8 @@ import {
   proporcaoPlanta,
   dimensoesExport,
   formatarMetros,
+  normalizarRotacao,
+  PASSO_ROTACAO,
   MAX_ZONAS_PLANTA,
   ZONA_MIN,
   type Mesa,
@@ -56,6 +58,7 @@ function mesa(over: Partial<Mesa> = {}): Mesa {
     x: over.x ?? 50,
     y: over.y ?? 50,
     forma: over.forma ?? 'redonda',
+    rotacao: over.rotacao ?? 0,
   };
 }
 
@@ -245,7 +248,7 @@ describe('parsePlanta', () => {
       null,
     ]);
     expect(parsePlanta(raw)).toEqual([
-      { id: 'a', nome: 'Mesa 1', lugares: 8, x: 100, y: 0, forma: 'quadrada' },
+      { id: 'a', nome: 'Mesa 1', lugares: 8, x: 100, y: 0, forma: 'quadrada', rotacao: 0 },
     ]);
   });
 });
@@ -408,12 +411,12 @@ describe('parsePlantaPendente', () => {
 
   it('lê mesas, version e ts', () => {
     const raw = JSON.stringify({
-      mesas: [{ id: 'a', nome: 'Mesa 1', lugares: 4, x: 10, y: 20, forma: 'redonda' }],
+      mesas: [{ id: 'a', nome: 'Mesa 1', lugares: 4, x: 10, y: 20, forma: 'redonda', rotacao: 0 }],
       version: 5,
       ts: 1700000000000,
     });
     expect(parsePlantaPendente(raw)).toEqual({
-      mesas: [{ id: 'a', nome: 'Mesa 1', lugares: 4, x: 10, y: 20, forma: 'redonda' }],
+      mesas: [{ id: 'a', nome: 'Mesa 1', lugares: 4, x: 10, y: 20, forma: 'redonda', rotacao: 0 }],
       zonas: [],
       version: 5,
       ts: 1700000000000,
@@ -456,7 +459,7 @@ describe('parsePlantaPendente', () => {
   it('filtra mesas inválidas via parsePlanta', () => {
     const raw = JSON.stringify({ mesas: [{ id: 'a', nome: 'Mesa 1' }, { nome: 'sem id' }] });
     expect(parsePlantaPendente(raw)?.mesas).toEqual([
-      { id: 'a', nome: 'Mesa 1', lugares: 0, x: 0, y: 0, forma: 'redonda' },
+      { id: 'a', nome: 'Mesa 1', lugares: 0, x: 0, y: 0, forma: 'redonda', rotacao: 0 },
     ]);
   });
 });
@@ -867,6 +870,53 @@ describe('renderSvgPlanta', () => {
       { mostrarEscala: false },
     );
     expect(svg).not.toContain('5,0 m');
+  });
+});
+
+describe('rotação de mesas', () => {
+  it('normaliza para o intervalo 0-359', () => {
+    expect(normalizarRotacao(0)).toBe(0);
+    expect(normalizarRotacao(45)).toBe(45);
+    expect(normalizarRotacao(360)).toBe(0);
+    expect(normalizarRotacao(405)).toBe(45);
+    expect(normalizarRotacao(-45)).toBe(315);
+    expect(normalizarRotacao(44.6)).toBe(45);
+    expect(normalizarRotacao(NaN)).toBe(0);
+    expect(PASSO_ROTACAO).toBe(45);
+  });
+
+  it('criarMesa assume 0 e aceita rotação', () => {
+    expect(criarMesa('Mesa 1', 4).rotacao).toBe(0);
+    expect(criarMesa('Mesa 1', 4, 'quadrada', 50, 50, 90).rotacao).toBe(90);
+    expect(criarMesa('Mesa 1', 4, 'quadrada', 50, 50, 450).rotacao).toBe(90);
+  });
+
+  it('parsePlanta lê a rotação e descarta inválidos', () => {
+    const raw = JSON.stringify([
+      { id: 'a', nome: 'A', rotacao: 45 },
+      { id: 'b', nome: 'B', rotacao: -90 },
+      { id: 'c', nome: 'C', rotacao: 'x' },
+    ]);
+    expect(parsePlanta(raw).map((m) => m.rotacao)).toEqual([45, 270, 0]);
+  });
+
+  it('moverMesa preserva a rotação', () => {
+    const movidas = moverMesa([mesa({ rotacao: 90 })], 'm1', 10, 20);
+    expect(movidas[0].rotacao).toBe(90);
+  });
+
+  it('renderSvgPlanta roda só a forma, mantendo o rótulo direito', () => {
+    const svg = renderSvgPlanta({
+      mesas: [mesa({ id: 'a', forma: 'quadrada', rotacao: 90 })],
+      zonas: [],
+    });
+    expect(svg).toContain('<g transform="rotate(90 50 50)"><rect');
+    expect(svg).not.toContain('<g transform="rotate(90 50 50)"><text');
+  });
+
+  it('sem rotação não emite grupo de transformação', () => {
+    const svg = renderSvgPlanta({ mesas: [mesa({ rotacao: 0 })], zonas: [] });
+    expect(svg).not.toContain('<g transform');
   });
 });
 

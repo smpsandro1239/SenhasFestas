@@ -44,6 +44,8 @@ import {
   normalizarDimensoes,
   proporcaoPlanta,
   dimensoesExport,
+  normalizarRotacao,
+  PASSO_ROTACAO,
   renderSvgPlanta,
   normalizarPosicao,
   encaixarGrelha,
@@ -1508,7 +1510,14 @@ function AdminPage() {
     const origem = atual.find((m) => m.id === id);
     if (!origem) return;
     const { x, y } = posicaoParaIndice(atual.length, atual.length + 1);
-    const copia = criarMesa(`${origem.nome} (cópia)`, origem.lugares, origem.forma, x, y);
+    const copia = criarMesa(
+      `${origem.nome} (cópia)`,
+      origem.lugares,
+      origem.forma,
+      x,
+      y,
+      origem.rotacao,
+    );
     definirPlanta(adicionarMesa(atual, copia));
     setPlantaSel(copia.id);
   };
@@ -1520,6 +1529,12 @@ function AdminPage() {
 
   const editarMesaPlanta = (id: string, patch: Partial<Omit<Mesa, 'id'>>) => {
     definirPlanta(atualizarMesa(plantaEstadoRef.current, id, patch));
+  };
+
+  const rodarMesaPlanta = (id: string, delta: number) => {
+    const mesa = plantaEstadoRef.current.find((m) => m.id === id);
+    if (!mesa) return;
+    editarMesaPlanta(id, { rotacao: normalizarRotacao(mesa.rotacao + delta) });
   };
 
   const limparPlanta = () => {
@@ -1539,6 +1554,11 @@ function AdminPage() {
     arrastoRef.current = { tipo: 'mesa', id: mesa.id };
     try {
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+    // O preventDefault do pointerdown impede o foco por omissão: sem isto os
+    // atalhos de teclado (setas, r, Delete) só funcionavam após Tab.
+    try {
+      (e.currentTarget as HTMLElement).focus({ preventScroll: true });
     } catch {}
   };
 
@@ -1630,6 +1650,11 @@ function AdminPage() {
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       removerMesaPlanta(mesa.id);
+      return;
+    }
+    if (e.key === 'r' || e.key === 'R') {
+      e.preventDefault();
+      rodarMesaPlanta(mesa.id, e.shiftKey ? -PASSO_ROTACAO : PASSO_ROTACAO);
       return;
     }
     const passo = e.shiftKey ? 5 : 2;
@@ -4179,7 +4204,9 @@ function AdminPage() {
                           key={mesa.id}
                           role="button"
                           tabIndex={0}
-                          aria-label={`Mesa ${mesa.nome}, ${mesa.lugares} lugares`}
+                          aria-label={`Mesa ${mesa.nome}, ${mesa.lugares} lugares${
+                            mesa.rotacao ? `, rodada ${mesa.rotacao} graus` : ''
+                          }`}
                           onPointerDown={(e) => onMesaPointerDown(e, mesa)}
                           onFocus={() => setPlantaSel(mesa.id)}
                           onKeyDown={(e) => onMesaKeyDown(e, mesa)}
@@ -4187,10 +4214,10 @@ function AdminPage() {
                             'planta-mesa absolute flex cursor-grab select-none flex-col items-center justify-center text-center outline-none',
                             mesa.forma === 'quadrada' ? 'rounded-lg' : 'rounded-full',
                             sel
-                              ? 'bg-brand/20 ring-2 ring-brand'
+                              ? 'ring-2 ring-brand'
                               : duplicada
-                                ? 'bg-surface border border-amber-400/50 ring-2 ring-amber-400/70'
-                                : 'bg-surface border border-border hover:border-border-hover',
+                                ? 'ring-2 ring-amber-400/70'
+                                : '',
                           )}
                           style={{
                             left: `${mesa.x}%`,
@@ -4199,10 +4226,27 @@ function AdminPage() {
                             touchAction: 'none',
                           }}
                         >
-                          <span className="max-w-[68px] truncate text-xs font-semibold text-zinc-100">
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              'pointer-events-none absolute left-0 top-1/2 w-full border',
+                              mesa.forma === 'quadrada'
+                                ? 'h-[85%] rounded-lg'
+                                : 'h-full rounded-full',
+                              sel
+                                ? 'border-brand bg-brand/20'
+                                : duplicada
+                                  ? 'border-amber-400/50 bg-surface'
+                                  : 'border-border bg-surface hover:border-border-hover',
+                            )}
+                            style={{ transform: `translateY(-50%) rotate(${mesa.rotacao}deg)` }}
+                          />
+                          <span className="relative z-10 max-w-[68px] truncate text-xs font-semibold text-zinc-100">
                             {mesa.nome}
                           </span>
-                          <span className="text-[10px] text-zinc-400">{mesa.lugares} lug.</span>
+                          <span className="relative z-10 text-[10px] text-zinc-400">
+                            {mesa.lugares} lug.
+                          </span>
                         </div>
                       );
                     })}
@@ -4263,6 +4307,38 @@ function AdminPage() {
                               <option value="quadrada">Quadrada</option>
                             </select>
                           </label>
+                          <label className="block w-32">
+                            <span className="block text-sm font-medium text-zinc-400 mb-1.5">
+                              Rotação (°)
+                            </span>
+                            <input
+                              type="number"
+                              min="0"
+                              max="359"
+                              step={PASSO_ROTACAO}
+                              value={mesa.rotacao}
+                              onChange={(e) =>
+                                editarMesaPlanta(mesa.id, {
+                                  rotacao: normalizarRotacao(Number(e.target.value)),
+                                })
+                              }
+                              className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+                            />
+                          </label>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => rodarMesaPlanta(mesa.id, -PASSO_ROTACAO)}
+                          >
+                            −{PASSO_ROTACAO}°
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => rodarMesaPlanta(mesa.id, PASSO_ROTACAO)}
+                          >
+                            +{PASSO_ROTACAO}°
+                          </Button>
                           <Button size="sm" variant="outline" onClick={() => duplicarMesaPlanta(mesa.id)}>
                             Duplicar mesa
                           </Button>

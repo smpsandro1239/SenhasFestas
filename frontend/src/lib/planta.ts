@@ -7,10 +7,19 @@ export interface Mesa {
   x: number;
   y: number;
   forma: FormaMesa;
+  // Graus inteiros 0-359. Só visível em mesas não circulares (quadradas).
+  rotacao: number;
 }
 
 export const MAX_MESAS_PLANTA = 200;
 export const GRID_PLANTA = 5;
+export const PASSO_ROTACAO = 45;
+
+export function normalizarRotacao(valor: number): number {
+  if (!Number.isFinite(valor)) return 0;
+  const resto = Math.round(valor) % 360;
+  return resto < 0 ? resto + 360 : resto;
+}
 
 export function normalizarPosicao(valor: number): number {
   if (!Number.isFinite(valor)) return 0;
@@ -42,6 +51,7 @@ export function criarMesa(
   forma: FormaMesa = 'redonda',
   x = 50,
   y = 50,
+  rotacao = 0,
 ): Mesa {
   return {
     id: novoIdMesa(),
@@ -50,6 +60,7 @@ export function criarMesa(
     x: normalizarPosicao(x),
     y: normalizarPosicao(y),
     forma,
+    rotacao: normalizarRotacao(rotacao),
   };
 }
 
@@ -158,6 +169,7 @@ export function parsePlanta(raw: string | null): Mesa[] {
       x: normalizarPosicao(typeof m.x === 'number' ? m.x : 0),
       y: normalizarPosicao(typeof m.y === 'number' ? m.y : 0),
       forma: m.forma === 'quadrada' ? 'quadrada' : 'redonda',
+      rotacao: normalizarRotacao(typeof m.rotacao === 'number' ? m.rotacao : 0),
     });
   }
   return mesas;
@@ -676,15 +688,13 @@ export function renderSvgPlanta(doc: DocumentoPlanta, opcoes: OpcoesSvgPlanta = 
   }
   for (const mesa of doc.mesas) {
     const cy = (mesa.y / 100) * h;
-    if (mesa.forma === 'quadrada') {
-      out.push(
-        `<rect x="${mesa.x - raio}" y="${cy - raio * 0.85}" width="${raio * 2}" height="${raio * 1.7}" rx="0.8" fill="#52525b" stroke="#a1a1aa" stroke-width="0.4"/>`,
-      );
-    } else {
-      out.push(
-        `<circle cx="${mesa.x}" cy="${cy}" r="${raio}" fill="#52525b" stroke="#a1a1aa" stroke-width="0.4"/>`,
-      );
-    }
+    const forma =
+      mesa.forma === 'quadrada'
+        ? `<rect x="${mesa.x - raio}" y="${cy - raio * 0.85}" width="${raio * 2}" height="${raio * 1.7}" rx="0.8" fill="#52525b" stroke="#a1a1aa" stroke-width="0.4"/>`
+        : `<circle cx="${mesa.x}" cy="${cy}" r="${raio}" fill="#52525b" stroke="#a1a1aa" stroke-width="0.4"/>`;
+    // A rotação aplica-se só à forma: o rótulo fica sempre direito.
+    const rotacao = normalizarRotacao(mesa.rotacao);
+    out.push(rotacao ? `<g transform="rotate(${rotacao} ${mesa.x} ${cy})">${forma}</g>` : forma);
     out.push(
       `<text x="${mesa.x}" y="${cy + 1}" font-family="sans-serif" font-size="3" text-anchor="middle" fill="#fafafa">${escaparXml(mesa.nome)}</text>`,
     );
