@@ -13,6 +13,29 @@
 
 ---
 
+## 2026-10-19 — Correcção CSP em dev (hidratação)
+
+**Objectivo**: resolver a dívida #10 do `PLAN.md` — o frontend em `npm run dev`
+ficava inerte porque a CSP bloqueava o `eval` do webpack e o React não hidratava.
+
+**Feito**
+- `next.config.js`: `script-src` passa a incluir `'unsafe-eval'` **só quando
+  `!isProd`**; produção mantém `'self' 'unsafe-inline'` (estrito).
+- Verificação end-to-end: backend (`:3000`) + frontend dev (`:3001`); Playwright
+  **sem `bypassCSP`** → `HIDRATADO: true`, sem erro de CSP/eval. (1 erro benigno:
+  `401` pré-login em `/api/auth/refresh`.)
+
+**Gates (frontend)**
+- `tsc --noEmit` limpo; `vitest run` 227/227; `lint` sem warnings; `build` OK.
+
+**Commits**
+- `frontend/next.config.js` (fix) + `PLAN.md`/`PROGRESS.md` (docs)
+
+**Pendente**
+- Restart do opencode para validar o próprio MCP `cdt`.
+
+---
+
 ## 2026-10-19 — Teste visual (Playwright)
 
 **Objectivo**: validar visualmente o editor da planta sem o MCP `cdt` (que só
