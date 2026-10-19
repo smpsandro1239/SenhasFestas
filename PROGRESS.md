@@ -13,6 +13,37 @@
 
 ---
 
+## 2026-10-19 — Fundo da zona deixa de assumir hex de 6 dígitos (dívida #6)
+
+**Objectivo**: dívida #6 — o fundo translúcido da zona era obtido concatenando alfa
+ao texto da cor.
+
+**Feito**
+- Localizado o sítio real: `admin/page.tsx:4215` fazia `` `${zona.cor}22` `` (a nota
+  da dívida apontava para `renderSvgPlanta`, que já usava `fill-opacity="0.16"` e
+  nunca teve o problema).
+- Novo helper puro `fundoZona(cor, percentagem = 16)` em `lib/planta.ts` que devolve
+  `color-mix(in srgb, <cor> <pct>%, transparent)`; a percentagem é limitada a 0-100
+  (NaN cai no valor por omissão). `PERCENTAGEM_FUNDO_ZONA = 16` coincide com o
+  `fill-opacity` do SVG, para o canvas e o PNG exportado ficarem iguais.
+- `color-mix` aceita qualquer formato de cor (`#rgb`, `#rrggbb`, `#rrggbbaa`,
+  `rgb()`, `hsl()`, nomes), ao contrário da concatenação, que só funcionava com hex
+  de 6 dígitos (com `#08f` produzia `#08f22`, inválido, e o browser descartava a
+  declaração — fundo transparente).
+
+**Testes**: `describe('fundoZona')` com 3 casos (valor por omissão; cinco formatos de
+cor equivalem-se; limites 0/100/NaN). Frontend **268/268**.
+
+**Verificação em browser real** (Playwright, `festa-teste-2026` v22 → v23 → v24):
+cor da Zona 1 trocada por `#08f` via API, `getComputedStyle` do `.planta-zona`
+devolveu `color(srgb 0 0.533333 1 / 0.16)` (α = 0,16 ✓) e borda
+`rgb(0, 136, 255)`; cor reposta em `#3b82f6` no fim. Zero erros de página.
+
+**Gates**: frontend `tsc` limpo, 268/268, lint sem warnings, build ok
+(`Compiled successfully in 7.8s`).
+
+---
+
 ## 2026-10-19 — Binário nativo do SWC truncado (dívida #8)
 
 **Objectivo**: dívida #8 — o binário `@next/swc-win32-x64-msvc` estava truncado e o
