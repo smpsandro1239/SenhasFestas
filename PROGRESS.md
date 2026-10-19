@@ -43,6 +43,11 @@
 **Gates**: backend `tsc` limpo, 390/390, build ok, lint 4 warnings pré-existentes;
 frontend `tsc` limpo, **238/238**, build ok, lint sem warnings.
 
+**Verificação (browser, Playwright + Chrome real)**: login admin → `/admin` →
+tab Planta → `festa-teste-2026`; "Adicionar zona" 2× → 2 zonas no canvas e aviso
+`Zonas sobrepostas: Zona 1 × Zona 2. Confirma se é intencional.` visível.
+Único erro de rede: `401 /api/auth/refresh` pré-login (benigno, habitual).
+
 **Pendente**: push dos commits locais — só com autorização explícita.
 
 ---
