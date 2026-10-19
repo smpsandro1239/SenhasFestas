@@ -174,7 +174,7 @@ mesa e relatórios financeiros.
 
 | # | Descrição | Onde | Impacto |
 |---|---|---|---|
-| 1 | Auditoria do interceptor só captura `after` — suporte a `before` **adicionado 2026-10-19**; o PUT da planta passa-o, **outras rotas ainda não** | `audit.interceptor.ts` | Rotas sem `before` continuam sem estado anterior |
+| 1 | ~~Auditoria do interceptor só captura `after`~~ **Resolvido 2026-10-19** | `audit.interceptor.ts` | Suporte a `before` (+ `eventId`/`entityId`/`extras`) no interceptor; **todas as rotas de escrita** (catalog update/delete/stock, cash-closure abrir/fechar, balance load/deduct/reverse/transfer/extend/unarchive/notified, order status/cancel, kitchen status, public-screen entregue, event update/status/settings/members/remove, user update/remove, planta PUT) arquivam o estado anterior num mecanismo único (os registos directos do `AuditService` no catalog/cash-closure foram removidos — duplicavam). Criação e `POST /import` não têm `before` por não existir estado anterior |
 | 2 | ~~Undo não cobre zonas~~ **Resolvido 2026-10-19** | `admin/page.tsx` | Adicionar/editar/remover zona agora oferecem undo de 6 s |
 | 3 | ~~`plantaAviso` limpo no arranque da carga~~ **Resolvido 2026-10-19** | `admin/page.tsx`, `lib/planta.ts` (`pendentesDeOutrosEventos`) | O aviso de edições por sincronizar passou a ser **derivado** das chaves `sf:planta-pendente:*` (que só existem após uma falha), sobrevive a reload e não é apagado pela carga. Cada evento pendente tem botão «Ir para …» |
 | 4 | ~~`pendenteTs` congelado no render~~ **Resolvido 2026-10-19** | `admin/page.tsx` | O painel de conflito re-renderiza a cada 30 s (`agoraIdade` + intervalo activo só com o painel aberto), passando o `agora` a `descreverIdade` |
@@ -257,6 +257,23 @@ mesa e relatórios financeiros.
 - Access token em memória, refresh token em cookie httpOnly same-origin.
 - Roles efectivas derivadas de `EventUserEntity` (event-role) dentro do evento;
   `superadmin` global é imune.
+
+### Auditoria
+- Um **mecanismo único**: o interceptor global captura o `after` (resumo da resposta) e,
+  quando a rota o fornece, o `before`/`eventId`/`entityId`/`extras`. O **serviço** constrói
+  o snapshot completo (`antes` + `eventId` + `entidadeId` + `extras`) e o **controller** só
+  o arquiva via `arquivarAuditoria(req)` (factory que fecha `definirAuditBefore` +
+  `definirAuditEvento` + `definirAuditEntidade`). Os serviços de domínio **não** injectam o
+  `AuditService` — não há registos duplicados.
+- `eventId`/`entityId`: derivados de `params`/`body` pelo interceptor, ou sobrepostos pelo
+  serviço nas rotas que não os trazem (produto→evento, pedido→evento, caixa→evento, id da
+  caixa criada). `undefined` **preserva** o valor derivado.
+- Snapshots **sem relações pesadas**: `catalog.update`/`softRemove` excluem a relação
+  `event` e `event.update` exclui o `floorPlan` — acima de 8000 chars o interceptor
+  substitui o `before` por `{resumo:'resposta extensa'}` e perde-o.
+- `snapshot()` remove `password`/`token`/`refreshToken`/`tokenHash` (profundidade 4,
+  arrays cortados a 50); o `before` de `user` usa `toPublicUser` (subconjunto público).
+- Criação e import não têm `before` (não há estado anterior).
 
 ---
 

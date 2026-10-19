@@ -13,6 +13,77 @@
 
 ---
 
+## 2026-10-19 — Auditoria com `before` em todas as rotas de escrita (dívida #1)
+
+**Objectivo**: fechar a dívida #1 — o interceptor global de auditoria já capturava
+o `after` (resultado) mas só o PUT da planta capturava o `before` (estado anterior).
+Estender o mecanismo às restantes rotas de escrita, sem duplicar registos (o serviço
+não volta a chamar o `AuditService`).
+
+**Feito**
+- **Interceptor** (`audit.interceptor.ts`): novos símbolos `AUDIT_DETAILS_EXTRAS`,
+  `AUDIT_EVENT_ID` e `AUDIT_ENTITY_ID`; `definirAuditBefore(req, antes, extras?)` passa
+  a fundir `extras` em `details`; novos `definirAuditEvento(req, eventId)` e
+  `definirAuditEntidade(req, entityId)`; interface `SnapshotAuditoria`
+  (`{ antes?, eventId?, entidadeId?, extras? }`); helper `arquivarAuditoria(req)` que
+  fecha os três setters (os controllers limitam-se a passá-lo). `eventoEfetivo`/
+  `entidadeEfetiva` = `override ?? base` garantem que um override ausente (`undefined`)
+  não apaga o valor derivado do path/body.
+- **Evento `eventId`**: o interceptor deriva-o de `req.params.eventId`/`req.body.eventId`.
+  Rotas como `PATCH /products/:id/stock`, `PATCH kitchen/orders/:id/status`,
+  `POST /cash-closure/:id/fechar` e `PATCH /events/:id*` não o trazem → o serviço
+  passa `eventId` explicitamente (produto→evento, pedido→evento, caixa→evento) para o
+  log não sair do escopo do tesoureiro.
+- **Rotas passam a arquivar `before`** (o serviço constrói o snapshot; o controller
+  passa `arquivarAuditoria(req)`):
+  - `catalog`: `PATCH /:id`, `DELETE /:id` (o stock já tinha sido migrado antes).
+  - `cash-closure`: `POST /:id/fechar` (migrado antes) e `POST /abrir` (unificado:
+    era o último ponto a gravar `CREATE` pelo `AuditService` **e** `OPEN` pelo
+    interceptor; fica só o `OPEN`, com `entityId` = id da caixa via `entidadeId`).
+  - `balance`: `load`, `deduct`, `reverse/:movementId`, `transfer` (regista os **dois
+    lados** + `extras {fromEventId,toEventId}`), `extend`, `unarchive`, `notified`.
+  - `order`: `PATCH /:id/status`, `POST /:id/cancel`.
+  - `kitchen`: `PATCH kitchen/orders/:id/status`.
+  - `public-screen`: `PATCH public/pedidos/:id/entregue`.
+  - `event`: `PATCH /:id`, `PATCH /:id/status`, `PATCH /:id/settings`,
+    `POST /:id/members`, `DELETE /:id/members/:userId`, `DELETE /:id`.
+  - `user`: `PATCH /:id`, `DELETE /:id` (snapshot via `toPublicUser` — **sem password**).
+- Sem `before` (não há estado anterior): `POST` de criação e `POST /import`.
+- **Snapshots sem relações pesadas**: em `catalog.update`/`softRemove` e
+  `event.update` o snapshot exclui a relação `event`/o campo `floorPlan` — um evento
+  com muitas mesas ultrapassava o corte de 8000 chars do interceptor e o `before`
+  era substituído por `{resumo:'resposta extensa'}`, perdendo-se por inteiro.
+- Testes: 7 novos em `balance.service.spec.ts` (load/deduct/reverse/transfer/extend/
+  unarchive/notified) + 2 em `order` + 1 em `kitchen` + 1 em `public-screen` + 6 em
+  `event` + 2 em `catalog` + 2 em `user` + 2 em `audit.interceptor.spec.ts` (override
+  de `entityId` e snapshot de criação sem `antes`).
+
+**Decisões**
+- O **serviço** constrói o snapshot completo (tem todos os dados: antes + evento +
+  extras); o **controller** só o arquiva no `req` — evita que os serviços de domínio
+  dependam do `AuditService` (registo duplicado).
+- `arquivarAuditoria(req)` é o único ponto que toca nos símbolos do `req`; os
+  controllers não conhecem `definirAuditBefore`/`definirAuditEvento`/`definirAuditEntidade`
+  directamente.
+- Um mecanismo só para a auditoria: os registos directos do `AuditService` no
+  `catalog` (ajuste de stock) e no `cash-closure` (fechar e abrir) foram removidos —
+  deixavam **duas** entradas por operação. `catalog.module`/`cash-closure.module`
+  perderam o `AuditModule` e os serviços o `AuditService`.
+
+**Verificação em execução** (instância de teste em `:3100`, `NODE_ENV=test`, build
+fresco; parada no fim): `PATCH /products/:id` → `before` de 306 chars com o produto
+sem `event` aninhado; `PATCH /events/:id` → `before` de 415 chars com
+`floorPlanVersion` mas **sem** a chave `floorPlan`; `entityId`/`eventId` correctos em
+ambos. O arranque da app valida também a injecção de dependências após remover o
+`AuditModule` dos dois módulos.
+
+**Gates**: `tsc` 0 erros · vitest **438/438** · `lint` com os 4 avisos pré-existentes
+(nenhum novo) · `build` OK (`nest build`).
+
+**Pendente**: nenhum para a dívida #1. (Dívida nova: nenhuma.)
+
+---
+
 ## 2026-10-19 — Versão-base da planta passa a ser por evento (dívida #12)
 
 **Objectivo**: dívida #12, descoberta ao validar a #5 — `plantaVersionRef` era um
