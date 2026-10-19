@@ -118,6 +118,12 @@ mesa e relatórios financeiros.
 4. **Auditoria com `before`/`after` nos PUT da planta**
    - **Porquê**: hoje só se guarda o resultado final; não se sabe o que mudou.
    - **O quê**: o serviço guarda o `floorPlan` anterior; o interceptor passa-o.
+   - **Estado**: concluído 2026-10-19 — `guardarPlanta` expõe o estado anterior
+     por callback; o controller arquiva-o no pedido (`definirAuditBefore`) e o
+     `AuditInterceptor` grava `before` junto do `after` (com o mesmo
+     `resumoResposta` de corte a 8000 chars). Só na rota da planta por agora:
+     outras rotas continuam a registar só `after` (dívida #1 parcialmente
+     resolvida).
 
 5. **Validação visual com Chrome DevTools MCP**
    - **Porquê**: drag de zonas, sobreposição mesa-zona, resize — nada disto é
@@ -152,7 +158,7 @@ mesa e relatórios financeiros.
 
 | # | Descrição | Onde | Impacto |
 |---|---|---|---|
-| 1 | Auditoria só captura `after` | `audit.interceptor.ts` | Não se sabe o estado anterior |
+| 1 | Auditoria do interceptor só captura `after` — suporte a `before` **adicionado 2026-10-19**; o PUT da planta passa-o, **outras rotas ainda não** | `audit.interceptor.ts` | Rotas sem `before` continuam sem estado anterior |
 | 2 | ~~Undo não cobre zonas~~ **Resolvido 2026-10-19** | `admin/page.tsx` | Adicionar/editar/remover zona agora oferecem undo de 6 s |
 | 3 | `plantaAviso` limpo no arranque da carga | `admin/page.tsx` | Aviso pode não ser visto |
 | 4 | `pendenteTs` congelado no render | `admin/page.tsx` | Idade desactualizada |

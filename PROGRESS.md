@@ -13,6 +13,46 @@
 
 ---
 
+## 2026-10-19 — Auditoria com `before` no PUT da planta
+
+**Objectivo**: roadmap prioridade média #4 (dívida #1) — o `AuditInterceptor`
+grava só `after`; nos PUT da planta não se sabe o que mudou.
+
+**Feito**
+- `audit.interceptor.ts`: exporta `AUDIT_BEFORE` (símbolo) e
+  `definirAuditBefore(req, antes)`; no branch de sucesso lê `req[AUDIT_BEFORE]`
+  e passa `before: resumoResposta(...)` — mesmo corte de >8000 chars do `after`.
+- `event.service.ts.guardarPlanta`: 4º parâmetro opcional
+  `antesDeGravar?(anterior)` invocado **depois** da checagem de `version` (não
+  corre em 409/404) com `{ mesas, zonas, version }` do `lerFloorPlan`.
+- `event.controller.ts`: passa callback que arquiva o snapshot no `req`.
+- Testes: 3 no spec do serviço (callback com estado anterior; não corre em 409;
+  não corre em 404) + novo `audit.interceptor.spec.ts` (grava `before`+`after`,
+  `before` ausente mantém comportamento antigo, resumo corta resposta extensa).
+
+**Decisões**
+- **Callback em vez de `@Inject(REQUEST)`/AsyncLocalStorage/símbolo na
+  resposta**: o serviço não tem acesso ao `req`; o controller (que já tinha
+  `@Request() req: any`) faz o stash. Evita mudar lifetimes DI, `enterWith`
+  frágil ou segundas leituras na BD.
+- Chave `Symbol` em vez de propriedade string: não aparece em `JSON.stringify`
+  nem em logs do pedido.
+- `record()` directo (padrão `catalog.service`) **não** usado aqui — duplicaria
+  o registo do interceptor para esta rota.
+- Só o branch de sucesso grava `before`: em 409/404 o serviço nem chega a
+  invocar o callback, logo não há estado anterior para guardar.
+
+**Commits**
+- `e9347fa feat(backend): auditar o estado anterior no PUT da planta`
+- `docs: registar o before/after no PUT da planta` (PLAN.md + este)
+
+**Gates (backend)**: `tsc` limpo; `vitest` **390/390**; `build` ok; `lint` só os
+4 warnings pré-existentes (nenhum novo).
+
+**Pendente**: push dos commits locais — só com autorização explícita.
+
+---
+
 ## 2026-10-19 — Feedback visual no export PNG
 
 **Objectivo**: roadmap prioridade alta #3 (dívida #7) — o export era silencioso:
