@@ -667,4 +667,48 @@ describe('EventService — planta (optimistic locking)', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(mockEventRepository.save).not.toHaveBeenCalled();
   });
+
+  it('guardarPlanta expõe o estado anterior pelo callback (antes de gravar)', async () => {
+    mockEventRepository.findOne.mockResolvedValue({
+      id: 'evt1',
+      floorPlan: { mesas: [{ id: 'mesa-antiga' }], zonas: [] },
+      floorPlanVersion: 3,
+    });
+    mockEventRepository.save.mockImplementation(async (e: any) => e);
+
+    const antes: any[] = [];
+    await service.guardarPlanta(
+      'evt1',
+      ORGANIZADOR,
+      { mesas: [{ id: 'nova' }], zonas: [], version: 3 } as any,
+      (anterior) => antes.push(anterior),
+    );
+
+    expect(antes).toEqual([{ mesas: [{ id: 'mesa-antiga' }], zonas: [], version: 3 }]);
+    expect(mockEventRepository.save).toHaveBeenCalled();
+  });
+
+  it('guardarPlanta não chama o callback no conflito (409)', async () => {
+    mockEventRepository.findOne.mockResolvedValue({
+      id: 'evt1',
+      floorPlan: { mesas: [], zonas: [] },
+      floorPlanVersion: 5,
+    });
+    const antesDeGravar = vi.fn();
+
+    await expect(
+      service.guardarPlanta('evt1', ORGANIZADOR, { mesas: [], version: 4 } as any, antesDeGravar),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(antesDeGravar).not.toHaveBeenCalled();
+  });
+
+  it('guardarPlanta não chama o callback quando o evento não existe (404)', async () => {
+    mockEventRepository.findOne.mockResolvedValue(null);
+    const antesDeGravar = vi.fn();
+
+    await expect(
+      service.guardarPlanta('naoexiste', ORGANIZADOR, { mesas: [], version: 0 } as any, antesDeGravar),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(antesDeGravar).not.toHaveBeenCalled();
+  });
 });

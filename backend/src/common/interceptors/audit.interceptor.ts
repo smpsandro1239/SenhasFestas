@@ -12,6 +12,16 @@ import { AuditService } from '../../modules/audit/audit.service';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * O serviço não tem acesso ao `req`, por isso o controller arquiva aqui o
+ * snapshot do estado anterior; o interceptor lê-o e grava o `before`.
+ */
+export const AUDIT_BEFORE = Symbol('auditBefore');
+
+export function definirAuditBefore(req: Request, antes: unknown): void {
+  (req as any)[AUDIT_BEFORE] = antes;
+}
+
 const ENTITY_MAP: Record<string, string> = {
   orders: 'order',
   products: 'product',
@@ -90,6 +100,7 @@ export class AuditInterceptor implements NestInterceptor {
             eventId,
             actorId: ator.id,
             actorRole: ator.role,
+            before: this.resumoResposta((req as any)[AUDIT_BEFORE]),
             after: this.resumoResposta(data),
             details: {
               method: metodo,

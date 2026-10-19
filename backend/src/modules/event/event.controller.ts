@@ -18,6 +18,7 @@ import { GuardarPlantaDto } from './planta.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { MANAGEMENT_ROLES } from '../../common/roles';
+import { definirAuditBefore } from '../../common/interceptors/audit.interceptor';
 
 @Controller('events')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -88,7 +89,9 @@ export class EventController {
     @Request() req: any,
     @Body() dto: GuardarPlantaDto,
   ) {
-    return this.eventService.guardarPlanta(id, req.user, dto);
+    return this.eventService.guardarPlanta(id, req.user, dto, (anterior) =>
+      definirAuditBefore(req, anterior),
+    );
   }
 
   @Get(':id/members')

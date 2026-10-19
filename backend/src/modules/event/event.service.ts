@@ -394,11 +394,14 @@ export class EventService {
     eventId: string,
     user: UserEntity,
     dto: GuardarPlantaDto,
+    // Snapshot do estado anterior para a auditoria: o interceptor grava-o como
+    // `before` (o serviço não tem acesso ao `req`).
+    antesDeGravar?: (anterior: { mesas: any[]; zonas: any[]; version: number }) => void,
   ): Promise<{ mesas: any[]; zonas: any[]; version: number }> {
     const event = await this.findOne(eventId, user);
     const versionAtual = event.floorPlanVersion ?? 0;
+    const atual = lerFloorPlan(event.floorPlan);
     if (dto.version !== versionAtual) {
-      const atual = lerFloorPlan(event.floorPlan);
       throw new ConflictException({
         message: 'A planta foi alterada noutro dispositivo',
         mesas: atual.mesas,
@@ -406,6 +409,7 @@ export class EventService {
         version: versionAtual,
       });
     }
+    antesDeGravar?.({ mesas: atual.mesas, zonas: atual.zonas, version: versionAtual });
     const zonas = (dto.zonas ?? []).map(normalizarZonaPlanta).slice(0, 50);
     event.floorPlan = { mesas: dto.mesas, zonas };
     event.floorPlanVersion = versionAtual + 1;
