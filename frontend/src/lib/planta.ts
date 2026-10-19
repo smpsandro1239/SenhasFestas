@@ -329,7 +329,7 @@ export interface GrupoZona {
   mesas: Mesa[];
 }
 
-export const MAX_ZONAS_PLANTA = 50;
+export const MAX_ZONAS_PLANTA = 100;
 export const ZONA_MIN = 5;
 export const CORES_ZONA = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
@@ -395,6 +395,37 @@ export function atualizarZona(
   patch: Partial<Omit<Zona, 'id'>>,
 ): Zona[] {
   return zonas.map((zona) => (zona.id === id ? normalizarZona({ ...zona, ...patch, id: zona.id }) : zona));
+}
+
+export const LIMIAR_SOBREPOSICAO_ZONA = 0.2;
+
+export interface ParSobreposicaoZona {
+  a: string;
+  b: string;
+  fracao: number;
+}
+
+// A fracção é medida sobre a MENOR zona: encostar ligeiramente (abaixo de 20% da
+// menor) não conta como erro, mas cobrir metade dela é quase sempre engano.
+export function paresDeSobreposicao(
+  zonas: Zona[],
+  limiar = LIMIAR_SOBREPOSICAO_ZONA,
+): ParSobreposicaoZona[] {
+  const pares: ParSobreposicaoZona[] = [];
+  for (let i = 0; i < zonas.length; i++) {
+    for (let j = i + 1; j < zonas.length; j++) {
+      const a = zonas[i];
+      const b = zonas[j];
+      const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+      const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      if (w <= 0 || h <= 0) continue;
+      const menor = Math.min(a.w * a.h, b.w * b.h);
+      if (menor <= 0) continue;
+      const fracao = (w * h) / menor;
+      if (fracao >= limiar) pares.push({ a: a.id, b: b.id, fracao });
+    }
+  }
+  return pares;
 }
 
 export function moverZona(zonas: Zona[], id: string, x: number, y: number): Zona[] {

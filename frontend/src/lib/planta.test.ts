@@ -32,6 +32,7 @@ import {
   zonaContemPonto,
   zonaPrincipal,
   agruparMesasPorZona,
+  paresDeSobreposicao,
   parseZona,
   parseDocumentoPlanta,
   reorganizarMesasComZonas,
@@ -595,6 +596,59 @@ describe('moverZona', () => {
     const [z] = moverZona([zona()], 'z1', -10, -10);
     expect(z.x).toBe(0);
     expect(z.y).toBe(0);
+  });
+});
+
+describe('paresDeSobreposicao', () => {
+  it('zonas separadas devolvem vazio', () => {
+    const pares = paresDeSobreposicao([
+      zona({ id: 'a', x: 0, y: 0, w: 20, h: 20 }),
+      zona({ id: 'b', x: 30, y: 0, w: 20, h: 20 }),
+    ]);
+    expect(pares).toEqual([]);
+  });
+
+  it('zonas encostadas (interseccão zero) não contam', () => {
+    const pares = paresDeSobreposicao([
+      zona({ id: 'a', x: 0, y: 0, w: 20, h: 20 }),
+      zona({ id: 'b', x: 20, y: 0, w: 20, h: 20 }),
+    ]);
+    expect(pares).toEqual([]);
+  });
+
+  it('sobreposição abaixo do limiar (15%) não conta', () => {
+    const pares = paresDeSobreposicao([
+      zona({ id: 'a', x: 0, y: 0, w: 20, h: 20 }),
+      zona({ id: 'b', x: 17, y: 0, w: 20, h: 20 }),
+    ]);
+    expect(pares).toEqual([]);
+  });
+
+  it('sobreposição significativa (25% da menor) é detectada', () => {
+    const pares = paresDeSobreposicao([
+      zona({ id: 'a', x: 0, y: 0, w: 20, h: 20 }),
+      zona({ id: 'b', x: 15, y: 0, w: 20, h: 20 }),
+    ]);
+    expect(pares).toHaveLength(1);
+    expect(pares[0]).toEqual({ a: 'a', b: 'b', fracao: 0.25 });
+  });
+
+  it('zona pequena contida numa grande tem fracao 1', () => {
+    const pares = paresDeSobreposicao([
+      zona({ id: 'grande', x: 0, y: 0, w: 50, h: 50 }),
+      zona({ id: 'pequena', x: 10, y: 10, w: 10, h: 10 }),
+    ]);
+    expect(pares).toEqual([{ a: 'grande', b: 'pequena', fracao: 1 }]);
+  });
+
+  it('respeita um limiar personalizado', () => {
+    const sobre = [
+      zona({ id: 'a', x: 0, y: 0, w: 20, h: 20 }),
+      zona({ id: 'b', x: 17, y: 0, w: 20, h: 20 }),
+    ];
+    expect(paresDeSobreposicao(sobre, 0.1)).toHaveLength(1);
+    expect(paresDeSobreposicao(sobre, 0.15)).toHaveLength(1);
+    expect(paresDeSobreposicao(sobre, 0.2)).toHaveLength(0);
   });
 });
 

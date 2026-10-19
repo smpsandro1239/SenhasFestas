@@ -40,6 +40,7 @@ import {
   reorganizarMesas,
   reorganizarMesasComZonas,
   agruparMesasPorZona,
+  paresDeSobreposicao,
   renderSvgPlanta,
   normalizarPosicao,
   encaixarGrelha,
@@ -1708,6 +1709,12 @@ function AdminPage() {
     () => new Set(duplicadosAtuais.map((d) => d.nome.trim().toLowerCase())),
     [duplicadosAtuais],
   );
+  const sobreposicoesZonas = useMemo(() => {
+    const nomePorId = new Map(plantaZonas.map((z) => [z.id, z.nome]));
+    return paresDeSobreposicao(plantaZonas).map(
+      (par) => `${nomePorId.get(par.a) ?? par.a} × ${nomePorId.get(par.b) ?? par.b}`,
+    );
+  }, [plantaZonas]);
   const eventoDoLote = useMemo(
     () => events.find((ev: any) => ev.shortCode === loteShortCode),
     [events, loteShortCode],
@@ -4081,6 +4088,13 @@ function AdminPage() {
                       Nomes de mesa repetidos:{' '}
                       {duplicadosAtuais.map((d) => `«${d.nome}» aparece ${d.ocorrencias}×`).join('; ')}.
                       Só a primeira ocorrência de cada nome é usada nos QRs.
+                    </p>
+                  )}
+
+                  {sobreposicoesZonas.length > 0 && (
+                    <p className="mt-2 text-xs text-amber-400">
+                      Zonas sobrepostas: {sobreposicoesZonas.join('; ')}. Confirma se é
+                      intencional.
                     </p>
                   )}
 
