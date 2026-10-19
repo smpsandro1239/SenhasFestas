@@ -109,6 +109,9 @@ mesa e relatórios financeiros.
      testável unitariamente.
    - **Estado**: MCP instalado (`cdt`), precisa de restart + app a correr.
      Alvo definido: evento `festa-teste-2026` (aceite polir evento existente).
+   - **Nota**: validação feita por Playwright (não `cdt`) em 2026-10-19 — login,
+     criar mesas/zona, drag para dentro de zona, auto-organizar e export PNG
+     confirmados (ver `PROGRESS.md`). O `cdt` continua a faltar validar em si.
 
 6. **Validação de sobreposição de zonas**
    - Avisar quando duas zonas se sobrepõem significativamente.
@@ -143,6 +146,7 @@ mesa e relatórios financeiros.
 | 7 | Export PNG sem feedback de erro | `admin/page.tsx` | Clique silencioso |
 | 8 | SWC do frontend **truncado** (18,4 MB instalados vs 148,4 MB esperados; magic `MZ`) | `node_modules/@next/swc-win32-x64-msvc` | Fallback WASM; compilação lenta. Corrigir reinstalando `@next/swc-win32-x64-msvc@15.5.24` |
 | 9 | `/health/ready` devolve **HTTP 200** mesmo com dependência `unhealthy` | `health.controller.ts:32-46` | Readiness probe engana load balancers; contrato correcto seria **503** |
+| 10 | CSP (`script-src 'self' 'unsafe-inline'`) bloqueia `eval` do webpack em dev | `next.config.js` | React não hidrata em `npm run dev`; frontend inerte em qualquer browser. Produção não é afectada |
 
 ---
 

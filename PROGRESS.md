@@ -13,6 +13,42 @@
 
 ---
 
+## 2026-10-19 — Teste visual (Playwright)
+
+**Objectivo**: validar visualmente o editor da planta sem o MCP `cdt` (que só
+carrega com restart do opencode), usando Playwright (já instalado para e2e).
+
+**Feito**
+- Login automático → `/admin` → tab Planta → evento `festa-teste-2026`.
+- Criadas 3 mesas e 1 zona; arrastada Mesa A para dentro da zona.
+- Auto-organizar por zonas; export PNG capturado como download real.
+- Verificação programática na BD: `floorPlanVersion` subiu a 4; Mesa A dentro da
+  Zona 1 (pertença derivada correcta); Mesas B/C sem zona → faixa no topo (y=6);
+  export = PNG válido 1600×1600 (98.996 bytes).
+
+**Descoberta (registada no `PLAN.md`, dívida #10)**
+- A **CSP bloqueia a hidratação em dev**: `script-src 'self' 'unsafe-inline'` sem
+  `'unsafe-eval'`, mas o webpack em dev usa `eval-source-map` → bundle bloqueado →
+  React não hidrata → frontend inerte em qualquer browser em `npm run dev`. O teste
+  usou `bypassCSP: true`. Produção (sem eval) não é afectada.
+
+**Decisões tomadas**
+- Validar via Playwright em vez de esperar pelo `cdt` — mesmo objectivo, ferramenta
+  já disponível. O `cdt` continua por validar em si.
+- Teste poluiu `festa-teste-2026` (aceite): 3 mesas + 1 zona, versão 4.
+
+**Commits**
+- (este) `docs: registar resultado do teste visual da planta`
+
+**Gates**
+- Só docs; sem alterações ao código da app.
+
+**Pendente**
+- Decidir se a CSP em dev deve permitir `unsafe-eval` (só em desenvolvimento).
+- Restart do opencode para validar o próprio `cdt`.
+
+---
+
 ## 2026-10-19 — Verificação de arranque + descobertas de ambiente
 
 **Objectivo**: verificar se a app arranca contra a BD real e apurar riscos antes
