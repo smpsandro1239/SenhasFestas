@@ -183,6 +183,7 @@ function AdminPage() {
   const [plantaSnap, setPlantaSnap] = useState(true);
   const [undoEtiqueta, setUndoEtiqueta] = useState<string | null>(null);
   const [plantaSync, setPlantaSync] = useState<'' | 'saving' | 'saved' | 'erro' | 'offline'>('');
+  const [exportarEstado, setExportarEstado] = useState<'' | 'a-exportar' | 'erro'>('');
   const [plantaConflito, setPlantaConflito] = useState<{
     mesas: Mesa[];
     zonas: Zona[];
@@ -1646,34 +1647,45 @@ function AdminPage() {
   };
 
   const exportarPlantaPng = () => {
-    const svg = renderSvgPlanta({
-      mesas: plantaEstadoRef.current,
-      zonas: plantaZonasEstadoRef.current,
-    });
-    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 1600;
-      canvas.height = 1600;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = '#0b0b0f';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob((png) => {
-          if (!png) return;
+    if (exportarEstado === 'a-exportar') return;
+    setExportarEstado('a-exportar');
+    void (async () => {
+      try {
+        const svg = renderSvgPlanta({
+          mesas: plantaEstadoRef.current,
+          zonas: plantaZonasEstadoRef.current,
+        });
+        const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+        try {
+          const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const i = new Image();
+            i.onload = () => resolve(i);
+            i.onerror = () => reject(new Error('falha ao carregar o SVG'));
+            i.src = url;
+          });
+          const canvas = document.createElement('canvas');
+          canvas.width = 1600;
+          canvas.height = 1600;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('canvas sem contexto 2d');
+          ctx.fillStyle = '#0b0b0f';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const png = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+          if (!png) throw new Error('falha ao converter a PNG');
           const a = document.createElement('a');
           a.href = URL.createObjectURL(png);
           a.download = `planta-${plantaShortCode || 'evento'}.png`;
           a.click();
           URL.revokeObjectURL(a.href);
-        }, 'image/png');
+          setExportarEstado('');
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      } catch {
+        setExportarEstado('erro');
       }
-      URL.revokeObjectURL(url);
-    };
-    img.onerror = () => URL.revokeObjectURL(url);
-    img.src = url;
+    })();
   };
 
   const descartarLote = () => {
@@ -3893,7 +3905,7 @@ function AdminPage() {
                       size="sm"
                       variant="outline"
                       onClick={exportarPlantaPng}
-                      disabled={planta.length === 0 && plantaZonas.length === 0}
+                      disabled={(planta.length === 0 && plantaZonas.length === 0) || exportarEstado === 'a-exportar'}
                     >
                       Exportar PNG
                     </Button>
@@ -3916,6 +3928,14 @@ function AdminPage() {
                     )}
                     {plantaSync === 'offline' && (
                       <span className="text-xs text-zinc-400">Modo offline</span>
+                    )}
+                    {exportarEstado === 'a-exportar' && (
+                      <span className="text-xs text-zinc-400">A exportar…</span>
+                    )}
+                    {exportarEstado === 'erro' && (
+                      <span className="text-xs text-amber-400">
+                        Falha ao exportar a PNG — tenta de novo
+                      </span>
                     )}
                   </div>
 
