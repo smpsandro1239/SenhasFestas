@@ -13,6 +13,66 @@
 
 ---
 
+## 2026-10-19 — Rotação de mesas (graus)
+
+**Objectivo**: roadmap prioridade baixa #9 — mesas não alinhadas com a grelha.
+
+**Feito**
+- **Backend**: `MesaPlantaDto.rotacao` opcional (`@IsInt`, `@Min(0)`, `@Max(359)`).
+  Plantas antigas não o têm e assume-se 0; o serviço grava as mesas como vêm (sem
+  normalização por mesa), por isso basta o DTO.
+- **lib**: `Mesa.rotacao` obrigatório (default 0 em `criarMesa`), `normalizarRotacao`
+  (redonda e em módulo 360, aceita negativos), `PASSO_ROTACAO = 45`; `parsePlanta`
+  lê e normaliza; `renderSvgPlanta` envolve **só a forma** em
+  `<g transform="rotate(a x cy)">` — o rótulo fica direito.
+- **admin**: a mesa passou a ter um `<span aria-hidden>` com a forma (bg/borda) que
+  roda, com o nome/lugares por cima **sem** rodar. Para o ângulo ser visível no
+  canvas, a mesa quadrada desenha 85% da altura (igual ao rectângulo 1:0.85 do
+  SVG); a redonda é invariante. Controlos: input 0–359 (passo 45) e botões −45/+45;
+  atalhos `r` (roda) e `Shift+R` (roda ao contrário); duplicar copia o ângulo.
+- Bug corrigido durante a verificação: o `preventDefault` do `pointerdown` impedia
+  o foco, logo os atalhos de teclado (setas, `Delete`, `r`) só funcionavam depois
+  de `Tab`. O clique passa a dar foco explícito (`focus({preventScroll:true})`).
+- Testes: 6 do DTO no backend (compatibilidade, limites, decimais, não numérico);
+  6 na lib (normalização, `criarMesa`, `parsePlanta`, `moverMesa` preserva,
+  SVG roda só a forma, sem rotação não emite `<g>`).
+
+**Decisões**
+- Graus inteiros 0–359 no próprio documento da mesa; **não** se guarda a matriz de
+  transformação nem se usam radianos (export legível, JSON estável).
+- Rodar a forma e não o rótulo: um plano com nomes inclinados é ilegível.
+- A mesa quadrada passou a ser um rectângulo 1:0.85 também no canvas — antes era
+  um quadrado, divergindo do SVG; agora canvas e export coincidem.
+- `rotacao` fica no payload dos clientes novos; um cliente antigo que não o envie
+  grava mesas sem `rotacao` (tolerado no parse, que assume 0).
+
+**Commits**
+- `0588f4a feat(planta): rotacao da mesa no DTO (0-359 graus, opcional)`
+- `934e12a feat(planta): rotacao de mesas (0-359 graus)`
+- `docs: registar rotacao de mesas` (PLAN.md + este)
+
+**Gates**: backend `tsc` limpo, **404/404** (398 + 6), build ok, lint 4 warnings
+pré-existentes; frontend `tsc` limpo, **257/257** (251 + 6), build ok, lint sem
+warnings.
+
+**Verificação (browser)**
+- Playwright + Chrome real em `festa-teste-2026`: Mesa A → quadrada + 45°: bbox da
+  forma passa de **76×64,6** (rectângulo) para **99,4×99,4** (losango) — a rotação
+  é mesmo aplicada no canvas; `style="... rotate(45deg)"`; rótulo com
+  `transform: none` (direito); `aria-label` ganha «rodada 45 graus».
+- Botões ±45°: 45 → 90 → 45. Teclado: Mesa B `r` → 45°, `Shift+R` → 0°.
+- Sem `pageerror` nem `console.error`.
+- Estado do evento reposto no fim (3 mesas redondas `rotacao: 0`, 1 zona, 25×15 m)
+  via API; screenshots `rotacao-mesa-45.png` e `rotacao-mesa-final.png`.
+- Nota: a 1.ª corrida do script falhou por assumir o baseline limpo (a corrida
+  anterior tinha deixado a Mesa A quadrada/45) — os testes de UI que dependem de
+  mudança de estado precisam de repor o baseline primeiro.
+
+**Pendente**: push dos commits locais — só com autorização explícita. O rótulo
+acessível duplicado («Mesa Mesa A», «Zona Zona 1») ficou registado como dívida #11.
+
+---
+
 ## 2026-10-19 — Dimensões reais da planta (metros) e export à escala
 
 **Objectivo**: roadmap prioridade baixa #10 — dimensões reais em metros para

@@ -151,6 +151,10 @@ mesa e relatórios financeiros.
 8. **Export PDF com separadores por zona** — cada zona numa folha, com QRs das
    respectivas mesas.
 9. **Rotação de mesas** — útil para layouts não-alinhados.
+   - **Estado**: concluído 2026-10-19 — `Mesa.rotacao` (graus inteiros 0–359,
+     opcional no DTO; omissão = 0), shape rodada em torno do centro no canvas e no
+     export SVG/PNG com o rótulo sempre direito; controlos input/±45° e atalhos
+     `r`/`Shift+R`.
 10. **Dimensões reais (metros)** — impressão à escala.
     - **Estado**: concluído 2026-10-19 — `dimensoes: {larguraM, alturaM}` opcional
       no documento da planta (1–200 m, uma casa decimal); inputs no admin, canvas
@@ -180,6 +184,7 @@ mesa e relatórios financeiros.
 | 8 | SWC do frontend **truncado** (18,4 MB instalados vs 148,4 MB esperados; magic `MZ`) | `node_modules/@next/swc-win32-x64-msvc` | Fallback WASM; compilação lenta. Corrigir reinstalando `@next/swc-win32-x64-msvc@15.5.24` |
 | 9 | `/health/ready` devolve **HTTP 200** mesmo com dependência `unhealthy` | `health.controller.ts:32-46` | Readiness probe engana load balancers; contrato correcto seria **503** |
 | 10 | ~~CSP (`script-src 'self' 'unsafe-inline'`) bloqueia `eval` do webpack em dev~~ **Resolvido 2026-10-19** | `next.config.js` | `'unsafe-eval'` adicionado só quando `!isProd`; hidratação verificada em dev, produção mantém CSP estrito |
+| 11 | Rótulos acessíveis duplicam o prefixo quando o nome já o tem (`aria-label="Mesa Mesa A, 8 lugares"`, `"Zona Zona 1"`) | `admin/page.tsx` | Leitores de ecrã ouvem o prefixo duas vezes. Fix: não prefixar quando `nome` já começa por `Mesa `/`Zona ` |
 
 ---
 
@@ -223,6 +228,10 @@ mesa e relatórios financeiros.
   existem); o cliente reconcilia.
 - **Pendente por evento** em `localStorage` (`sf:planta-pendente:<shortCode>`) com
   `{mesas, zonas, version, ts}`.
+- **Rotação**: `Mesa.rotacao` em graus inteiros 0–359 (opcional no DTO; ausente
+  = 0). Roda a **forma** em torno do centro, não o rótulo. `Mesa.forma='redonda'`
+  é invariante à rotação (círculo); só a quadrada (rectângulo 1:0.85, igual no
+  canvas e no SVG) mostra o ângulo.
 - **`decidirPlantaRemota`**: `editadoDesdeCarga` → `ignorar`;
   `pendenteVersao === versaoServidor` → `retomar-pendente`; senão
   `conflito-pendente`; senão `oferecer-importacao`/`aplicar`.
