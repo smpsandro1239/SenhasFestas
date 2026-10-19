@@ -174,6 +174,9 @@ function AdminPage() {
     version: number;
   } | null>(null);
   const plantaEditadaDesdeCargaRef = useRef(false);
+  // Conta as edições locais: permite saber se a gravação que acabou de ter sucesso
+  // ainda representa o estado actual (sem edições entretanto).
+  const plantaEdicaoSeqRef = useRef(0);
   const [loteModo, setLoteModo] = useState<'intervalo' | 'nomes'>('intervalo');
   const [loteInicio, setLoteInicio] = useState('1');
   const [loteFim, setLoteFim] = useState('10');
@@ -1294,6 +1297,19 @@ function AdminPage() {
     } catch {}
   };
 
+  const marcarPlantaEditada = () => {
+    plantaEditadaDesdeCargaRef.current = true;
+    plantaEdicaoSeqRef.current += 1;
+  };
+
+  // Deixou de haver edições locais por gravar (adoptou-se o estado do servidor ou
+  // descartou-se o local). A sequência avança para que uma gravação ainda em voo
+  // não seja tomada como representativa do estado actual.
+  const esquecerEdicoesLocais = () => {
+    plantaEditadaDesdeCargaRef.current = false;
+    plantaEdicaoSeqRef.current += 1;
+  };
+
   const enviarPlantaContexto = async (
     eventoId: string,
     shortCode: string,
@@ -1304,6 +1320,7 @@ function AdminPage() {
   ) => {
     if (!eventoId || !shortCode) return;
     const ativo = () => plantaCarregadaRef.current === shortCode;
+    const seqDoEnvio = plantaEdicaoSeqRef.current;
     const docCache = {
       mesas,
       zonas,
@@ -1325,6 +1342,8 @@ function AdminPage() {
       if (!ativo()) return;
       plantaVersionRef.current =
         typeof r?.version === 'number' ? r.version : plantaVersionRef.current + 1;
+      // A gravação representa o estado actual: deixa de haver edições por gravar.
+      if (plantaEdicaoSeqRef.current === seqDoEnvio) plantaEditadaDesdeCargaRef.current = false;
       setPlantaConflito(null);
       setPlantaSync('saved');
     } catch (e) {
@@ -1410,6 +1429,7 @@ function AdminPage() {
     setPlantaSel(null);
     setZonaSel(null);
     limparUndo();
+    esquecerEdicoesLocais();
     if (plantaShortCode) {
       try {
         localStorage.setItem(
@@ -1450,6 +1470,7 @@ function AdminPage() {
     setPlantaSel(null);
     setZonaSel(null);
     limparUndo();
+    esquecerEdicoesLocais();
     if (plantaShortCode) {
       try {
         localStorage.removeItem(`sf:planta:${plantaShortCode}`);
@@ -1468,7 +1489,7 @@ function AdminPage() {
   const definirDocumento = (mesas: Mesa[], zonas: Zona[]) => {
     plantaEstadoRef.current = mesas;
     plantaZonasEstadoRef.current = zonas;
-    plantaEditadaDesdeCargaRef.current = true;
+    marcarPlantaEditada();
     setPlanta(mesas);
     setPlantaZonas(zonas);
     gravarPlanta(mesas);
@@ -1627,7 +1648,7 @@ function AdminPage() {
       const y = plantaSnap ? encaixarGrelha(rawY) : normalizarPosicao(rawY);
       const next = moverMesa(plantaEstadoRef.current, arrasto.id, x, y);
       plantaEstadoRef.current = next;
-      plantaEditadaDesdeCargaRef.current = true;
+      marcarPlantaEditada();
       setPlanta(next);
       return;
     }
@@ -1641,7 +1662,7 @@ function AdminPage() {
         plantaSnap ? encaixarGrelha(y) : y,
       );
       plantaZonasEstadoRef.current = next;
-      plantaEditadaDesdeCargaRef.current = true;
+      marcarPlantaEditada();
       setPlantaZonas(next);
       return;
     }
@@ -1656,7 +1677,7 @@ function AdminPage() {
       plantaSnap ? encaixarGrelha(h) : h,
     );
     plantaZonasEstadoRef.current = next;
-    plantaEditadaDesdeCargaRef.current = true;
+    marcarPlantaEditada();
     setPlantaZonas(next);
   };
 
