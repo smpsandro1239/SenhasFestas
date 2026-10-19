@@ -5,6 +5,7 @@ import { CreateCashClosureDto, CloseCashClosureDto } from './dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { FINANCE_ROLES } from '../../common/roles';
+import { arquivarAuditoria } from '../../common/interceptors/audit.interceptor';
 
 @Controller('cash-closure')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -14,7 +15,7 @@ export class CashClosureController {
   @Post('abrir')
   @Roles(...FINANCE_ROLES)
   async abrir(@Request() req: any, @Body() dto: CreateCashClosureDto) {
-    return this.cashClosureService.abrirCaixa(req.user.id, req.user, dto);
+    return this.cashClosureService.abrirCaixa(req.user.id, req.user, dto, arquivarAuditoria(req));
   }
 
   @Post(':id/fechar')
@@ -24,7 +25,7 @@ export class CashClosureController {
     @Request() req: any,
     @Body() dto: CloseCashClosureDto,
   ) {
-    return this.cashClosureService.fecharCaixa(id, req.user.id, req.user, dto);
+    return this.cashClosureService.fecharCaixa(id, req.user.id, req.user, dto, arquivarAuditoria(req));
   }
 
   @Get('event/:eventoId')

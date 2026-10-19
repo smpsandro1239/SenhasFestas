@@ -158,4 +158,42 @@ describe('UserService', () => {
       ).resolves.toEqual(UTILIZADOR_PUBLICO);
     });
   });
+
+  describe('snapshot anterior para auditoria (arquivar)', () => {
+    it('update arquiva o utilizador anterior sem password', async () => {
+      mockUserRepository.findOne.mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.pt',
+        name: 'Ana',
+        password: 'hash',
+        role: 'client',
+      });
+      mockUserRepository.save.mockImplementation(async (u: any) => u);
+      const arquivar = vi.fn();
+
+      await service.update('u1', { name: 'Ana Maria' } as any, arquivar);
+
+      expect(arquivar).toHaveBeenCalledWith({
+        antes: { id: 'u1', email: 'a@b.pt', name: 'Ana', role: 'client' },
+      });
+    });
+
+    it('remove arquiva o utilizador anterior sem password', async () => {
+      mockUserRepository.findOne.mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.pt',
+        name: 'Ana',
+        password: 'hash',
+        role: 'client',
+      });
+      mockUserRepository.softDelete.mockResolvedValue({ affected: 1 });
+      const arquivar = vi.fn();
+
+      await service.remove('u1', arquivar);
+
+      expect(arquivar).toHaveBeenCalledWith({
+        antes: { id: 'u1', email: 'a@b.pt', name: 'Ana', role: 'client' },
+      });
+    });
+  });
 });

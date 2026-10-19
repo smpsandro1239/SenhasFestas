@@ -6,6 +6,7 @@ import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { STAFF_ROLES, FINANCE_ROLES, ORDER_CREATOR_ROLES } from '../../common/roles';
+import { arquivarAuditoria } from '../../common/interceptors/audit.interceptor';
 
 @Controller('orders')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -25,13 +26,13 @@ export class OrderController {
     @Body() dto: UpdateOrderStatusDto,
     @Request() req: any,
   ) {
-    return this.orderService.updateStatus(id, dto.status, req.user);
+    return this.orderService.updateStatus(id, dto.status, req.user, arquivarAuditoria(req));
   }
 
   @Post(':id/cancel')
   @Roles(...FINANCE_ROLES, 'client')
   async cancel(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    return this.orderService.cancelOrder(id, req.user);
+    return this.orderService.cancelOrder(id, req.user, arquivarAuditoria(req));
   }
 
   @Get('mine')

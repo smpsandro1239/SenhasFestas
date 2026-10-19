@@ -4,6 +4,7 @@ import { PublicScreenService } from './public-screen.service';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { STAFF_ROLES } from '../../common/roles';
+import { arquivarAuditoria } from '../../common/interceptors/audit.interceptor';
 
 @Controller('public')
 export class PublicScreenController {
@@ -38,6 +39,6 @@ export class PublicScreenController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(...STAFF_ROLES)
   async entregar(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    return this.publicScreenService.marcarEntregue(id, req.user);
+    return this.publicScreenService.marcarEntregue(id, req.user, arquivarAuditoria(req));
   }
 }

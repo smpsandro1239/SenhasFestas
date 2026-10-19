@@ -3,6 +3,7 @@ import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { OrderEntity, EventUserEntity, EventEntity } from '../../entities';
 import { OrderGateway } from '../../websocket/order.gateway';
+import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';
 
 // Campos do ecrã público. A7: total e itens.notes removidos — o ecrã nunca os
 // renderiza (mostra só nº do pedido, tempo, mesa, estado) mas servia-os sem
@@ -88,7 +89,11 @@ export class PublicScreenService {
     return { prontos, emPreparacao, recebidos };
   }
 
-  async marcarEntregue(id: string, utilizador: any): Promise<any> {
+  async marcarEntregue(
+    id: string,
+    utilizador: any,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
+  ): Promise<any> {
     return this.dataSource.transaction(async (manager) => {
 const pedidoCtx = await manager.findOne(OrderEntity, {
       where: { id },
@@ -122,6 +127,7 @@ const pedidoCtx = await manager.findOne(OrderEntity, {
     if (pedido.status !== 'ready') {
       throw new BadRequestException('Pedido não está pronto para entrega');
     }
+    arquivar?.({ antes: { status: pedido.status }, eventId: pedidoCtx.event?.id });
     pedido.status = 'delivered';
     const pedidoAtualizado = await manager.save(OrderEntity, pedido);
 

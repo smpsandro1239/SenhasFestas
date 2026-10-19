@@ -19,13 +19,10 @@ function criarServico(overrides: { jaAberta?: any } = {}) {
     save: vi.fn().mockImplementation(async (v) => ({ id: 'c1', ...v })),
   } as any;
 
-  const auditService = { record: vi.fn().mockResolvedValue(undefined) } as any;
-
   return {
-    service: new CashClosureService(repository, membershipService, eventService, auditService),
+    service: new CashClosureService(repository, membershipService, eventService),
     repository,
     eventService,
-    auditService,
   };
 }
 
@@ -40,7 +37,6 @@ describe('CashClosureService — guard de janela operacional', () => {
       assertMember: vi.fn().mockResolvedValue(undefined),
     } as any,
     eventService,
-    { record: vi.fn() } as any,
   );
 
   beforeEach(() => vi.clearAllMocks());
@@ -174,28 +170,37 @@ describe('A9 — fecho: operador que abriu OU superadmin', () => {
     expect(resultado.openedById).toBe('op-desaparecido');
   });
 
-  it('o audit regista actorId = quem fechou (superadmin), mantendo o before', async () => {
-    const { service, auditService } = criarServico({
+  it('o fecho arquiva o before, o eventId e quem abriu (o interceptor grava)', async () => {
+    const { service } = criarServico({
       jaAberta: caixaAberta({ openedById: 'op-desaparecido' }),
     });
+    const arquivar = vi.fn();
 
-    await service.fecharCaixa('c1', 'root', { id: 'root', role: 'superadmin' }, { totalActual: 100 } as any);
+    await service.fecharCaixa(
+      'c1',
+      'root',
+      { id: 'root', role: 'superadmin' },
+      { totalActual: 100 } as any,
+      arquivar,
+    );
 
-    expect(auditService.record).toHaveBeenCalledTimes(1);
-    const entrada = auditService.record.mock.calls[0][0];
-    expect(entrada.actorId).toBe('root');
-    expect(entrada.entityId).toBe('c1');
-    expect(entrada.eventId).toBe('evt1');
-    expect(entrada.before).toMatchObject({ status: 'open' });
+    expect(arquivar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        antes: expect.objectContaining({ status: 'open', closedById: null }),
+        eventId: 'evt1',
+        extras: expect.objectContaining({ abertoPor: 'op-desaparecido', fechoPorSuperadmin: true }),
+      }),
+    );
   });
 
-  it('abrir a caixa também fica registada no audit', async () => {
-    const { service, auditService } = criarServico();
+  it('abrir a caixa arquiva o snapshot para o interceptor gravar o audit', async () => {
+    const { service } = criarServico();
+    const arquivar = vi.fn();
 
-    await service.abrirCaixa('op1', { id: 'op1', role: 'cashier' }, { eventId: 'evt1' } as any);
+    await service.abrirCaixa('op1', { id: 'op1', role: 'cashier' }, { eventId: 'evt1' } as any, arquivar);
 
-    expect(auditService.record).toHaveBeenCalledTimes(1);
-    expect(auditService.record.mock.calls[0][0].actorId).toBe('op1');
+    expect(arquivar).toHaveBeenCalledTimes(1);
+    expect(arquivar).toHaveBeenCalledWith({ entidadeId: 'c1', eventId: 'evt1' });
   });
 
   it('não fecha uma caixa já fechada', async () => {

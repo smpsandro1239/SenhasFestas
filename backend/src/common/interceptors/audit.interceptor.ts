@@ -18,8 +18,70 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  */
 export const AUDIT_BEFORE = Symbol('auditBefore');
 
-export function definirAuditBefore(req: Request, antes: unknown): void {
+/**
+ * Metadados extra (ex.: motivo do ajuste de stock, lados de uma transferência)
+ * que o serviço não consegue derivar do `req`; são fundidos em `details`.
+ */
+export const AUDIT_DETAILS_EXTRAS = Symbol('auditDetailsExtras');
+
+/**
+ * `eventId` que o serviço conhece mas não está no path nem no body (ex.:
+ * evento do produto num ajuste de stock, evento de uma caixa a fechar). Sem
+ * isto o log ficaria sem eventId e sairia do escopo do tesoureiro.
+ */
+export const AUDIT_EVENT_ID = Symbol('auditEventId');
+
+export function definirAuditBefore(
+  req: Request,
+  antes: unknown,
+  extras?: Record<string, unknown>,
+): void {
   (req as any)[AUDIT_BEFORE] = antes;
+  if (extras !== undefined) {
+    (req as any)[AUDIT_DETAILS_EXTRAS] = extras;
+  }
+}
+
+export function definirAuditEvento(req: Request, eventId: string | undefined): void {
+  (req as any)[AUDIT_EVENT_ID] = eventId;
+}
+
+/**
+ * `entityId` que só o serviço conhece (ex.: o id da caixa acabada de criar,
+ * numa rota cujo path não leva id).
+ */
+export const AUDIT_ENTITY_ID = Symbol('auditEntityId');
+
+export function definirAuditEntidade(req: Request, entityId: string | undefined): void {
+  (req as any)[AUDIT_ENTITY_ID] = entityId;
+}
+
+/**
+ * O que o serviço sabe sobre a mutação e o pedido não: estado anterior, evento
+ * e metadados. O serviço passa-o ao controller (callback) e o controller
+ * arquiva-o no `req` para o interceptor gravar — sem o serviço depender do
+ * `AuditService` (evita o registo duplicado).
+ */
+export interface SnapshotAuditoria {
+  antes?: unknown;
+  eventId?: string;
+  entidadeId?: string;
+  extras?: Record<string, unknown>;
+}
+
+/**
+ * Fecha o callback que os serviços aceitam: arquiva o snapshot do estado
+ * anterior (e o evento, quando o serviço o conhece) no `req` para o
+ * interceptor gravar. Os controllers limitam-se a passar `arquivarAuditoria(req)`.
+ */
+export function arquivarAuditoria(req: Request): (snapshot: SnapshotAuditoria) => void {
+  return (snapshot) => {
+    if (snapshot.antes !== undefined || snapshot.extras !== undefined) {
+      definirAuditBefore(req, snapshot.antes, snapshot.extras);
+    }
+    definirAuditEvento(req, snapshot.eventId);
+    definirAuditEntidade(req, snapshot.entidadeId);
+  };
 }
 
 const ENTITY_MAP: Record<string, string> = {
@@ -87,16 +149,17 @@ export class AuditInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    const { acao, entity, entityId, eventId } = this.descreverPedido(req, metodo);
+    const { acao, entity, entityId, eventId: eventIdBase } = this.descreverPedido(req, metodo);
 
     return next.handle().pipe(
       tap({
         next: (data) => {
           const ator = this.resolverAtor(req, acao, data);
+          const eventId = this.eventoEfetivo(req, eventIdBase);
           void this.auditService.record({
             action: acao,
             entity,
-            entityId,
+            entityId: this.entidadeEfetiva(req, entityId),
             eventId,
             actorId: ator.id,
             actorRole: ator.role,
@@ -107,6 +170,7 @@ export class AuditInterceptor implements NestInterceptor {
               url: this.caminho(req),
               statusCode: res.statusCode,
               params: req.params,
+              ...this.detalhesExtras(req),
             },
             ip: req.ip,
             userAgent: req.headers['user-agent'],
@@ -115,6 +179,7 @@ export class AuditInterceptor implements NestInterceptor {
         error: (error) => {
           const ator = this.resolverAtor(req, acao, undefined);
           const statusCode = (error as { status?: number })?.status ?? 500;
+          const eventId = this.eventoEfetivo(req, eventIdBase);
           void this.auditService.record({
             action: metodo === 'POST' && acao === 'LOGIN' ? 'LOGIN_FAILED' : acao,
             entity,
@@ -128,6 +193,7 @@ export class AuditInterceptor implements NestInterceptor {
               statusCode,
               erro: (error as Error)?.message,
               params: req.params,
+              ...this.detalhesExtras(req),
             },
             ip: req.ip,
             userAgent: req.headers['user-agent'],
@@ -139,6 +205,20 @@ export class AuditInterceptor implements NestInterceptor {
 
   private caminho(req: Request): string {
     return (req.originalUrl || req.url || '').split('?')[0];
+  }
+
+  private detalhesExtras(req: Request): Record<string, unknown> {
+    return ((req as any)[AUDIT_DETAILS_EXTRAS] as Record<string, unknown>) ?? {};
+  }
+
+  private eventoEfetivo(req: Request, base?: string): string | undefined {
+    const override = (req as any)[AUDIT_EVENT_ID] as string | undefined;
+    return override ?? base;
+  }
+
+  private entidadeEfetiva(req: Request, base?: string): string | undefined {
+    const override = (req as any)[AUDIT_ENTITY_ID] as string | undefined;
+    return override ?? base;
   }
 
   private descreverPedido(

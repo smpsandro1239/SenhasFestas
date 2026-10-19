@@ -12,6 +12,7 @@ import { reembolsarSaldoEmTransacao, temSaldoParaReembolsar } from '../../common
 import { assertPodeMexerEmSaldo, assertSaldoUtilizavel } from '../../common/balance-guard';
 import { reporStockEmTransacao } from '../../common/order-stock';
 import { EventService } from '../event/event.service';
+import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';
 
 @Injectable()
 export class OrderService {
@@ -313,7 +314,11 @@ export class OrderService {
       .getOne();
   }
 
-  async cancelOrder(id: string, user: any): Promise<any> {
+  async cancelOrder(
+    id: string,
+    user: any,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
+  ): Promise<any> {
     const order = await this.orderRepository.findOne({
       where: { id },
       relations: { event: true },
@@ -349,6 +354,8 @@ export class OrderService {
       }
     }
 
+    arquivar?.({ antes: { status: order.status }, eventId: order.event?.id });
+
     const savedOrder = await this.dataSource.transaction(async (manager) => {
       const currentOrder = await manager.findOne(OrderEntity, {
         where: { id: order.id },
@@ -379,7 +386,12 @@ export class OrderService {
     return savedOrder;
   }
 
-  async updateStatus(id: string, status: string, user?: any): Promise<any> {
+  async updateStatus(
+    id: string,
+    status: string,
+    user?: any,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
+  ): Promise<any> {
     const order = await this.orderRepository.findOne({
       where: { id },
       relations: { event: true },
@@ -407,6 +419,8 @@ export class OrderService {
     if (!transicoesValidas[order.status]?.includes(status)) {
       throw new ForbiddenException(`Transição inválida: ${order.status} -> ${status}`);
     }
+
+    arquivar?.({ antes: { status: order.status }, eventId: order.event?.id });
 
     const savedOrder = await this.dataSource.transaction(async (manager) => {
       const currentOrder = await manager.findOne(OrderEntity, {

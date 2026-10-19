@@ -45,10 +45,6 @@ const mockMembershipService = {
   assertMember: vi.fn(),
 };
 
-const mockAuditService = {
-  record: vi.fn().mockResolvedValue(undefined),
-};
-
 describe('CatalogService', () => {
   let service: CatalogService;
 
@@ -74,7 +70,6 @@ describe('CatalogService', () => {
       mockOrderRepository as any,
       mockOrderItemRepository as any,
       mockMembershipService as any,
-      mockAuditService as any,
     );
   });
 
@@ -586,6 +581,36 @@ describe('CatalogService', () => {
     });
   });
 
+  describe('snapshot anterior para auditoria (arquivar)', () => {
+    it('update arquiva o produto anterior e o evento (sem a relação pesada)', async () => {
+      const existing = { id: 'p1', name: 'Bifana', price: 3.5, event: { id: 'evt1', floorPlan: { mesas: [] } } };
+      mockProductRepository.findOne.mockResolvedValue(existing);
+      mockProductRepository.save.mockImplementation(async (data: any) => data);
+      const arquivar = vi.fn();
+
+      await service.update('p1', {} as any, { price: 4 } as any, arquivar);
+
+      expect(arquivar).toHaveBeenCalledWith({
+        antes: { id: 'p1', name: 'Bifana', price: 3.5 },
+        eventId: 'evt1',
+      });
+    });
+
+    it('softRemove arquiva o produto anterior e o evento', async () => {
+      const existing = { id: 'p1', name: 'Bifana', event: { id: 'evt1' } };
+      mockProductRepository.findOne.mockResolvedValue(existing);
+      mockProductRepository.softDelete.mockResolvedValue({ affected: 1 });
+      const arquivar = vi.fn();
+
+      await service.softRemove('p1', {} as any, arquivar);
+
+      expect(arquivar).toHaveBeenCalledWith({
+        antes: { id: 'p1', name: 'Bifana' },
+        eventId: 'evt1',
+      });
+    });
+  });
+
   describe('findCategories', () => {
     it('returns active categories ordered by sortOrder then name', async () => {
       const categories = [
@@ -1044,23 +1069,20 @@ describe('CatalogService', () => {
       manager.save.mockClear();
     });
 
-    it('delta soma ao stock com lock pessimista e grava auditoria com motivo', async () => {
+    it('delta soma ao stock com lock pessimista e arquiva o estado anterior com motivo', async () => {
       manager.findOne.mockResolvedValue({ id: 'p1', stock: 3, event: { id: 'evt1' } });
-      const r = await service.ajustarStock('p1', MEMBRO, { delta: 10, motivo: 'repo' });
+      const arquivar = vi.fn();
+      const r = await service.ajustarStock('p1', MEMBRO, { delta: 10, motivo: 'repo' }, arquivar);
       expect(manager.findOne).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ lock: { mode: 'pessimistic_write' } }),
       );
       expect(r.stock).toBe(13);
-      expect(mockAuditService.record).toHaveBeenCalledWith(
+      expect(arquivar).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'STOCK_ADJUST',
-          entity: 'product',
-          entityId: 'p1',
+          antes: { stock: 3 },
           eventId: 'evt1',
-          before: { stock: 3 },
-          after: { stock: 13 },
-          details: expect.objectContaining({ delta: 10, motivo: 'repo' }),
+          extras: expect.objectContaining({ delta: 10, motivo: 'repo' }),
         }),
       );
     });
@@ -1073,13 +1095,14 @@ describe('CatalogService', () => {
 
     it('novoValor define stock absoluto (acerto)', async () => {
       manager.findOne.mockResolvedValue({ id: 'p1', stock: 2, event: { id: 'evt1' } });
-      const r = await service.ajustarStock('p1', MEMBRO, { novoValor: 24, motivo: 'contagem' });
+      const arquivar = vi.fn();
+      const r = await service.ajustarStock('p1', MEMBRO, { novoValor: 24, motivo: 'contagem' }, arquivar);
       expect(r.stock).toBe(24);
-      expect(mockAuditService.record).toHaveBeenCalledWith(
+      expect(arquivar).toHaveBeenCalledWith(
         expect.objectContaining({
-          before: { stock: 2 },
-          after: { stock: 24 },
-          details: expect.objectContaining({ novoValor: 24, motivo: 'contagem' }),
+          antes: { stock: 2 },
+          eventId: 'evt1',
+          extras: expect.objectContaining({ novoValor: 24, motivo: 'contagem' }),
         }),
       );
     });

@@ -785,3 +785,89 @@ describe('EventService — planta (optimistic locking)', () => {
     );
   });
 });
+
+describe('EventService — snapshot anterior para auditoria (arquivar)', () => {
+  let service: EventService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    service = new EventService(
+      mockEventRepository as any,
+      mockEventUserRepository as any,
+      mockOrderRepository as any,
+      mockCashClosureRepository as any,
+      mockAuditService as any,
+      mockBalanceRepository as any,
+    );
+    mockEventRepository.save.mockImplementation(async (e: any) => e);
+    mockEventRepository.update.mockResolvedValue({ affected: 1 });
+  });
+
+  it('update arquiva o evento anterior sem o floorPlan', async () => {
+    const evento = {
+      id: 'eventoX',
+      name: 'Festa',
+      shortCode: 'festa',
+      status: 'draft',
+      floorPlan: { mesas: [{ id: 'm1' }], zonas: [] },
+    };
+    mockEventRepository.findOne.mockResolvedValue(evento);
+    const arquivar = vi.fn();
+
+    await service.update('eventoX', SUPERADMIN, { name: 'Festão' } as any, arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({
+      antes: { id: 'eventoX', name: 'Festa', shortCode: 'festa', status: 'draft' },
+      eventId: 'eventoX',
+    });
+  });
+
+  it('updateStatus arquiva o estado anterior', async () => {
+    mockEventRepository.findOne.mockResolvedValue({ id: 'eventoX', status: 'draft' });
+    const arquivar = vi.fn();
+
+    await service.updateStatus('eventoX', SUPERADMIN, 'active', arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({ antes: { status: 'draft' }, eventId: 'eventoX' });
+  });
+
+  it('updateSettings arquiva as settings anteriores', async () => {
+    mockEventRepository.findOne.mockResolvedValue({ id: 'eventoX', settings: { a: 1 } });
+    const arquivar = vi.fn();
+
+    await service.updateSettings('eventoX', SUPERADMIN, { b: 2 } as any, arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({ antes: { settings: { a: 1 } }, eventId: 'eventoX' });
+  });
+
+  it('addMember arquiva a role anterior do membro', async () => {
+    mockEventRepository.findOne.mockResolvedValue({ id: 'eventoX' });
+    mockEventUserRepository.findOne.mockResolvedValue({ role: 'cashier' });
+    const arquivar = vi.fn();
+
+    await service.addMember('eventoX', SUPERADMIN, { userId: 'u2', role: 'organizer' } as any, arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({ antes: { userId: 'u2', role: 'cashier' }, eventId: 'eventoX' });
+  });
+
+  it('removeMember arquiva o userId removido', async () => {
+    mockEventRepository.findOne.mockResolvedValue({ id: 'eventoX' });
+    mockEventUserRepository.delete.mockResolvedValue({ affected: 1 });
+    const arquivar = vi.fn();
+
+    await service.removeMember('eventoX', SUPERADMIN, 'u2', arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({ antes: { userId: 'u2' }, eventId: 'eventoX' });
+  });
+
+  it('remove arquiva o estado anterior', async () => {
+    mockEventRepository.findOne.mockResolvedValue({ id: 'eventoX', status: 'draft' });
+    mockOrderRepository.count.mockResolvedValue(0);
+    mockCashClosureRepository.count.mockResolvedValue(0);
+    const arquivar = vi.fn();
+
+    await service.remove('eventoX', SUPERADMIN, arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({ antes: { status: 'draft', deletedAt: null }, eventId: 'eventoX' });
+  });
+});

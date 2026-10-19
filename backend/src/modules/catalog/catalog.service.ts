@@ -5,7 +5,7 @@ import { ProductEntity, CategoryEntity, UserEntity, EventEntity, OrderEntity, Or
 import { In, ILike } from 'typeorm';
 import { CreateProductDto, UpdateProductDto, AdjustStockDto } from './dto';
 import { MembershipService } from '../../common/membership.service';
-import { AuditService } from '../audit/audit.service';
+import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';
 
 @Injectable()
 export class CatalogService {
@@ -21,7 +21,6 @@ export class CatalogService {
     @InjectRepository(OrderItemEntity)
     private readonly orderItemRepository: Repository<OrderItemEntity>,
     private readonly membershipService: MembershipService,
-    private readonly auditService: AuditService,
   ) {}
 
   async findAll(
@@ -195,11 +194,16 @@ export class CatalogService {
     id: string,
     user: UserEntity,
     dto: UpdateProductDto,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<ProductEntity> {
     const product = await this.findOne(id, user);
     if (product.event?.id) {
       await this.membershipService.assertMember(user, product.event.id);
     }
+    // A relação `event` traria o floorPlan inteiro para o log; com >8000 chars o
+    // snapshot era cortado e perdia-se. Guarda-se o resto e o id do evento.
+    const { event, ...camposProduto } = product;
+    arquivar?.({ antes: camposProduto, eventId: event?.id });
     const { categoryId, ...rest } = dto;
     Object.assign(product, rest);
     if (categoryId !== undefined) {
@@ -210,11 +214,12 @@ export class CatalogService {
 
   // Reabastecimento rápido (+N) e acerto de stock físico (novoValor). O delta
   // usa lock pessimista para não colidir com os decrementos dos pedidos; o
-  // acerto grava o motivo no audit para reconciliar diferenças no fim da festa.
+  // acerto arquiva o motivo para reconciliar diferenças no fim da festa.
   async ajustarStock(
     id: string,
     user: UserEntity,
     dto: AdjustStockDto,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<ProductEntity> {
     const temDelta = dto.delta !== undefined;
     const temNovoValor = dto.novoValor !== undefined;
@@ -239,6 +244,15 @@ export class CatalogService {
       }
 
       const antes = product.stock ?? null;
+      arquivar?.({
+        antes: { stock: antes },
+        eventId: product.event?.id,
+        extras: {
+          delta: temDelta ? dto.delta : undefined,
+          novoValor: temNovoValor ? dto.novoValor : undefined,
+          motivo: dto.motivo,
+        },
+      });
       if (temDelta) {
         if (product.stock == null) {
           throw new BadRequestException('Produto sem controlo de stock (reabastecer exige stock definido)');
@@ -248,22 +262,6 @@ export class CatalogService {
         product.stock = dto.novoValor!;
       }
       const salvo = await manager.save(ProductEntity, product);
-
-      await this.auditService.record({
-        action: 'STOCK_ADJUST',
-        entity: 'product',
-        entityId: product.id,
-        actorId: user?.id,
-        actorRole: user?.role,
-        eventId: product.event?.id,
-        before: { stock: antes },
-        after: { stock: product.stock },
-        details: {
-          delta: temDelta ? dto.delta : undefined,
-          novoValor: temNovoValor ? dto.novoValor : undefined,
-          motivo: dto.motivo,
-        },
-      });
 
       return salvo;
     });
@@ -421,11 +419,17 @@ export class CatalogService {
     return { importedCount: savedProducts.length, products: savedProducts };
   }
 
-  async softRemove(id: string, user: UserEntity): Promise<{ deleted: boolean; softDelete: boolean }> {
+  async softRemove(
+    id: string,
+    user: UserEntity,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
+  ): Promise<{ deleted: boolean; softDelete: boolean }> {
     const product = await this.findOne(id, user);
     if (product.event?.id) {
       await this.membershipService.assertMember(user, product.event.id);
     }
+    const { event, ...camposProduto } = product;
+    arquivar?.({ antes: camposProduto, eventId: event?.id });
     await this.productRepository.softDelete(product.id);
     return { deleted: true, softDelete: true };
   }

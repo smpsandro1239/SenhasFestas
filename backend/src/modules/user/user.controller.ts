@@ -6,6 +6,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { FINANCE_ROLES, MANAGEMENT_ROLES } from '../../common/roles';
 import { toPublicUser } from '../../common/serializers';
+import { arquivarAuditoria } from '../../common/interceptors/audit.interceptor';
 
 @Controller('users')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -43,13 +44,13 @@ export class UserController {
 
   @Patch(':id')
   @Roles('superadmin')
-  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
-    return this.userService.update(id, dto);
+  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto, @Request() req: any) {
+    return this.userService.update(id, dto, arquivarAuditoria(req));
   }
 
   @Delete(':id')
   @Roles('superadmin')
-  async remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.userService.remove(id);
+  async remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    return this.userService.remove(id, arquivarAuditoria(req));
   }
 }

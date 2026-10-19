@@ -6,7 +6,7 @@ import { MembershipService } from '../../common/membership.service';
 import { EventService } from '../event/event.service';
 import { CreateCashClosureDto, CloseCashClosureDto } from './dto';
 import { centavos } from '../../common/money';
-import { AuditService } from '../audit/audit.service';
+import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';
 
 @Injectable()
 export class CashClosureService {
@@ -15,13 +15,13 @@ export class CashClosureService {
     private readonly cashClosureRepository: Repository<CashClosureEntity>,
     private readonly membershipService: MembershipService,
     private readonly eventService: EventService,
-    private readonly auditService: AuditService,
   ) {}
 
   async abrirCaixa(
     operadorId: string,
     utilizador: any,
     dto: CreateCashClosureDto,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<CashClosureEntity> {
     await this.membershipService.assertMember(utilizador, dto.eventId);
     await this.eventService.assertEventOperavelById(dto.eventId);
@@ -46,14 +46,9 @@ export class CashClosureService {
       status: 'open',
     });
     const salvo = await this.cashClosureRepository.save(novoFecho);
-    await this.auditService.record({
-      action: 'CREATE',
-      entity: 'cash-closure',
-      entityId: salvo.id,
+    arquivar?.({
+      entidadeId: salvo.id,
       eventId: dto.eventId,
-      actorId: operadorId,
-      actorRole: utilizador?.role ?? 'unknown',
-      after: { status: 'open', openingBalance: salvo.openingBalance },
     });
     return salvo;
   }
@@ -63,6 +58,7 @@ export class CashClosureService {
     operadorId: string,
     utilizador: any,
     dto: CloseCashClosureDto,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<CashClosureEntity> {
     const fecho = await this.cashClosureRepository.findOne({ where: { id } });
     if (!fecho) {
@@ -88,6 +84,12 @@ export class CashClosureService {
       closedById: fecho.closedById ?? null,
     };
 
+    arquivar?.({
+      antes,
+      eventId: fecho.eventId,
+      extras: { abertoPor: fecho.openedById, fechoPorSuperadmin },
+    });
+
     fecho.closedAt = new Date();
     fecho.closingBalance = centavos(dto.totalActual);
     fecho.status = 'closed';
@@ -95,22 +97,6 @@ export class CashClosureService {
     if (dto.notes) fecho.notes = dto.notes;
 
     const salvo = await this.cashClosureRepository.save(fecho);
-    await this.auditService.record({
-      action: 'CLOSE',
-      entity: 'cash-closure',
-      entityId: salvo.id,
-      eventId: salvo.eventId,
-      actorId: operadorId,
-      actorRole: utilizador?.role ?? 'unknown',
-      before: antes,
-      after: {
-        status: 'closed',
-        closedAt: fecho.closedAt,
-        closingBalance: fecho.closingBalance,
-        closedById: operadorId,
-      },
-      details: { abertoPor: fecho.openedById, fechoPorSuperadmin },
-    });
     return salvo;
   }
 

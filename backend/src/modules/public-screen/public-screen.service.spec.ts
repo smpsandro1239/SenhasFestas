@@ -74,3 +74,27 @@ describe('PublicScreenService — A7: ecrã público não expõe dados financeir
     expect(camposSelecionados).toContain('pedido.tableNumber');
   });
 });
+
+describe('PublicScreenService — snapshot anterior para auditoria (arquivar)', () => {
+  it('marcarEntregue arquiva o estado anterior e o evento', async () => {
+    const manager = {
+      findOne: vi
+        .fn()
+        .mockResolvedValueOnce({ id: 'o1', status: 'ready', event: { id: 'evt1' } })
+        .mockResolvedValueOnce({ id: 'o1', status: 'ready' }),
+      save: vi.fn().mockImplementation((_e: any, d: any) => Promise.resolve(d)),
+    };
+    const service = new PublicScreenService(
+      {} as any,
+      {} as any,
+      {} as any,
+      { transaction: vi.fn().mockImplementation(async (fn: any) => fn(manager)) } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+    );
+    const arquivar = vi.fn();
+
+    await service.marcarEntregue('o1', { id: 'u1', role: 'superadmin' }, arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({ antes: { status: 'ready' }, eventId: 'evt1' });
+  });
+});

@@ -7,6 +7,7 @@ import { toPublicUser } from '../../common/serializers';
 import { centavos, soma, subtrai } from '../../common/money';
 import { assertSaldoUtilizavel, saldoDeadlineUtc } from '../../common/balance-guard';
 import { EventService } from '../event/event.service';
+import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';
 
 const DIA_MS = 86_400_000;
 const SOFT_DELETE_APOS_DIAS = 30;
@@ -56,12 +57,17 @@ export class BalanceService {
     });
   }
 
-  async loadBalance(userId: string, dto: LoadBalanceDto, actor?: any): Promise<Partial<BalanceEntity>> {
+  async loadBalance(
+    userId: string,
+    dto: LoadBalanceDto,
+    actor?: any,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
+  ): Promise<Partial<BalanceEntity>> {
     if (!dto.eventId) {
       throw new ForbiddenException('Carregamento de saldo exige eventId (evita saldo sem scope de evento)');
     }
     await this.eventService.assertEventOperavelById(dto.eventId);
-    const updated = await this.runLoadTransaction(userId, dto, actor);
+    const updated = await this.runLoadTransaction(userId, dto, actor, arquivar);
     await this.eventService.vincularCliente(userId, dto.eventId);
     return {
       id: updated.id,
@@ -78,6 +84,7 @@ export class BalanceService {
     movementId: string,
     actor?: any,
     dto?: ReverseLoadDto,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<{
     balance: { id: string; currentBalance: number };
     movement: BalanceMovementEntity;
@@ -146,6 +153,11 @@ export class BalanceService {
         throw new ForbiddenException('Saldo insuficiente para estornar (já utilizado)');
       }
 
+      arquivar?.({
+        antes: { currentBalance: saldoAtual },
+        eventId: (movement.balance as any)?.event?.id as string | undefined,
+      });
+
       locked.reversed = true;
       locked.reversedAt = new Date();
       await manager.save(BalanceMovementEntity, locked);
@@ -178,6 +190,7 @@ export class BalanceService {
     userId: string,
     dto: LoadBalanceDto,
     actor?: any,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
     tries = 3,
   ): Promise<BalanceEntity> {
     try {
@@ -222,6 +235,8 @@ export class BalanceService {
           await manager.save(BalanceEntity, balance);
         }
 
+        arquivar?.({ antes: { currentBalance: centavos(Number(balance.currentBalance)) }, eventId: dto.eventId });
+
         balance.currentBalance = soma(Number(balance.currentBalance), centavos(dto.amount));
         const saved = await manager.save(BalanceEntity, balance);
 
@@ -239,7 +254,7 @@ export class BalanceService {
     } catch (error) {
       const code = (error as { code?: string } | null)?.code;
       if (tries > 1 && code === '23505') {
-        return this.runLoadTransaction(userId, dto, actor, tries - 1);
+        return this.runLoadTransaction(userId, dto, actor, arquivar, tries - 1);
       }
       throw error;
     }
@@ -249,6 +264,7 @@ export class BalanceService {
     userId: string,
     dto: DeductBalanceDto,
     actor?: any,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<{ id: string; currentBalance: number; movement: BalanceMovementEntity }> {
     if (!dto.eventId) {
       throw new ForbiddenException('Desconto de saldo exige eventId (evita saldo sem scope de evento)');
@@ -279,6 +295,8 @@ export class BalanceService {
       if (centavos(Number(balance.currentBalance)) < montante) {
         throw new ForbiddenException('Saldo insuficiente para descontar');
       }
+
+      arquivar?.({ antes: { currentBalance: centavos(Number(balance.currentBalance)) }, eventId: dto.eventId });
 
       balance.currentBalance = subtrai(Number(balance.currentBalance), montante);
       const savedBalance = await manager.save(BalanceEntity, balance);
@@ -366,12 +384,17 @@ export class BalanceService {
   async extendBalance(
     userId: string,
     dto: ExtendBalanceDto,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<SaldoEstado> {
     const balance = await this.carregarSaldoEvento(userId, dto.eventId);
     const until = new Date(dto.until);
     if (Number.isNaN(until.getTime()) || until.getTime() <= Date.now()) {
       throw new BadRequestException('Data de extensão tem de ser futura');
     }
+    arquivar?.({
+      antes: { extendedUntil: balance.extendedUntil ?? null, archivedAt: balance.archivedAt ?? null },
+      eventId: dto.eventId,
+    });
     balance.extendedUntil = until;
     if (balance.archivedAt) {
       // Extensão para o futuro revive um saldo já arquivado.
@@ -384,8 +407,10 @@ export class BalanceService {
   async unarchiveBalance(
     userId: string,
     eventId: string,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<SaldoEstado> {
     const balance = await this.carregarSaldoEvento(userId, eventId);
+    arquivar?.({ antes: { archivedAt: balance.archivedAt ?? null }, eventId });
     balance.archivedAt = null;
     const saved = await this.balanceRepository.save(balance);
     return this.resumoSaldo(userId, saved);
@@ -394,8 +419,10 @@ export class BalanceService {
   async markNotified(
     userId: string,
     eventId: string,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<SaldoEstado> {
     const balance = await this.carregarSaldoEvento(userId, eventId);
+    arquivar?.({ antes: { notifiedAt: balance.notifiedAt ?? null }, eventId });
     balance.notifiedAt = new Date();
     const saved = await this.balanceRepository.save(balance);
     return this.resumoSaldo(userId, saved);
@@ -512,6 +539,7 @@ export class BalanceService {
     userId: string,
     dto: TransferBalanceDto,
     actor?: any,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<{
     balance: { id: string; currentBalance: number };
     originBalance: { id: string; currentBalance: number };
@@ -568,6 +596,15 @@ export class BalanceService {
         // O dinheiro chega agora ao destino: revive um saldo arquivado.
         destino.archivedAt = null;
       }
+
+      arquivar?.({
+        antes: {
+          originBalance: { id: origem.id, currentBalance: centavos(Number(origem.currentBalance)) },
+          destinationBalance: { id: destino.id, currentBalance: centavos(Number(destino.currentBalance)) },
+        },
+        eventId: dto.toEventId,
+        extras: { fromEventId: dto.fromEventId, toEventId: dto.toEventId },
+      });
 
       origem.currentBalance = subtrai(Number(origem.currentBalance), montante);
       destino.currentBalance = soma(Number(destino.currentBalance), montante);

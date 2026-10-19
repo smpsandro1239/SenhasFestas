@@ -579,3 +579,61 @@ describe('OrderService — cancelamento repõe stock (B1c)', () => {
     expect(manager.save).not.toHaveBeenCalledWith(ProductEntity, expect.anything());
   });
 });
+
+describe('OrderService — snapshot anterior para auditoria (arquivar)', () => {
+  function svcCom(orderRepo: any, manager: any) {
+    const dataSource = { transaction: vi.fn().mockImplementation(async (fn: any) => fn(manager)) };
+    return new OrderService(
+      orderRepo as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      { findOne: vi.fn().mockResolvedValue({ id: 'm1' }) } as any,
+      dataSource as any,
+      { generateOrderQRCode: vi.fn() } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+      {
+        notifyNewOrder: vi.fn(),
+        notifyOrderPrepared: vi.fn(),
+        notifyOrderReady: vi.fn(),
+        notifyOrderDelivered: vi.fn(),
+      } as any,
+      { assertEventOperavel: vi.fn() } as any,
+    );
+  }
+
+  function managerBase() {
+    return {
+      find: vi.fn().mockResolvedValue([]),
+      findOne: vi.fn().mockResolvedValue({ id: 'o1', status: 'received' }),
+      save: vi.fn().mockImplementation((_e: any, d: any) => Promise.resolve(d)),
+      create: vi.fn().mockImplementation((_e: any, d: any) => d),
+    };
+  }
+
+  it('updateStatus arquiva o estado anterior e o evento', async () => {
+    const orderRepo = {
+      findOne: vi.fn().mockResolvedValue({ id: 'o1', status: 'received', event: { id: 'evt1' } }),
+    };
+    const svc = svcCom(orderRepo, managerBase());
+    const arquivar = vi.fn();
+
+    await svc.updateStatus('o1', 'cancelled', { id: 'u1', role: 'superadmin' }, arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({ antes: { status: 'received' }, eventId: 'evt1' });
+  });
+
+  it('cancelOrder arquiva o estado anterior e o evento', async () => {
+    const orderRepo = {
+      findOne: vi.fn().mockResolvedValue({ id: 'o1', status: 'received', event: { id: 'evt1' } }),
+    };
+    const svc = svcCom(orderRepo, managerBase());
+    const arquivar = vi.fn();
+
+    await svc.cancelOrder('o1', { id: 'u1', role: 'superadmin' }, arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({ antes: { status: 'received' }, eventId: 'evt1' });
+  });
+});

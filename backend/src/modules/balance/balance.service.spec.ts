@@ -792,3 +792,165 @@ describe('BalanceService — transferência entre eventos (melhoria #8)', () => 
     expect((svc as any).eventUserRepository.find).not.toHaveBeenCalled();
   });
 });
+
+describe('BalanceService — snapshot anterior para auditoria (arquivar)', () => {
+  const eventService = {
+    assertEventOperavelById: vi.fn().mockResolvedValue(undefined),
+    vincularCliente: vi.fn().mockResolvedValue(undefined),
+  } as unknown as EventService;
+
+  const Novo = () =>
+    new BalanceService(
+      { find: vi.fn(), findOne: vi.fn(), save: vi.fn() } as any,
+      { findOne: vi.fn(), save: vi.fn() } as any,
+      {} as any,
+      { findOne: vi.fn() } as any,
+      { find: vi.fn(), findOne: vi.fn() } as any,
+      { transaction: vi.fn() } as any,
+      eventService,
+    );
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it('loadBalance arquiva o saldo anterior e o evento', async () => {
+    const svc = Novo();
+    (svc as any).dataSource.transaction.mockImplementation(async (fn: any) =>
+      fn({
+        findOne: vi.fn().mockResolvedValue({ id: 'b1', currentBalance: 40, event: { id: 'evt1' } }),
+        create: vi.fn(),
+        save: vi.fn().mockImplementation((_e: any, e: any) => Promise.resolve(e)),
+      }),
+    );
+    const arquivar = vi.fn();
+
+    await svc.loadBalance('u1', { amount: 10, eventId: 'evt1' } as any, { id: 'staff' }, arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({ antes: { currentBalance: 40 }, eventId: 'evt1' });
+  });
+
+  it('deductBalance arquiva o saldo anterior e o evento', async () => {
+    const svc = Novo();
+    (svc as any).dataSource.transaction.mockImplementation(async (fn: any) =>
+      fn({
+        findOne: vi
+          .fn()
+          .mockResolvedValue({ id: 'b1', currentBalance: 100, archivedAt: null, extendedUntil: null }),
+        create: vi.fn().mockImplementation((_e: any, d: any) => d),
+        save: vi.fn().mockImplementation((_e: any, e: any) => Promise.resolve(e)),
+      }),
+    );
+    const arquivar = vi.fn();
+
+    await svc.deductBalance('u1', { amount: 30, eventId: 'evt1' } as any, { id: 'staff' }, arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({ antes: { currentBalance: 100 }, eventId: 'evt1' });
+  });
+
+  it('reverseLoad arquiva o saldo atual e o evento do movimento', async () => {
+    const svc = Novo();
+    const movimento = {
+      id: 'mov1',
+      reversed: false,
+      amount: 10,
+      type: 'load',
+      balance: { id: 'b1', user: { id: 'u1' }, event: { id: 'evtA' } },
+    };
+    (svc as any).dataSource.transaction.mockImplementation(async (fn: any) =>
+      fn({
+        findOne: vi.fn().mockImplementation((entity: any, opts: any) => {
+          const name = entity?.name;
+          if (name === 'BalanceMovementEntity' && opts?.where?.id === 'mov1') {
+            return Promise.resolve(movimento);
+          }
+          if (name === 'BalanceEntity' && opts?.where?.id === 'b1') {
+            return Promise.resolve({ id: 'b1', currentBalance: 100 });
+          }
+          return Promise.resolve(null);
+        }),
+        save: vi.fn().mockImplementation((_e: any, e: any) => Promise.resolve(e)),
+        create: vi.fn().mockImplementation((_e: any, d: any) => d),
+      }),
+    );
+    const arquivar = vi.fn();
+
+    await svc.reverseLoad('u1', 'mov1', { id: 'root', role: 'superadmin' }, {} as any, arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({ antes: { currentBalance: 100 }, eventId: 'evtA' });
+  });
+
+  it('transferBalance arquiva os dois lados, o evento destino e os extras', async () => {
+    const svc = Novo();
+    (svc as any).eventRepository.findOne.mockResolvedValue({ id: 'magusto', name: 'Magusto' });
+    const origem = { id: 'b-origem', currentBalance: 100 };
+    const destino = { id: 'b-destino', currentBalance: 20 };
+    const manager = {
+      findOne: vi.fn().mockResolvedValueOnce(origem).mockResolvedValueOnce(destino),
+      save: vi.fn().mockImplementation((_e: any, d: any) => Promise.resolve(d)),
+      create: vi.fn().mockImplementation((_e: any, d: any) => d),
+    };
+    (svc as any).dataSource.transaction.mockImplementation(async (fn: any) => fn(manager));
+    const arquivar = vi.fn();
+
+    await svc.transferBalance(
+      'u1',
+      { fromEventId: 'magusto', toEventId: 'atual', amount: 30 },
+      { role: 'superadmin' },
+      arquivar,
+    );
+
+    expect(arquivar).toHaveBeenCalledWith({
+      antes: {
+        originBalance: { id: 'b-origem', currentBalance: 100 },
+        destinationBalance: { id: 'b-destino', currentBalance: 20 },
+      },
+      eventId: 'atual',
+      extras: { fromEventId: 'magusto', toEventId: 'atual' },
+    });
+  });
+
+  it('extendBalance arquiva o estado anterior (extendedUntil/archivedAt)', async () => {
+    const svc = Novo();
+    (svc as any).balanceRepository.findOne.mockResolvedValue({
+      id: 'b1',
+      event: { id: 'evt1' },
+      extendedUntil: null,
+      archivedAt: new Date('2026-01-01'),
+    });
+    (svc as any).balanceRepository.save = vi.fn().mockImplementation((e: any) => Promise.resolve(e));
+    const arquivar = vi.fn();
+
+    await svc.extendBalance(
+      'u1',
+      { eventId: 'evt1', until: new Date(Date.now() + 86_400_000).toISOString() } as any,
+      arquivar,
+    );
+
+    expect(arquivar).toHaveBeenCalledWith({
+      antes: { extendedUntil: null, archivedAt: new Date('2026-01-01') },
+      eventId: 'evt1',
+    });
+  });
+
+  it('unarchiveBalance arquiva o archivedAt anterior', async () => {
+    const svc = Novo();
+    const archivedAt = new Date('2026-01-01');
+    (svc as any).balanceRepository.findOne.mockResolvedValue({ id: 'b1', event: { id: 'evt1' }, archivedAt });
+    (svc as any).balanceRepository.save = vi.fn().mockImplementation((e: any) => Promise.resolve(e));
+    const arquivar = vi.fn();
+
+    await svc.unarchiveBalance('u1', 'evt1', arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({ antes: { archivedAt }, eventId: 'evt1' });
+  });
+
+  it('markNotified arquiva o notifiedAt anterior', async () => {
+    const svc = Novo();
+    (svc as any).balanceRepository.findOne.mockResolvedValue({ id: 'b1', event: { id: 'evt1' }, notifiedAt: null });
+    (svc as any).balanceRepository.save = vi.fn().mockImplementation((e: any) => Promise.resolve(e));
+    const arquivar = vi.fn();
+
+    await svc.markNotified('u1', 'evt1', arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({ antes: { notifiedAt: null }, eventId: 'evt1' });
+  });
+});

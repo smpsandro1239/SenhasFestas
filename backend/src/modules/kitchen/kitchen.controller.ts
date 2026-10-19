@@ -5,6 +5,7 @@ import { KitchenQueryDto } from './dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { KITCHEN_ROLES } from '../../common/roles';
+import { arquivarAuditoria } from '../../common/interceptors/audit.interceptor';
 
 @Controller('kitchen')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -30,7 +31,7 @@ export class KitchenController {
     @Query('status') status: string,
     @Request() req: any,
   ) {
-    return this.kitchenService.atualizarEstado(id, status, req.user);
+    return this.kitchenService.atualizarEstado(id, status, req.user, arquivarAuditoria(req));
   }
 
   @Get('stats')

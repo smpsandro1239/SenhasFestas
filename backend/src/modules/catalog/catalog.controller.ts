@@ -19,6 +19,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { MembershipService } from '../../common/membership.service';
 import { MANAGEMENT_ROLES } from '../../common/roles';
+import { arquivarAuditoria } from '../../common/interceptors/audit.interceptor';
 
 @Controller('products')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -110,7 +111,7 @@ export class CatalogController {
     @Request() req: any,
     @Body() dto: UpdateProductDto,
   ) {
-    return this.catalogService.update(id, req.user, dto);
+    return this.catalogService.update(id, req.user, dto, arquivarAuditoria(req));
   }
 
   @Patch(':id/stock')
@@ -120,7 +121,7 @@ export class CatalogController {
     @Request() req: any,
     @Body() dto: AdjustStockDto,
   ) {
-    return this.catalogService.ajustarStock(id, req.user, dto);
+    return this.catalogService.ajustarStock(id, req.user, dto, arquivarAuditoria(req));
   }
 
   @Post(':id/duplicate')
@@ -132,6 +133,6 @@ export class CatalogController {
   @Delete(':id')
   @Roles(...MANAGEMENT_ROLES)
   async remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    return this.catalogService.softRemove(id, req.user);
+    return this.catalogService.softRemove(id, req.user, arquivarAuditoria(req));
   }
 }

@@ -5,6 +5,7 @@ import { LoadBalanceDto, DeductBalanceDto, ReverseLoadDto, ExtendBalanceDto, Bal
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { FINANCE_ROLES } from '../../common/roles';
+import { arquivarAuditoria } from '../../common/interceptors/audit.interceptor';
 
 @Controller('balances')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -36,7 +37,7 @@ export class BalanceController {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
     this.assertStaffEventScope(req.user, dto.eventId);
-    return this.balanceService.loadBalance(userId, dto, req.user);
+    return this.balanceService.loadBalance(userId, dto, req.user, arquivarAuditoria(req));
   }
 
   @Post(':userId/reverse/:movementId')
@@ -52,7 +53,7 @@ export class BalanceController {
     if (eventId && req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, eventId);
     }
-    return this.balanceService.reverseLoad(userId, movementId, req.user, dto);
+    return this.balanceService.reverseLoad(userId, movementId, req.user, dto, arquivarAuditoria(req));
   }
 
   @Post(':userId/deduct')
@@ -66,7 +67,7 @@ export class BalanceController {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
     this.assertStaffEventScope(req.user, dto.eventId);
-    return this.balanceService.deductBalance(userId, dto, req.user);
+    return this.balanceService.deductBalance(userId, dto, req.user, arquivarAuditoria(req));
   }
 
   @Get(':userId/events')
@@ -103,7 +104,7 @@ export class BalanceController {
     if (req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, dto.toEventId);
     }
-    return this.balanceService.transferBalance(userId, dto, req.user);
+    return this.balanceService.transferBalance(userId, dto, req.user, arquivarAuditoria(req));
   }
 
   @Post(':userId/extend')
@@ -117,7 +118,7 @@ export class BalanceController {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
     this.assertStaffEventScope(req.user, dto.eventId);
-    return this.balanceService.extendBalance(userId, dto);
+    return this.balanceService.extendBalance(userId, dto, arquivarAuditoria(req));
   }
 
   @Post(':userId/unarchive')
@@ -131,7 +132,7 @@ export class BalanceController {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
     this.assertStaffEventScope(req.user, dto.eventId);
-    return this.balanceService.unarchiveBalance(userId, dto.eventId);
+    return this.balanceService.unarchiveBalance(userId, dto.eventId, arquivarAuditoria(req));
   }
 
   @Post(':userId/notified')
@@ -145,7 +146,7 @@ export class BalanceController {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
     this.assertStaffEventScope(req.user, dto.eventId);
-    return this.balanceService.markNotified(userId, dto.eventId);
+    return this.balanceService.markNotified(userId, dto.eventId, arquivarAuditoria(req));
   }
 
   @Get('event/:eventId/outstanding')

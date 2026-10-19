@@ -18,7 +18,7 @@ import { GuardarPlantaDto } from './planta.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { MANAGEMENT_ROLES } from '../../common/roles';
-import { definirAuditBefore } from '../../common/interceptors/audit.interceptor';
+import { definirAuditBefore, arquivarAuditoria } from '../../common/interceptors/audit.interceptor';
 
 @Controller('events')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -48,7 +48,7 @@ export class EventController {
     @Request() req: any,
     @Body() dto: UpdateEventDto,
   ) {
-    return this.eventService.update(id, req.user, dto);
+    return this.eventService.update(id, req.user, dto, arquivarAuditoria(req));
   }
 
   @Patch(':id/status')
@@ -58,7 +58,7 @@ export class EventController {
     @Request() req: any,
     @Body() dto: UpdateEventStatusDto,
   ) {
-    return this.eventService.updateStatus(id, req.user, dto.status);
+    return this.eventService.updateStatus(id, req.user, dto.status, arquivarAuditoria(req));
   }
 
   @Get(':id/settings')
@@ -73,7 +73,7 @@ export class EventController {
     @Request() req: any,
     @Body() dto: EventSettingsDto,
   ) {
-    return this.eventService.updateSettings(id, req.user, dto);
+    return this.eventService.updateSettings(id, req.user, dto, arquivarAuditoria(req));
   }
 
   @Get(':id/planta')
@@ -107,7 +107,7 @@ export class EventController {
     @Request() req: any,
     @Body() dto: AddMemberDto,
   ) {
-    return this.eventService.addMember(id, req.user, dto);
+    return this.eventService.addMember(id, req.user, dto, arquivarAuditoria(req));
   }
 
   @Delete(':id/members/:userId')
@@ -117,12 +117,12 @@ export class EventController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @Request() req: any,
   ) {
-    return this.eventService.removeMember(id, req.user, userId);
+    return this.eventService.removeMember(id, req.user, userId, arquivarAuditoria(req));
   }
 
   @Delete(':id')
   @Roles('superadmin')
   async remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    return this.eventService.remove(id, req.user);
+    return this.eventService.remove(id, req.user, arquivarAuditoria(req));
   }
 }

@@ -7,6 +7,7 @@ import { CreateUserDto, UpdateUserDto } from './dto';
 import { MembershipService } from '../../common/membership.service';
 import { PUBLIC_USER_SELECT, PUBLIC_USER_SELECT_COM_ACCESS_CODE, toPublicUser } from '../../common/serializers';
 import { codigoAcessoUnico } from '../../common/access-code';
+import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';
 
 const SEM_MEMBROS = '00000000-0000-0000-0000-000000000000';
 
@@ -131,21 +132,30 @@ export class UserService {
     return toPublicUser(savedUser) as Partial<UserEntity>;
   }
 
-  async update(id: string, dto: UpdateUserDto): Promise<Partial<UserEntity>> {
+  async update(
+    id: string,
+    dto: UpdateUserDto,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
+  ): Promise<Partial<UserEntity>> {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('Utilizador não encontrado');
     }
+    arquivar?.({ antes: toPublicUser(user) });
     Object.assign(user, dto);
     const savedUser = await this.userRepository.save(user);
     return toPublicUser(savedUser) as Partial<UserEntity>;
   }
 
-  async remove(id: string): Promise<{ deleted: boolean; softDelete: boolean }> {
+  async remove(
+    id: string,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
+  ): Promise<{ deleted: boolean; softDelete: boolean }> {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('Utilizador não encontrado');
     }
+    arquivar?.({ antes: toPublicUser(user) });
     await this.userRepository.softDelete(id);
     return { deleted: true, softDelete: true };
   }

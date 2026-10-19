@@ -19,6 +19,7 @@ import {
 import { CreateEventDto, UpdateEventDto, AddMemberDto, EventSettingsDto } from './dto';
 import { GuardarPlantaDto, MAX_ZONAS_PLANTA } from './planta.dto';
 import { AuditService } from '../audit/audit.service';
+import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';
 import { eventWindowMessage, isEventWindowOpen } from '../../common/event-window';
 import {
   FORMATO_SHORT_CODE,
@@ -251,7 +252,12 @@ export class EventService {
     return savedEvent;
   }
 
-  async update(id: string, user: UserEntity, dto: UpdateEventDto): Promise<EventEntity> {
+  async update(
+    id: string,
+    user: UserEntity,
+    dto: UpdateEventDto,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
+  ): Promise<EventEntity> {
     const event = await this.findOne(id, user);
     if (dto.shortCode !== undefined) {
       const normalizado = this.validarShortCode(dto.shortCode);
@@ -261,6 +267,10 @@ export class EventService {
       }
       dto = { ...dto, shortCode: normalizado };
     }
+    // O floorPlan (mesas/zonas) fica de fora: num evento grande ultrapassaria o
+    // corte de 8000 chars do interceptor e o snapshot perdia-se por inteiro.
+    const { floorPlan: _floorPlan, ...camposEvento } = event;
+    arquivar?.({ antes: camposEvento, eventId: id });
     Object.assign(event, dto);
     return this.eventRepository.save(event);
   }
@@ -357,6 +367,7 @@ export class EventService {
     id: string,
     user: UserEntity,
     status: 'draft' | 'active' | 'closed',
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<EventEntity> {
     const event = await this.findOne(id, user);
     if (status === 'active') {
@@ -367,6 +378,7 @@ export class EventService {
         );
       }
     }
+    arquivar?.({ antes: { status: event.status }, eventId: id });
     event.status = status;
     return this.eventRepository.save(event);
   }
@@ -380,8 +392,10 @@ export class EventService {
     id: string,
     user: UserEntity,
     settings: EventSettingsDto,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<Record<string, any>> {
     const event = await this.findOne(id, user);
+    arquivar?.({ antes: { settings: event.settings ?? {} }, eventId: id });
     event.settings = { ...(event.settings ?? {}), ...settings };
     await this.eventRepository.save(event);
     return event.settings;
@@ -496,13 +510,19 @@ export class EventService {
     }
   }
 
-  async addMember(eventId: string, user: UserEntity, dto: AddMemberDto): Promise<EventUserEntity> {
+  async addMember(
+    eventId: string,
+    user: UserEntity,
+    dto: AddMemberDto,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
+  ): Promise<EventUserEntity> {
     await this.findOne(eventId, user);
     this.assertPodeAtribuirRole(user, dto.role);
     const userId = dto.userId;
     const existing = await this.eventUserRepository.findOne({
       where: { event: { id: eventId }, user: { id: userId } },
     });
+    arquivar?.({ antes: { userId, role: existing?.role ?? null }, eventId });
     if (existing) {
       existing.role = dto.role;
       return this.eventUserRepository.save(existing);
@@ -510,8 +530,14 @@ export class EventService {
     return this.addUserRole(eventId, userId, dto.role);
   }
 
-  async removeMember(eventId: string, user: UserEntity, userId: string): Promise<{ removed: boolean }> {
+  async removeMember(
+    eventId: string,
+    user: UserEntity,
+    userId: string,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
+  ): Promise<{ removed: boolean }> {
     await this.findOne(eventId, user);
+    arquivar?.({ antes: { userId }, eventId });
     await this.eventUserRepository.delete({
       event: { id: eventId },
       user: { id: userId },
@@ -519,8 +545,12 @@ export class EventService {
     return { removed: true };
   }
 
-  async remove(id: string, user: UserEntity): Promise<{ deleted: boolean; softDelete: boolean }> {
-    await this.findOne(id, user);
+  async remove(
+    id: string,
+    user: UserEntity,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
+  ): Promise<{ deleted: boolean; softDelete: boolean }> {
+    const event = await this.findOne(id, user);
 
     const pedidosAtivos = await this.orderRepository.count({
       where: { event: { id } as any, status: In(['received', 'preparing', 'ready']) },
@@ -535,6 +565,8 @@ export class EventService {
     if (caixaAberto > 0) {
       throw new ConflictException('Feche o caixa antes de eliminar o evento');
     }
+
+    arquivar?.({ antes: { status: event.status, deletedAt: null }, eventId: id });
 
     await this.eventRepository.update(
       { id },

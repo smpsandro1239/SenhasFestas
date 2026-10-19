@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { of, lastValueFrom } from 'rxjs';
-import { AuditInterceptor, definirAuditBefore } from './audit.interceptor';
+import {
+  AuditInterceptor,
+  definirAuditBefore,
+  definirAuditEvento,
+  arquivarAuditoria,
+} from './audit.interceptor';
 
 const EVENT_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
 
@@ -81,5 +86,59 @@ describe('AuditInterceptor — before/after', () => {
     expect(record.mock.calls[0][0].before).toEqual(
       expect.objectContaining({ resumo: 'resposta extensa' }),
     );
+  });
+
+  it('funde os extras arquivados pelo serviço em details', async () => {
+    const req = fazerReq('PATCH', `/api/products/${EVENT_ID}/stock`);
+    definirAuditBefore(req, { stock: 3 }, { motivo: 'quebra', delta: 2 });
+
+    await correr(req, { ok: true });
+
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        details: expect.objectContaining({ motivo: 'quebra', delta: 2, method: 'PATCH' }),
+      }),
+    );
+  });
+
+  it('sem extras em details mantém o comportamento antigo', async () => {
+    const req = fazerReq('PUT', `/api/events/${EVENT_ID}/planta`);
+    definirAuditBefore(req, { version: 1 });
+
+    await correr(req, { ok: true });
+
+    expect(record.mock.calls[0][0].details).not.toHaveProperty('motivo');
+  });
+
+  it('usa o eventId arquivado pelo serviço quando o body não o traz', async () => {
+    // /products/:id/stock não tem eventId no path nem no body; só o serviço
+    // sabe o evento do produto. Sem este override o log saía sem eventId.
+    const req = fazerReq('PATCH', `/api/products/${EVENT_ID}/stock`);
+    definirAuditEvento(req, EVENT_ID);
+
+    await correr(req, { ok: true });
+
+    expect(record.mock.calls[0][0].eventId).toBe(EVENT_ID);
+  });
+
+  it('usa o entityId arquivado pelo serviço quando o path não o traz', async () => {
+    // POST /cash-closure/abrir cria o registo cujo id só o serviço conhece.
+    const req = fazerReq('POST', '/api/cash-closure/abrir');
+    arquivarAuditoria(req)({ entidadeId: EVENT_ID, eventId: EVENT_ID });
+
+    await correr(req, { id: EVENT_ID });
+
+    expect(record.mock.calls[0][0].entityId).toBe(EVENT_ID);
+    expect(record.mock.calls[0][0].action).toBe('OPEN');
+  });
+
+  it('arquivarAuditoria aceita um snapshot sem estado anterior (criação)', async () => {
+    const req = fazerReq('POST', '/api/cash-closure/abrir');
+    arquivarAuditoria(req)({ entidadeId: EVENT_ID, eventId: EVENT_ID, extras: { origem: 'caixa' } });
+
+    await correr(req, { id: EVENT_ID });
+
+    expect(record.mock.calls[0][0].before).toBeUndefined();
+    expect(record.mock.calls[0][0].details).toMatchObject({ origem: 'caixa' });
   });
 });

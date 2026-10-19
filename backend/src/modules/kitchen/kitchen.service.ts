@@ -8,6 +8,7 @@ import { assertPodeMexerEmSaldo } from '../../common/balance-guard';
 import { reporStockEmTransacao } from '../../common/order-stock';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { KitchenQueryDto } from './dto';
+import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';
 
 @Injectable()
 export class KitchenService {
@@ -62,7 +63,12 @@ export class KitchenService {
     return { items, total, page, limit };
   }
 
-  async atualizarEstado(id: string, novoEstado: string, utilizador: any): Promise<any> {
+  async atualizarEstado(
+    id: string,
+    novoEstado: string,
+    utilizador: any,
+    arquivar?: (snapshot: SnapshotAuditoria) => void,
+  ): Promise<any> {
     const pedido = await this.orderRepository.findOne({
       where: { id },
       relations: { event: true },
@@ -88,6 +94,8 @@ export class KitchenService {
     if (!transicoesValidas[pedido.status]?.includes(novoEstado)) {
       throw new BadRequestException(`Transição inválida: ${pedido.status} -> ${novoEstado}`);
     }
+
+    arquivar?.({ antes: { status: pedido.status }, eventId: pedido.event?.id });
 
     const pedidoAtualizado = await this.orderRepository.manager.transaction(async (manager) => {
       const atual = await manager.findOne(OrderEntity, {

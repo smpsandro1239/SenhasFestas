@@ -240,3 +240,30 @@ describe('KitchenService — A12: KDS mostra os pedidos mais recentes (ordem DES
     expect(resultado.total).toBe(25);
   });
 });
+
+describe('KitchenService — snapshot anterior para auditoria (arquivar)', () => {
+  it('atualizarEstado arquiva o estado anterior e o evento', async () => {
+    const orderRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'o1', status: 'received', event: { id: 'evt1' } }),
+      manager: { transaction: null as any },
+    };
+    orderRepository.manager.transaction = vi.fn().mockImplementation(async (fn: any) =>
+      fn({
+        find: vi.fn().mockResolvedValue([]),
+        findOne: vi.fn().mockResolvedValue({ id: 'o1', status: 'received' }),
+        save: vi.fn().mockImplementation((_e: any, d: any) => Promise.resolve(d)),
+        create: vi.fn().mockImplementation((_e: any, d: any) => d),
+      }),
+    );
+    const svc = new KitchenService(
+      orderRepository as any,
+      { assertMember: vi.fn(), eventIdsFor: vi.fn().mockResolvedValue(null) } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+    );
+    const arquivar = vi.fn();
+
+    await svc.atualizarEstado('o1', 'preparing', { id: 'u1', role: 'superadmin' }, arquivar);
+
+    expect(arquivar).toHaveBeenCalledWith({ antes: { status: 'received' }, eventId: 'evt1' });
+  });
+});
