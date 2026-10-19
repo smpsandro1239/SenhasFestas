@@ -425,10 +425,24 @@ export interface GrupoZona {
 export const MAX_ZONAS_PLANTA = 100;
 export const ZONA_MIN = 5;
 export const CORES_ZONA = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+// Mesma opacidade do `fill-opacity` do SVG exportado, para canvas e PNG coincidirem.
+export const PERCENTAGEM_FUNDO_ZONA = 16;
 
 export function corZona(indice: number): string {
   const i = Number.isFinite(indice) ? Math.abs(Math.trunc(indice)) : 0;
   return CORES_ZONA[i % CORES_ZONA.length];
+}
+
+/**
+ * Fundo translúcido de uma zona. A cor vem de uma paleta/JSON livre (pode ser
+ * `#rgb`, `#rrggbbaa`, `rgb()`, `hsl()` ou um nome), por isso não se pode
+ * concatenar alfa ao fim do texto (como fazia `${cor}22`, que só funciona com
+ * hex de 6 dígitos). `color-mix` respeita qualquer formato e é o mesmo valor
+ * usado no export PNG (onde o SVG aplica `fill-opacity`).
+ */
+export function fundoZona(cor: string, percentagem: number = PERCENTAGEM_FUNDO_ZONA): string {
+  const pct = Number.isFinite(percentagem) ? Math.min(100, Math.max(0, percentagem)) : PERCENTAGEM_FUNDO_ZONA;
+  return `color-mix(in srgb, ${cor} ${pct}%, transparent)`;
 }
 
 export function normalizarDimensao(valor: number): number {

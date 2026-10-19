@@ -58,6 +58,7 @@ import {
   pendentesDeOutrosEventos,
   parseDocumentoPlanta,
   corZona,
+  fundoZona,
   criarZona,
   adicionarZona,
   removerZona,
@@ -4212,7 +4213,7 @@ function AdminPage() {
                             top: `${zona.y}%`,
                             width: `${zona.w}%`,
                             height: `${zona.h}%`,
-                            background: `${zona.cor}22`,
+                            background: fundoZona(zona.cor),
                             border: `1px solid ${zona.cor}`,
                             touchAction: 'none',
                           }}

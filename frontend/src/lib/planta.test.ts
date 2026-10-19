@@ -22,6 +22,8 @@ import {
   chavePlantaPendente,
   MAX_MESAS_PLANTA,
   corZona,
+  fundoZona,
+  PERCENTAGEM_FUNDO_ZONA,
   normalizarDimensao,
   normalizarZona,
   criarZona,
@@ -537,6 +539,26 @@ function zona(over: Partial<Zona> = {}): Zona {
     h: over.h ?? 30,
   };
 }
+
+describe('fundoZona', () => {
+  it('usa color-mix com a percentagem por omissão', () => {
+    expect(PERCENTAGEM_FUNDO_ZONA).toBe(16);
+    expect(fundoZona('#3b82f6')).toBe('color-mix(in srgb, #3b82f6 16%, transparent)');
+  });
+
+  it('não concatena alfa ao texto da cor (aceita hex curto, rgba, hsl e nomes)', () => {
+    for (const cor of ['#08f', '#3b82f680', 'rgb(59 130 246)', 'hsl(217 91% 60%)', 'rebeccapurple']) {
+      expect(fundoZona(cor)).toBe(`color-mix(in srgb, ${cor} 16%, transparent)`);
+    }
+  });
+
+  it('limita a percentagem a 0-100 e aceita valor explícito', () => {
+    expect(fundoZona('#000', 40)).toBe('color-mix(in srgb, #000 40%, transparent)');
+    expect(fundoZona('#000', -10)).toBe('color-mix(in srgb, #000 0%, transparent)');
+    expect(fundoZona('#000', 500)).toBe('color-mix(in srgb, #000 100%, transparent)');
+    expect(fundoZona('#000', Number.NaN)).toBe('color-mix(in srgb, #000 16%, transparent)');
+  });
+});
 
 describe('corZona', () => {
   it('devolve a primeira cor da paleta', () => {
