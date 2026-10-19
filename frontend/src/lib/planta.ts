@@ -189,6 +189,68 @@ export function decidirPlantaRemota(entrada: {
   return 'aplicar';
 }
 
+export interface EntradaCargaPlanta {
+  editadoDesdeCarga: boolean;
+  pendente: PlantaPendente | null;
+  remoto: DocumentoPlanta & { version: number };
+  local: DocumentoPlanta;
+}
+
+export type PlanoCargaPlanta =
+  | { tipo: 'ignorar' }
+  | { tipo: 'oferecer-importacao' }
+  | {
+      tipo: 'conflito-pendente';
+      mesas: Mesa[];
+      zonas: Zona[];
+      version: number;
+      pendenteTs: number;
+    }
+  | { tipo: 'retomar-pendente'; mesas: Mesa[]; zonas: Zona[]; version: number }
+  | { tipo: 'aplicar'; mesas: Mesa[]; zonas: Zona[]; version: number };
+
+/**
+ * O que o efeito de carga da planta deve fazer para cada decisão. O efeito só
+ * aplica o plano (refs, estado, localStorage); toda a decisão fica aqui testada.
+ */
+export function resolverPlanoCargaPlanta(entrada: EntradaCargaPlanta): PlanoCargaPlanta {
+  const decisao = decidirPlantaRemota({
+    editadoDesdeCarga: entrada.editadoDesdeCarga,
+    pendenteVersao: entrada.pendente ? entrada.pendente.version : null,
+    versaoServidor: entrada.remoto.version,
+    mesasServidor: entrada.remoto.mesas.length,
+    mesasLocais: entrada.local.mesas.length,
+  });
+  switch (decisao) {
+    case 'ignorar':
+      return { tipo: 'ignorar' };
+    case 'oferecer-importacao':
+      return { tipo: 'oferecer-importacao' };
+    case 'conflito-pendente':
+      return {
+        tipo: 'conflito-pendente',
+        mesas: entrada.remoto.mesas,
+        zonas: entrada.remoto.zonas,
+        version: entrada.remoto.version,
+        pendenteTs: entrada.pendente ? entrada.pendente.ts : 0,
+      };
+    case 'retomar-pendente':
+      return {
+        tipo: 'retomar-pendente',
+        mesas: entrada.local.mesas,
+        zonas: entrada.local.zonas,
+        version: entrada.remoto.version,
+      };
+    case 'aplicar':
+      return {
+        tipo: 'aplicar',
+        mesas: entrada.remoto.mesas,
+        zonas: entrada.remoto.zonas,
+        version: entrada.remoto.version,
+      };
+  }
+}
+
 export interface PlantaPendente {
   mesas: Mesa[];
   zonas: Zona[];

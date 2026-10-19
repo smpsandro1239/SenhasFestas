@@ -13,6 +13,8 @@ import {
   mesasParaQrs,
   parsePlanta,
   decidirPlantaRemota,
+  resolverPlanoCargaPlanta,
+  type PlantaPendente,
   parsePlantaPendente,
   descreverIdade,
   pendentesOrfaos,
@@ -318,6 +320,76 @@ describe('decidirPlantaRemota', () => {
 
   it('aplica quando o servidor tem version mas não há mesas locais', () => {
     expect(decidirPlantaRemota({ ...base, mesasLocais: 0 })).toBe('aplicar');
+  });
+});
+
+describe('resolverPlanoCargaPlanta', () => {
+  const mesaRemota = criarMesa('Remota', 4, 'redonda', 10, 10);
+  const mesaLocal = criarMesa('Local', 6, 'quadrada', 50, 50);
+  const zonaRemota = criarZona('Zona R', corZona(0), 0, 0, 30, 30);
+  const pendente: PlantaPendente = {
+    mesas: [mesaLocal],
+    zonas: [],
+    version: 3,
+    ts: 1_760_000_000_000,
+  };
+  const base = {
+    editadoDesdeCarga: false,
+    pendente: null as PlantaPendente | null,
+    remoto: { mesas: [mesaRemota], zonas: [zonaRemota], version: 5 },
+    local: { mesas: [mesaLocal], zonas: [] as ReturnType<typeof criarZona>[] },
+  };
+
+  it('aplica o documento remoto quando não há pendente nem edição', () => {
+    expect(resolverPlanoCargaPlanta(base)).toEqual({
+      tipo: 'aplicar',
+      mesas: [mesaRemota],
+      zonas: [zonaRemota],
+      version: 5,
+    });
+  });
+
+  it('não toca no estado quando o utilizador editou desde a carga', () => {
+    expect(resolverPlanoCargaPlanta({ ...base, editadoDesdeCarga: true })).toEqual({
+      tipo: 'ignorar',
+    });
+  });
+
+  it('oferece importação quando o servidor está vazio e há mesas locais', () => {
+    expect(
+      resolverPlanoCargaPlanta({
+        ...base,
+        remoto: { mesas: [], zonas: [], version: 0 },
+      }),
+    ).toEqual({ tipo: 'oferecer-importacao' });
+  });
+
+  it('conflito expõe as remotas, a versão do servidor e a idade do pendente', () => {
+    expect(resolverPlanoCargaPlanta({ ...base, pendente })).toEqual({
+      tipo: 'conflito-pendente',
+      mesas: [mesaRemota],
+      zonas: [zonaRemota],
+      version: 5,
+      pendenteTs: 1_760_000_000_000,
+    });
+  });
+
+  it('retoma a edição local (mesas e zonas pendentes) com a versão do servidor', () => {
+    // No efeito, `local` é o próprio pendente quando existe — por isso as zonas
+    // pendentes aparecem nos dois lados da entrada.
+    const zonaPendente = criarZona('Pendente', corZona(1), 60, 60, 30, 30);
+    expect(
+      resolverPlanoCargaPlanta({
+        ...base,
+        pendente: { ...pendente, version: 5, zonas: [zonaPendente] },
+        local: { mesas: [mesaLocal], zonas: [zonaPendente] },
+      }),
+    ).toEqual({
+      tipo: 'retomar-pendente',
+      mesas: [mesaLocal],
+      zonas: [zonaPendente],
+      version: 5,
+    });
   });
 });
 

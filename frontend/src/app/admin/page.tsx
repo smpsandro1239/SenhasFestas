@@ -43,7 +43,7 @@ import {
   renderSvgPlanta,
   normalizarPosicao,
   encaixarGrelha,
-  decidirPlantaRemota,
+  resolverPlanoCargaPlanta,
   parsePlantaPendente,
   chavePlantaPendente,
   descreverIdade,
@@ -1100,48 +1100,50 @@ function AdminPage() {
         if (cancelado || plantaCarregadaRef.current !== plantaShortCode) return;
         const versaoServidor = typeof remoto?.version === 'number' ? remoto.version : 0;
         const docRemoto = parseDocumentoPlanta(JSON.stringify(remoto ?? null));
-        const mesasRemotas = docRemoto.mesas;
-        const zonasRemotas = docRemoto.zonas;
         // Actualiza a version base mesmo que não apliquemos as mesas, para o próximo save
         // não partir de uma version desactualizada.
         plantaVersionRef.current = versaoServidor;
-        const decisao = decidirPlantaRemota({
+        const plano = resolverPlanoCargaPlanta({
           editadoDesdeCarga: plantaEditadaDesdeCargaRef.current,
-          pendenteVersao: pendenteInicial ? pendenteInicial.version : null,
-          versaoServidor,
-          mesasServidor: mesasRemotas.length,
-          mesasLocais: carregadas.length,
+          pendente: pendenteInicial,
+          remoto: { mesas: docRemoto.mesas, zonas: docRemoto.zonas, version: versaoServidor },
+          local: { mesas: carregadas, zonas: zonasCarregadas },
         });
-        if (decisao === 'ignorar') return;
-        if (decisao === 'oferecer-importacao') {
+        if (plano.tipo === 'ignorar') return;
+        if (plano.tipo === 'oferecer-importacao') {
           setPlantaImportarDisponivel(true);
           return;
         }
-        if (decisao === 'conflito-pendente') {
+        if (plano.tipo === 'conflito-pendente') {
           // O servidor mudou desde a edição pendente: não sobrescrever; oferecer escolha.
           setPlantaConflito({
-            mesas: mesasRemotas,
-            zonas: zonasRemotas,
-            version: versaoServidor,
-            pendenteTs: pendenteInicial?.ts ?? 0,
+            mesas: plano.mesas,
+            zonas: plano.zonas,
+            version: plano.version,
+            pendenteTs: plano.pendenteTs,
           });
           setPlantaSync('');
           return;
         }
-        if (decisao === 'retomar-pendente') {
+        plantaEstadoRef.current = plano.mesas;
+        plantaZonasEstadoRef.current = plano.zonas;
+        if (plano.tipo === 'retomar-pendente') {
           // O servidor está intacto desde a falha: reenvia a edição local sem banner.
-          plantaEstadoRef.current = carregadas;
-          void enviarPlantaContexto(eventoId, plantaShortCode, carregadas, zonasCarregadas, versaoServidor);
+          void enviarPlantaContexto(
+            eventoId,
+            plantaShortCode,
+            plano.mesas,
+            plano.zonas,
+            plano.version,
+          );
           return;
         }
-        plantaEstadoRef.current = mesasRemotas;
-        plantaZonasEstadoRef.current = zonasRemotas;
-        setPlanta(mesasRemotas);
-        setPlantaZonas(zonasRemotas);
+        setPlanta(plano.mesas);
+        setPlantaZonas(plano.zonas);
         try {
           localStorage.setItem(
             `sf:planta:${plantaShortCode}`,
-            JSON.stringify({ mesas: mesasRemotas, zonas: zonasRemotas }),
+            JSON.stringify({ mesas: plano.mesas, zonas: plano.zonas }),
           );
         } catch {}
       } catch {
