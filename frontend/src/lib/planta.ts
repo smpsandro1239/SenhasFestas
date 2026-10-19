@@ -319,9 +319,62 @@ export interface Zona {
   h: number;
 }
 
+export interface Dimensoes {
+  larguraM: number;
+  alturaM: number;
+}
+
 export interface DocumentoPlanta {
   mesas: Mesa[];
   zonas: Zona[];
+  dimensoes?: Dimensoes;
+}
+
+export const MIN_DIMENSAO_M = 1;
+export const MAX_DIMENSAO_M = 200;
+export const PX_POR_METRO_EXPORT = 100;
+export const MAX_LADO_EXPORT_PX = 6000;
+
+export function normalizarDimensoes(item: unknown): Dimensoes | null {
+  if (!item || typeof item !== 'object') return null;
+  const d = item as Record<string, unknown>;
+  const larguraM = typeof d.larguraM === 'number' ? d.larguraM : NaN;
+  const alturaM = typeof d.alturaM === 'number' ? d.alturaM : NaN;
+  if (!Number.isFinite(larguraM) || !Number.isFinite(alturaM)) return null;
+  const clamp = (v: number) =>
+    Math.round(Math.min(MAX_DIMENSAO_M, Math.max(MIN_DIMENSAO_M, v)) * 10) / 10;
+  return { larguraM: clamp(larguraM), alturaM: clamp(alturaM) };
+}
+
+export function proporcaoPlanta(dimensoes?: Dimensoes | null): number {
+  if (!dimensoes) return 16 / 9;
+  return dimensoes.larguraM / dimensoes.alturaM;
+}
+
+export interface DimensoesExport {
+  larguraPx: number;
+  alturaPx: number;
+  pxPorMetro: number;
+}
+
+// Export a 100 px/m (impressão legível a 300 DPI); o lado maior fica limitado
+// para o canvas não rebentar a memória em salões grandes.
+export function dimensoesExport(dimensoes?: Dimensoes | null): DimensoesExport | null {
+  if (!dimensoes) return null;
+  const pxPorMetro = Math.min(
+    PX_POR_METRO_EXPORT,
+    MAX_LADO_EXPORT_PX / dimensoes.larguraM,
+    MAX_LADO_EXPORT_PX / dimensoes.alturaM,
+  );
+  return {
+    larguraPx: Math.max(1, Math.round(dimensoes.larguraM * pxPorMetro)),
+    alturaPx: Math.max(1, Math.round(dimensoes.alturaM * pxPorMetro)),
+    pxPorMetro: Math.round(pxPorMetro * 100) / 100,
+  };
+}
+
+export function formatarMetros(metros: number): string {
+  return `${metros.toFixed(1).replace('.', ',')} m`;
 }
 
 export interface GrupoZona {
@@ -514,11 +567,13 @@ export function parseDocumentoPlanta(raw: string | null): DocumentoPlanta {
   }
   if (!dados || typeof dados !== 'object') return { mesas: [], zonas: [] };
   const d = dados as Record<string, unknown>;
+  const dimensoes = normalizarDimensoes(d.dimensoes);
   return {
     mesas: parsePlanta(JSON.stringify(Array.isArray(d.mesas) ? d.mesas : [])),
     zonas: (Array.isArray(d.zonas) ? d.zonas : [])
       .map(parseZona)
       .filter((z): z is Zona => z !== null),
+    ...(dimensoes ? { dimensoes } : {}),
   };
 }
 
@@ -571,6 +626,7 @@ export interface OpcoesSvgPlanta {
   largura?: number;
   altura?: number;
   fundo?: string;
+  mostrarEscala?: boolean;
 }
 
 export function escaparXml(texto: string): string {
@@ -584,47 +640,65 @@ export function escaparXml(texto: string): string {
 
 /**
  * Renderiza a planta como SVG standalone (para exportar a PNG no cliente).
- * Coordenadas 0-100 são o viewBox; o texto é escapado.
+ * As percentagens 0-100 são o viewBox; quando o documento tem dimensões reais,
+ * a altura do viewBox acompanha a proporção (para o desenho não ficar esticado)
+ * e é desenhada uma barra de escala.
  */
 export function renderSvgPlanta(doc: DocumentoPlanta, opcoes: OpcoesSvgPlanta = {}): string {
   const largura = opcoes.largura ?? 800;
   const altura = opcoes.altura ?? 800;
   const fundo = opcoes.fundo ?? '#0b0b0f';
+  const dimensoes = doc.dimensoes ?? null;
+  const f = dimensoes ? dimensoes.alturaM / dimensoes.larguraM : 1;
+  const h = 100 * f;
   const raio = 4;
   const out: string[] = [];
   out.push(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${largura}" height="${altura}" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${largura}" height="${altura}" viewBox="0 0 100 ${h}" preserveAspectRatio="xMidYMid meet">`,
   );
-  out.push(`<rect x="0" y="0" width="100" height="100" fill="${escaparXml(fundo)}"/>`);
+  out.push(`<rect x="0" y="0" width="100" height="${h}" fill="${escaparXml(fundo)}"/>`);
   for (let i = 10; i < 100; i += 10) {
     out.push(
-      `<line x1="${i}" y1="0" x2="${i}" y2="100" stroke="#27272a" stroke-width="0.2"/>`,
-      `<line x1="0" y1="${i}" x2="100" y2="${i}" stroke="#27272a" stroke-width="0.2"/>`,
+      `<line x1="${i}" y1="0" x2="${i}" y2="${h}" stroke="#27272a" stroke-width="0.2"/>`,
+      `<line x1="0" y1="${(i / 100) * h}" x2="100" y2="${(i / 100) * h}" stroke="#27272a" stroke-width="0.2"/>`,
     );
   }
   for (const zona of doc.zonas) {
     const cor = escaparXml(zona.cor);
     out.push(
-      `<rect x="${zona.x}" y="${zona.y}" width="${zona.w}" height="${zona.h}" rx="1.5" fill="${cor}" fill-opacity="0.16" stroke="${cor}" stroke-width="0.6"/>`,
+      `<rect x="${zona.x}" y="${(zona.y / 100) * h}" width="${zona.w}" height="${(zona.h / 100) * h}" rx="1.5" fill="${cor}" fill-opacity="0.16" stroke="${cor}" stroke-width="0.6"/>`,
     );
     if (zona.nome) {
       out.push(
-        `<text x="${zona.x + 1.5}" y="${zona.y + 3.5}" font-family="sans-serif" font-size="3" fill="${cor}">${escaparXml(zona.nome)}</text>`,
+        `<text x="${zona.x + 1.5}" y="${(zona.y / 100) * h + 3.5}" font-family="sans-serif" font-size="3" fill="${cor}">${escaparXml(zona.nome)}</text>`,
       );
     }
   }
   for (const mesa of doc.mesas) {
+    const cy = (mesa.y / 100) * h;
     if (mesa.forma === 'quadrada') {
       out.push(
-        `<rect x="${mesa.x - raio}" y="${mesa.y - raio * 0.85}" width="${raio * 2}" height="${raio * 1.7}" rx="0.8" fill="#52525b" stroke="#a1a1aa" stroke-width="0.4"/>`,
+        `<rect x="${mesa.x - raio}" y="${cy - raio * 0.85}" width="${raio * 2}" height="${raio * 1.7}" rx="0.8" fill="#52525b" stroke="#a1a1aa" stroke-width="0.4"/>`,
       );
     } else {
       out.push(
-        `<circle cx="${mesa.x}" cy="${mesa.y}" r="${raio}" fill="#52525b" stroke="#a1a1aa" stroke-width="0.4"/>`,
+        `<circle cx="${mesa.x}" cy="${cy}" r="${raio}" fill="#52525b" stroke="#a1a1aa" stroke-width="0.4"/>`,
       );
     }
     out.push(
-      `<text x="${mesa.x}" y="${mesa.y + 1}" font-family="sans-serif" font-size="3" text-anchor="middle" fill="#fafafa">${escaparXml(mesa.nome)}</text>`,
+      `<text x="${mesa.x}" y="${cy + 1}" font-family="sans-serif" font-size="3" text-anchor="middle" fill="#fafafa">${escaparXml(mesa.nome)}</text>`,
+    );
+  }
+  if (dimensoes && opcoes.mostrarEscala !== false) {
+    const barra = 25;
+    const x0 = 2;
+    const y0 = h - 5;
+    out.push(
+      `<line x1="${x0}" y1="${y0}" x2="${x0 + barra}" y2="${y0}" stroke="#a1a1aa" stroke-width="0.6"/>`,
+      `<line x1="${x0}" y1="${y0 - 1.2}" x2="${x0}" y2="${y0 + 1.2}" stroke="#a1a1aa" stroke-width="0.6"/>`,
+      `<line x1="${x0 + barra}" y1="${y0 - 1.2}" x2="${x0 + barra}" y2="${y0 + 1.2}" stroke="#a1a1aa" stroke-width="0.6"/>`,
+      `<text x="${x0 + barra / 2}" y="${y0 - 1.8}" font-family="sans-serif" font-size="3" text-anchor="middle" fill="#a1a1aa">${formatarMetros(dimensoes.larguraM / 4)}</text>`,
+      `<text x="98" y="${y0 - 1.8}" font-family="sans-serif" font-size="3" text-anchor="end" fill="#a1a1aa">${formatarMetros(dimensoes.larguraM)} × ${formatarMetros(dimensoes.alturaM)}</text>`,
     );
   }
   out.push('</svg>');

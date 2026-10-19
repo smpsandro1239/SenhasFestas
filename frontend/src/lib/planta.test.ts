@@ -38,6 +38,10 @@ import {
   reorganizarMesasComZonas,
   renderSvgPlanta,
   escaparXml,
+  normalizarDimensoes,
+  proporcaoPlanta,
+  dimensoesExport,
+  formatarMetros,
   MAX_ZONAS_PLANTA,
   ZONA_MIN,
   type Mesa,
@@ -837,6 +841,98 @@ describe('renderSvgPlanta', () => {
     expect(svg).not.toContain('<script>');
     expect(svg).toContain('&lt;b&gt;&amp;&quot;');
     expect(svg).toContain('&lt;script&gt;');
+  });
+
+  it('sem dimensões mantém o viewBox quadrado e sem barra de escala', () => {
+    const svg = renderSvgPlanta({ mesas: [], zonas: [] });
+    expect(svg).toContain('viewBox="0 0 100 100"');
+    expect(svg).not.toContain('×');
+  });
+
+  it('com dimensões usa a proporção real e desenha a barra de escala', () => {
+    const svg = renderSvgPlanta({
+      mesas: [mesa({ x: 50, y: 50 })],
+      zonas: [],
+      dimensoes: { larguraM: 20, alturaM: 12 },
+    });
+    expect(svg).toContain('viewBox="0 0 100 60"');
+    expect(svg).toContain('5,0 m');
+    expect(svg).toContain('20,0 m × 12,0 m');
+    expect(svg).toMatch(/<circle cx="50" cy="30"/);
+  });
+
+  it('permite omitir a barra de escala', () => {
+    const svg = renderSvgPlanta(
+      { mesas: [], zonas: [], dimensoes: { larguraM: 20, alturaM: 12 } },
+      { mostrarEscala: false },
+    );
+    expect(svg).not.toContain('5,0 m');
+  });
+});
+
+describe('dimensões reais', () => {
+  it('normaliza valores válidos com uma decimal', () => {
+    expect(normalizarDimensoes({ larguraM: 20.55, alturaM: 12 })).toEqual({
+      larguraM: 20.6,
+      alturaM: 12,
+    });
+  });
+
+  it('limita entre 1 e 200 metros', () => {
+    expect(normalizarDimensoes({ larguraM: 0, alturaM: 500 })).toEqual({
+      larguraM: 1,
+      alturaM: 200,
+    });
+  });
+
+  it('devolve null para valores inválidos', () => {
+    expect(normalizarDimensoes(null)).toBeNull();
+    expect(normalizarDimensoes({ larguraM: '20', alturaM: 12 })).toBeNull();
+    expect(normalizarDimensoes({ larguraM: NaN, alturaM: 12 })).toBeNull();
+  });
+
+  it('proporção cai em 16:9 sem dimensões', () => {
+    expect(proporcaoPlanta(null)).toBeCloseTo(16 / 9);
+    expect(proporcaoPlanta({ larguraM: 20, alturaM: 12 })).toBeCloseTo(5 / 3);
+  });
+
+  it('exporta a 100 px/m', () => {
+    expect(dimensoesExport({ larguraM: 20, alturaM: 12 })).toEqual({
+      larguraPx: 2000,
+      alturaPx: 1200,
+      pxPorMetro: 100,
+    });
+  });
+
+  it('limita o lado maior a 6000 px', () => {
+    expect(dimensoesExport({ larguraM: 100, alturaM: 50 })).toEqual({
+      larguraPx: 6000,
+      alturaPx: 3000,
+      pxPorMetro: 60,
+    });
+  });
+
+  it('sem dimensões não há tamanho de export', () => {
+    expect(dimensoesExport(null)).toBeNull();
+  });
+
+  it('formata metros com vírgula', () => {
+    expect(formatarMetros(5)).toBe('5,0 m');
+    expect(formatarMetros(3.14)).toBe('3,1 m');
+  });
+
+  it('parseDocumentoPlanta preserva dimensões válidas', () => {
+    const doc = parseDocumentoPlanta(
+      JSON.stringify({ mesas: [], zonas: [], dimensoes: { larguraM: 20, alturaM: 12 } }),
+    );
+    expect(doc.dimensoes).toEqual({ larguraM: 20, alturaM: 12 });
+  });
+
+  it('parseDocumentoPlanta descarta dimensões inválidas', () => {
+    const doc = parseDocumentoPlanta(
+      JSON.stringify({ mesas: [], zonas: [], dimensoes: { larguraM: 'x' } }),
+    );
+    expect(doc.dimensoes).toBeUndefined();
   });
 });
 

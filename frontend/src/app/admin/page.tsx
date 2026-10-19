@@ -41,6 +41,9 @@ import {
   reorganizarMesasComZonas,
   agruparMesasPorZona,
   paresDeSobreposicao,
+  normalizarDimensoes,
+  proporcaoPlanta,
+  dimensoesExport,
   renderSvgPlanta,
   normalizarPosicao,
   encaixarGrelha,
@@ -61,6 +64,7 @@ import {
   MAX_ZONAS_PLANTA,
   type Mesa,
   type Zona,
+  type Dimensoes,
   type FormaMesa,
 } from '@/lib/planta';
 import { QrLoteControlos } from '@/components/admin/qr-lote-controlos';
@@ -143,6 +147,7 @@ function AdminPage() {
   const plantaRef = useRef<HTMLDivElement>(null);
   const plantaEstadoRef = useRef<Mesa[]>([]);
   const plantaZonasEstadoRef = useRef<Zona[]>([]);
+  const plantaDimensoesRef = useRef<Dimensoes | null>(null);
   const plantaCarregadaRef = useRef<string>('');
   const arrastoRef = useRef<
     | { tipo: 'mesa'; id: string }
@@ -159,6 +164,7 @@ function AdminPage() {
     shortCode: string;
     mesas: Mesa[];
     zonas: Zona[];
+    dimensoes?: Dimensoes | null;
     version: number;
   } | null>(null);
   const plantaEditadaDesdeCargaRef = useRef(false);
@@ -178,6 +184,16 @@ function AdminPage() {
   const [plantaEventoId, setPlantaEventoId] = useState('');
   const [planta, setPlanta] = useState<Mesa[]>([]);
   const [plantaZonas, setPlantaZonas] = useState<Zona[]>([]);
+  const [plantaDimensoes, setPlantaDimensoes] = useState<Dimensoes | null>(null);
+  const [plantaLarguraM, setPlantaLarguraM] = useState('');
+  const [plantaAlturaM, setPlantaAlturaM] = useState('');
+
+  const aplicarDimensoes = (dimensoes: Dimensoes | null) => {
+    plantaDimensoesRef.current = dimensoes;
+    setPlantaDimensoes(dimensoes);
+    setPlantaLarguraM(dimensoes ? String(dimensoes.larguraM) : '');
+    setPlantaAlturaM(dimensoes ? String(dimensoes.alturaM) : '');
+  };
   const [plantaSel, setPlantaSel] = useState<string | null>(null);
   const [zonaSel, setZonaSel] = useState<string | null>(null);
   const [plantaNovoNome, setPlantaNovoNome] = useState('');
@@ -188,6 +204,7 @@ function AdminPage() {
   const [plantaConflito, setPlantaConflito] = useState<{
     mesas: Mesa[];
     zonas: Zona[];
+    dimensoes?: Dimensoes;
     version: number;
     pendenteTs?: number;
   } | null>(null);
@@ -1070,21 +1087,24 @@ function AdminPage() {
         pendente.mesas,
         pendente.zonas,
         pendente.version,
+        pendente.dimensoes ?? undefined,
       );
     }
     let pendenteInicial: ReturnType<typeof parsePlantaPendente> = null;
     try {
       pendenteInicial = parsePlantaPendente(localStorage.getItem(chavePlantaPendente(plantaShortCode)));
     } catch {}
+    const docCache = parseDocumentoPlanta(localStorage.getItem(`sf:planta:${plantaShortCode}`));
     const docInicial = pendenteInicial
       ? { mesas: pendenteInicial.mesas, zonas: pendenteInicial.zonas }
-      : parseDocumentoPlanta(localStorage.getItem(`sf:planta:${plantaShortCode}`));
+      : docCache;
     const carregadas = docInicial.mesas;
     const zonasCarregadas = docInicial.zonas;
     plantaCarregadaRef.current = plantaShortCode;
     plantaEditadaDesdeCargaRef.current = false;
     plantaEstadoRef.current = carregadas;
     plantaZonasEstadoRef.current = zonasCarregadas;
+    aplicarDimensoes(docCache.dimensoes ?? null);
     setPlanta(carregadas);
     setPlantaZonas(zonasCarregadas);
     setPlantaSel(null);
@@ -1102,6 +1122,7 @@ function AdminPage() {
         if (cancelado || plantaCarregadaRef.current !== plantaShortCode) return;
         const versaoServidor = typeof remoto?.version === 'number' ? remoto.version : 0;
         const docRemoto = parseDocumentoPlanta(JSON.stringify(remoto ?? null));
+        if (docRemoto.dimensoes) aplicarDimensoes(docRemoto.dimensoes);
         // Actualiza a version base mesmo que não apliquemos as mesas, para o próximo save
         // não partir de uma version desactualizada.
         plantaVersionRef.current = versaoServidor;
@@ -1121,6 +1142,7 @@ function AdminPage() {
           setPlantaConflito({
             mesas: plano.mesas,
             zonas: plano.zonas,
+            dimensoes: docRemoto.dimensoes,
             version: plano.version,
             pendenteTs: plano.pendenteTs,
           });
@@ -1145,7 +1167,11 @@ function AdminPage() {
         try {
           localStorage.setItem(
             `sf:planta:${plantaShortCode}`,
-            JSON.stringify({ mesas: plano.mesas, zonas: plano.zonas }),
+            JSON.stringify({
+              mesas: plano.mesas,
+              zonas: plano.zonas,
+              ...(docRemoto.dimensoes ? { dimensoes: docRemoto.dimensoes } : {}),
+            }),
           );
         } catch {}
       } catch {
@@ -1233,7 +1259,11 @@ function AdminPage() {
     try {
       localStorage.setItem(
         `sf:planta:${plantaShortCode}`,
-        JSON.stringify({ mesas, zonas: plantaZonasEstadoRef.current }),
+        JSON.stringify({
+          mesas,
+          zonas: plantaZonasEstadoRef.current,
+          ...(plantaDimensoesRef.current ? { dimensoes: plantaDimensoesRef.current } : {}),
+        }),
       );
     } catch {}
   };
@@ -1244,14 +1274,25 @@ function AdminPage() {
     mesas: Mesa[],
     zonas: Zona[],
     version: number,
+    dimensoes?: Dimensoes,
   ) => {
     if (!eventoId || !shortCode) return;
     const ativo = () => plantaCarregadaRef.current === shortCode;
+    const docCache = {
+      mesas,
+      zonas,
+      ...(plantaDimensoesRef.current ? { dimensoes: plantaDimensoesRef.current } : {}),
+    };
     if (ativo()) setPlantaSync('saving');
     try {
-      const r = await guardarPlanta(eventoId, { mesas, zonas, version });
+      const r = await guardarPlanta(eventoId, {
+        mesas,
+        zonas,
+        version,
+        ...(dimensoes ? { dimensoes } : {}),
+      });
       try {
-        localStorage.setItem(`sf:planta:${shortCode}`, JSON.stringify({ mesas, zonas }));
+        localStorage.setItem(`sf:planta:${shortCode}`, JSON.stringify(docCache));
         localStorage.removeItem(chavePlantaPendente(shortCode));
       } catch {}
       if (!ativo()) return;
@@ -1264,7 +1305,7 @@ function AdminPage() {
       try {
         localStorage.setItem(
           chavePlantaPendente(shortCode),
-          JSON.stringify({ mesas, zonas, version, ts: Date.now() }),
+          JSON.stringify({ ...docCache, version, ts: Date.now() }),
         );
       } catch {}
       if (!ativo()) {
@@ -1283,6 +1324,7 @@ function AdminPage() {
         setPlantaConflito({
           mesas: doc.mesas,
           zonas: doc.zonas,
+          dimensoes: doc.dimensoes,
           version: typeof body.version === 'number' ? body.version : 0,
         });
         setPlantaSync('');
@@ -1311,6 +1353,7 @@ function AdminPage() {
       shortCode: plantaShortCode,
       mesas,
       zonas: plantaZonasEstadoRef.current,
+      dimensoes: plantaDimensoesRef.current,
       version: plantaVersionRef.current,
     };
     if (plantaSaveTimerRef.current) window.clearTimeout(plantaSaveTimerRef.current);
@@ -1325,6 +1368,7 @@ function AdminPage() {
           pendente.mesas,
           pendente.zonas,
           pendente.version,
+          pendente.dimensoes ?? undefined,
         );
       }
     }, 800);
@@ -1336,6 +1380,7 @@ function AdminPage() {
     plantaVersionRef.current = conflito.version;
     plantaEstadoRef.current = conflito.mesas;
     plantaZonasEstadoRef.current = conflito.zonas;
+    aplicarDimensoes(conflito.dimensoes ?? null);
     setPlanta(conflito.mesas);
     setPlantaZonas(conflito.zonas);
     setPlantaSel(null);
@@ -1345,7 +1390,11 @@ function AdminPage() {
       try {
         localStorage.setItem(
           `sf:planta:${plantaShortCode}`,
-          JSON.stringify({ mesas: conflito.mesas, zonas: conflito.zonas }),
+          JSON.stringify({
+            mesas: conflito.mesas,
+            zonas: conflito.zonas,
+            ...(conflito.dimensoes ? { dimensoes: conflito.dimensoes } : {}),
+          }),
         );
         localStorage.removeItem(chavePlantaPendente(plantaShortCode));
       } catch {}
@@ -1647,14 +1696,52 @@ function AdminPage() {
     }
   };
 
+  const guardarDimensoesPlanta = () => {
+    if (!plantaEventoId || !plantaShortCode) return;
+    const atuais = plantaDimensoesRef.current;
+    const larguraTexto = plantaLarguraM.trim();
+    const alturaTexto = plantaAlturaM.trim();
+    const novas = normalizarDimensoes({
+      larguraM: Number(larguraTexto.replace(',', '.')),
+      alturaM: Number(alturaTexto.replace(',', '.')),
+    });
+    if (!novas || !larguraTexto || !alturaTexto) {
+      // Repõe só os campos sem valor válido; o campo bem preenchido mantém-se para
+      // o utilizador poder completar o par sem voltar a escrever.
+      if (!larguraTexto || !novas) setPlantaLarguraM(atuais ? String(atuais.larguraM) : '');
+      if (!alturaTexto || !novas) setPlantaAlturaM(atuais ? String(atuais.alturaM) : '');
+      return;
+    }
+    aplicarDimensoes(novas);
+    if (atuais && novas.larguraM === atuais.larguraM && novas.alturaM === atuais.alturaM) return;
+    // Envia já com o estado mais recente de mesas/zonas e descarta o save agendado,
+    // para não haver dois PUTs com a mesma version.
+    if (plantaSaveTimerRef.current) {
+      window.clearTimeout(plantaSaveTimerRef.current);
+      plantaSaveTimerRef.current = null;
+    }
+    plantaPendenteRef.current = null;
+    void enviarPlantaContexto(
+      plantaEventoId,
+      plantaShortCode,
+      plantaEstadoRef.current,
+      plantaZonasEstadoRef.current,
+      plantaVersionRef.current,
+      novas,
+    );
+  };
+
   const exportarPlantaPng = () => {
     if (exportarEstado === 'a-exportar') return;
     setExportarEstado('a-exportar');
     void (async () => {
       try {
+        const dimensoes = plantaDimensoesRef.current;
+        const tamanho = dimensoesExport(dimensoes);
         const svg = renderSvgPlanta({
           mesas: plantaEstadoRef.current,
           zonas: plantaZonasEstadoRef.current,
+          ...(dimensoes ? { dimensoes } : {}),
         });
         const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
         try {
@@ -1665,8 +1752,8 @@ function AdminPage() {
             i.src = url;
           });
           const canvas = document.createElement('canvas');
-          canvas.width = 1600;
-          canvas.height = 1600;
+          canvas.width = tamanho?.larguraPx ?? 1600;
+          canvas.height = tamanho?.alturaPx ?? 1600;
           const ctx = canvas.getContext('2d');
           if (!ctx) throw new Error('canvas sem contexto 2d');
           ctx.fillStyle = '#0b0b0f';
@@ -3908,6 +3995,44 @@ function AdminPage() {
                     >
                       Auto-organizar
                     </Button>
+                    <label className="flex items-center gap-1.5 text-xs text-zinc-400">
+                      Largura
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        step={0.1}
+                        value={plantaLarguraM}
+                        onChange={(e) => setPlantaLarguraM(e.target.value)}
+                        onBlur={guardarDimensoesPlanta}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') e.currentTarget.blur();
+                        }}
+                        disabled={!plantaEventoId}
+                        aria-label="Largura da planta em metros"
+                        className="w-20 rounded-lg border border-border bg-surface-solid px-2 py-1.5 text-sm text-zinc-100 focus:border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      />
+                      m
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-zinc-400">
+                      Altura
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        step={0.1}
+                        value={plantaAlturaM}
+                        onChange={(e) => setPlantaAlturaM(e.target.value)}
+                        onBlur={guardarDimensoesPlanta}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') e.currentTarget.blur();
+                        }}
+                        disabled={!plantaEventoId}
+                        aria-label="Altura da planta em metros"
+                        className="w-20 rounded-lg border border-border bg-surface-solid px-2 py-1.5 text-sm text-zinc-100 focus:border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      />
+                      m
+                    </label>
                     <Button
                       size="sm"
                       variant="outline"
@@ -3997,7 +4122,7 @@ function AdminPage() {
                     onPointerUp={onPlantaPointerUp}
                     onPointerLeave={onPlantaPointerUp}
                     className="relative mt-4 w-full overflow-hidden rounded-2xl border border-border bg-zinc-900/40"
-                    style={{ aspectRatio: '16 / 9', touchAction: 'none' }}
+                    style={{ aspectRatio: String(proporcaoPlanta(plantaDimensoes)), touchAction: 'none' }}
                   >
                     {planta.length === 0 && plantaZonas.length === 0 && (
                       <div className="absolute inset-0 flex items-center justify-center text-sm text-zinc-500">
