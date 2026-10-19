@@ -13,6 +13,8 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+export const MAX_ZONAS_PLANTA = 100;
+
 export class MesaPlantaDto {
   @IsString()
   @MaxLength(120)
@@ -86,7 +88,7 @@ export class GuardarPlantaDto {
 
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(50)
+  @ArrayMaxSize(MAX_ZONAS_PLANTA)
   @ValidateNested({ each: true })
   @Type(() => ZonaPlantaDto)
   zonas?: ZonaPlantaDto[] = [];

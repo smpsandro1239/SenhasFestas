@@ -17,7 +17,7 @@ import {
   BalanceEntity,
 } from '../../entities';
 import { CreateEventDto, UpdateEventDto, AddMemberDto, EventSettingsDto } from './dto';
-import { GuardarPlantaDto } from './planta.dto';
+import { GuardarPlantaDto, MAX_ZONAS_PLANTA } from './planta.dto';
 import { AuditService } from '../audit/audit.service';
 import { eventWindowMessage, isEventWindowOpen } from '../../common/event-window';
 import {
@@ -410,7 +410,7 @@ export class EventService {
       });
     }
     antesDeGravar?.({ mesas: atual.mesas, zonas: atual.zonas, version: versionAtual });
-    const zonas = (dto.zonas ?? []).map(normalizarZonaPlanta).slice(0, 50);
+    const zonas = (dto.zonas ?? []).map(normalizarZonaPlanta).slice(0, MAX_ZONAS_PLANTA);
     event.floorPlan = { mesas: dto.mesas, zonas };
     event.floorPlanVersion = versionAtual + 1;
     await this.eventRepository.save(event);

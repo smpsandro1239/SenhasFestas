@@ -110,8 +110,8 @@ describe('GuardarPlantaDto — validação', () => {
     expect(erros.some((e) => e.property === 'zonas')).toBe(true);
   });
 
-  it('rejeita mais de 50 zonas', async () => {
-    const zonas = Array.from({ length: 51 }, (_, i) => zona({ id: `zona-${i}` }));
+  it('rejeita mais de 100 zonas', async () => {
+    const zonas = Array.from({ length: 101 }, (_, i) => zona({ id: `zona-${i}` }));
     const erros = await validar(payload({ zonas }));
     expect(erros.some((e) => e.property === 'zonas')).toBe(true);
   });
