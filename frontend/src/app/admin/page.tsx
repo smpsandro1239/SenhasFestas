@@ -163,7 +163,11 @@ function AdminPage() {
   >(null);
   const undoSnapshotRef = useRef<{ mesas: Mesa[]; zonas: Zona[] } | null>(null);
   const undoTimerRef = useRef<number | null>(null);
-  const plantaVersionRef = useRef(0);
+  // Versão conhecida por evento (`shortCode`). Fica sem entrada enquanto o GET do
+  // evento não responde: gravar nessa janela enviaria a versão de outro evento
+  // (409, conflito espúrio), por isso a gravação é adiada até a versão chegar.
+  const plantaVersoesRef = useRef<Record<string, number>>({});
+  const plantaGravarAdiadoRef = useRef<Record<string, true>>({});
   const plantaSaveTimerRef = useRef<number | null>(null);
   const plantaPendenteRef = useRef<{
     eventoId: string;
@@ -171,7 +175,7 @@ function AdminPage() {
     mesas: Mesa[];
     zonas: Zona[];
     dimensoes?: Dimensoes | null;
-    version: number;
+    version?: number;
   } | null>(null);
   const plantaEditadaDesdeCargaRef = useRef(false);
   // Conta as edições locais: permite saber se a gravação que acabou de ter sucesso
@@ -1109,12 +1113,15 @@ function AdminPage() {
     const pendente = plantaPendenteRef.current;
     plantaPendenteRef.current = null;
     if (pendente && pendente.shortCode !== plantaShortCode) {
+      // A edição ficou guardada com a versão que era conhecida nessa altura.
+      if (typeof pendente.version === 'number') {
+        plantaVersoesRef.current[pendente.shortCode] = pendente.version;
+      }
       void enviarPlantaContexto(
         pendente.eventoId,
         pendente.shortCode,
         pendente.mesas,
         pendente.zonas,
-        pendente.version,
         pendente.dimensoes ?? undefined,
       );
     }
@@ -1153,7 +1160,12 @@ function AdminPage() {
         if (docRemoto.dimensoes) aplicarDimensoes(docRemoto.dimensoes);
         // Actualiza a version base mesmo que não apliquemos as mesas, para o próximo save
         // não partir de uma version desactualizada.
-        plantaVersionRef.current = versaoServidor;
+        plantaVersoesRef.current[plantaShortCode] = versaoServidor;
+        // Uma gravação adiada por a versão ser desconhecida já pode seguir.
+        if (plantaGravarAdiadoRef.current[plantaShortCode]) {
+          delete plantaGravarAdiadoRef.current[plantaShortCode];
+          agendarGuardarPlanta(plantaEstadoRef.current);
+        }
         const plano = resolverPlanoCargaPlanta({
           editadoDesdeCarga: plantaEditadaDesdeCargaRef.current,
           pendente: pendenteInicial,
@@ -1186,7 +1198,6 @@ function AdminPage() {
             plantaShortCode,
             plano.mesas,
             plano.zonas,
-            plano.version,
           );
           return;
         }
@@ -1204,8 +1215,18 @@ function AdminPage() {
         } catch {}
       } catch {
         if (cancelado || plantaCarregadaRef.current !== plantaShortCode) return;
-        // Offline ou servidor indisponível: mantém a cópia local.
+        // Offline ou servidor indisponível: mantém a cópia local. Se havia uma
+        // gravação à espera da versão, fica registada como pendente para o aviso.
         setPlantaSync('offline');
+        if (plantaGravarAdiadoRef.current[plantaShortCode]) {
+          delete plantaGravarAdiadoRef.current[plantaShortCode];
+          registarPendentePlanta(
+            plantaShortCode,
+            plantaEstadoRef.current,
+            plantaZonasEstadoRef.current,
+            undefined,
+          );
+        }
       }
     })();
     return () => {
@@ -1310,17 +1331,47 @@ function AdminPage() {
     plantaEdicaoSeqRef.current += 1;
   };
 
+  // Edição que não chegou a ser gravada: fica no armazenamento local e aparece no
+  // aviso de pendentes (a carga seguinte decide entre retomar ou pedir escolha).
+  const registarPendentePlanta = (
+    shortCode: string,
+    mesas: Mesa[],
+    zonas: Zona[],
+    version: number | undefined,
+  ) => {
+    try {
+      localStorage.setItem(
+        chavePlantaPendente(shortCode),
+        JSON.stringify({
+          mesas,
+          zonas,
+          ...(plantaDimensoesRef.current ? { dimensoes: plantaDimensoesRef.current } : {}),
+          ...(typeof version === 'number' ? { version } : {}),
+          ts: Date.now(),
+        }),
+      );
+    } catch {}
+    atualizarPendentesPlanta();
+  };
+
   const enviarPlantaContexto = async (
     eventoId: string,
     shortCode: string,
     mesas: Mesa[],
     zonas: Zona[],
-    version: number,
     dimensoes?: Dimensoes,
   ) => {
     if (!eventoId || !shortCode) return;
     const ativo = () => plantaCarregadaRef.current === shortCode;
     const seqDoEnvio = plantaEdicaoSeqRef.current;
+    const version = plantaVersoesRef.current[shortCode];
+    if (version === undefined) {
+      // O GET do evento ainda não trouxe a versão: gravar agora enviaria a versão
+      // de outro evento. Fica adiada e é reenviada assim que a versão chegar.
+      plantaGravarAdiadoRef.current[shortCode] = true;
+      if (ativo()) setPlantaSync('saving');
+      return;
+    }
     const docCache = {
       mesas,
       zonas,
@@ -1340,20 +1391,15 @@ function AdminPage() {
       } catch {}
       atualizarPendentesPlanta();
       if (!ativo()) return;
-      plantaVersionRef.current =
-        typeof r?.version === 'number' ? r.version : plantaVersionRef.current + 1;
+      plantaVersoesRef.current[shortCode] =
+        typeof r?.version === 'number' ? r.version : version + 1;
       // A gravação representa o estado actual: deixa de haver edições por gravar.
       if (plantaEdicaoSeqRef.current === seqDoEnvio) plantaEditadaDesdeCargaRef.current = false;
       setPlantaConflito(null);
       setPlantaSync('saved');
     } catch (e) {
       // Persiste a edição por sincronizar para não se perder num reload/troca de evento.
-      try {
-        localStorage.setItem(
-          chavePlantaPendente(shortCode),
-          JSON.stringify({ ...docCache, version, ts: Date.now() }),
-        );
-      } catch {}
+      registarPendentePlanta(shortCode, mesas, zonas, version);
       if (!ativo()) {
         // O evento já não está activo (flush ao trocar de evento): não podemos mostrar o
         // conflito no contexto do evento actual, mas a edição ficou guardada localmente e o
@@ -1384,7 +1430,6 @@ function AdminPage() {
       plantaShortCode,
       mesas,
       plantaZonasEstadoRef.current,
-      plantaVersionRef.current,
     );
   };
 
@@ -1397,7 +1442,7 @@ function AdminPage() {
       mesas,
       zonas: plantaZonasEstadoRef.current,
       dimensoes: plantaDimensoesRef.current,
-      version: plantaVersionRef.current,
+      version: plantaVersoesRef.current[plantaShortCode],
     };
     if (plantaSaveTimerRef.current) window.clearTimeout(plantaSaveTimerRef.current);
     plantaSaveTimerRef.current = window.setTimeout(() => {
@@ -1410,7 +1455,6 @@ function AdminPage() {
           pendente.shortCode,
           pendente.mesas,
           pendente.zonas,
-          pendente.version,
           pendente.dimensoes ?? undefined,
         );
       }
@@ -1420,7 +1464,7 @@ function AdminPage() {
   const recarregarPlantaRemota = () => {
     const conflito = plantaConflito;
     if (!conflito) return;
-    plantaVersionRef.current = conflito.version;
+    plantaVersoesRef.current[plantaShortCode] = conflito.version;
     plantaEstadoRef.current = conflito.mesas;
     plantaZonasEstadoRef.current = conflito.zonas;
     aplicarDimensoes(conflito.dimensoes ?? null);
@@ -1450,7 +1494,7 @@ function AdminPage() {
   const forcarGuardarPlanta = () => {
     const conflito = plantaConflito;
     if (!conflito) return;
-    plantaVersionRef.current = conflito.version;
+    plantaVersoesRef.current[plantaShortCode] = conflito.version;
     setPlantaConflito(null);
     void enviarPlanta(plantaEstadoRef.current);
   };
@@ -1462,7 +1506,7 @@ function AdminPage() {
 
   const descartarPlantaLocal = () => {
     setPlantaImportarDisponivel(false);
-    plantaVersionRef.current = 0;
+    plantaVersoesRef.current[plantaShortCode] = 0;
     plantaEstadoRef.current = [];
     plantaZonasEstadoRef.current = [];
     setPlanta([]);
@@ -1794,7 +1838,6 @@ function AdminPage() {
       plantaShortCode,
       plantaEstadoRef.current,
       plantaZonasEstadoRef.current,
-      plantaVersionRef.current,
       novas,
     );
   };
