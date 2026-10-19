@@ -13,6 +13,32 @@
 
 ---
 
+## 2026-10-19 — Undo para zonas da planta
+
+**Objectivo**: roadmap prioridade alta #2 (dívida #2) — apagar uma zona era
+irreversível; o snapshot `{mesas, zonas}` já existia mas só as operações de mesa
+(o `auto-organizar` e o `limpar`) ofereciam undo.
+
+**Feito**
+- `adicionarZonaPlanta`, `removerZonaPlanta` e `editarZonaPlanta` tiram o
+  snapshot **antes** de alterar e chamam `oferecerUndo` **depois**
+  (`definirDocumento` limpa o undo, como já faziam as restantes operações).
+- Labels: `Zona adicionada` / `Zona removida` / `Zona editada` — o banner e o
+  botão "Desfazer" já eram genéricos, sem mudança de UI.
+
+**Notas**
+- Editar o nome a teclar oferece undo por tecla (desfaz a última alteração);
+  limitação da arquitectura actual (limpa-oferece), documentada no `PLAN.md`.
+
+**Commits**
+- `c6a61c0 feat(frontend): undo para as operacoes de zona da planta`
+- `docs: registar o undo das zonas da planta` (PLAN.md + este)
+
+**Gates (frontend)**: `tsc` limpo; `vitest` 232/232; `lint` sem warnings;
+`build` OK.
+
+---
+
 ## 2026-10-19 — Fluxo de pendente da planta: testes do efeito
 
 **Objectivo**: roadmap prioridade alta #1 — testar o **efeito** que chama

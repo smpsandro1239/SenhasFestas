@@ -98,6 +98,11 @@ mesa e relatórios financeiros.
    - **O quê**: o snapshot já guarda `{mesas, zonas}`; falta oferecer o undo nas
      operações de zona (`adicionarZonaPlanta`, `removerZonaPlanta`, `editarZonaPlanta`).
    - **Ficheiros**: `frontend/src/app/admin/page.tsx`
+   - **Estado**: concluído 2026-10-19 — as 3 operações tiram snapshot antes e
+     chamam `oferecerUndo` depois (`Zona adicionada`/`Zona removida`/`Zona editada`);
+     banner e botão "Desfazer" já eram genéricos. Nota: o nome editado a teclar
+     oferece undo por tecla (última alteração) — arquitectura existente
+     (`definirDocumento` limpa o undo sempre).
 
 3. **Feedback visual no export PNG**
    - **Porquê**: se o `Image.onload` falha, o botão não faz nada.
@@ -143,7 +148,7 @@ mesa e relatórios financeiros.
 | # | Descrição | Onde | Impacto |
 |---|---|---|---|
 | 1 | Auditoria só captura `after` | `audit.interceptor.ts` | Não se sabe o estado anterior |
-| 2 | Undo não cobre zonas | `admin/page.tsx` | Operação irreversível |
+| 2 | ~~Undo não cobre zonas~~ **Resolvido 2026-10-19** | `admin/page.tsx` | Adicionar/editar/remover zona agora oferecem undo de 6 s |
 | 3 | `plantaAviso` limpo no arranque da carga | `admin/page.tsx` | Aviso pode não ser visto |
 | 4 | `pendenteTs` congelado no render | `admin/page.tsx` | Idade desactualizada |
 | 5 | `plantaEditadaDesdeCargaRef` nunca resetada no sucesso | `admin/page.tsx` | Futuros GETs ignorados até trocar de evento (documentado) |
