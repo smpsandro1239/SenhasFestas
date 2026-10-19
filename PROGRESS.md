@@ -13,6 +13,37 @@
 
 ---
 
+## 2026-10-19 — Binário nativo do SWC truncado (dívida #8)
+
+**Objectivo**: dívida #8 — o binário `@next/swc-win32-x64-msvc` estava truncado e o
+frontend caía no compilador alternativo, com avisos em cada build.
+
+**Feito**
+- Provado o defeito antes de mexer: `node`
+  `require('.../next-swc.win32-x64-msvc.node')` falhava com *«is not a valid Win32
+  application»*; tamanho instalado **18 449 860 B** contra **148 387 320 B**
+  esperados (soma dos 3 ficheiros em `dist.unpackedSize` no registro). O magic `MZ`
+  era normal (PE do Windows) — o sinal real era o tamanho.
+- Correcção: `rm -rf node_modules/@next/swc-win32-x64-msvc` +
+  `npm install --prefer-online` na raiz (monorepo com workspaces; o pacote está
+  hoisted). `package-lock.json` não mudou (a versão já era a 15.5.24).
+- Verificação: binário com **148 386 816 B** e a carregar **OK**.
+
+**Medições (build frio, `.next` apagado)**
+- Antes: 80 s, `Compiled successfully in 20.9 s` com avisos repetidos
+  «⚠ Attempted to load @next/swc-win32-x64-msvc, but an error occurred…».
+- Depois: 72 s, `Compiled successfully in 16.4 s`, **zero** ocorrências de
+  `swc|wasm` no log do build.
+- A diferença de tempo é modesta porque o Next 15 faz fallback para o compilador
+  alternativo sem falhar o build — o ganho é sobretudo deixar de ter um binário
+  inválido e avisos ruidosos.
+
+**Gates**: frontend `tsc` limpo, **265/265**, lint sem warnings, build ok.
+(`node_modules` é ignorado pelo git — a correcção é do ambiente, não do
+repositório.)
+
+---
+
 ## 2026-10-19 — `/health/ready` devolve 503 com dependência unhealthy (dívida #9)
 
 **Objectivo**: dívida #9 — `/api/health/ready` respondia **200** mesmo com
