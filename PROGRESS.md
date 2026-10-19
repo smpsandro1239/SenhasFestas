@@ -13,7 +13,43 @@
 
 ---
 
-## 2026-10-19 — Fundo da zona deixa de assumir hex de 6 dígitos (dívida #6)
+## 2026-10-19 — Flag de edições da planta passa a ser limpa (dívida #5)
+
+**Objectivo**: dívida #5 — `plantaEditadaDesdeCargaRef` só era reposta a `false` no
+início de cada carga; depois de uma gravação com sucesso continuava `true`, e
+`decidirPlantaRemota` ignorava (`'ignorar'`) qualquer resposta remota subsequente.
+
+**Feito**
+- Novo `plantaEdicaoSeqRef` (contador) e helper `marcarPlantaEditada()`, que agora é
+  a única forma de marcar edição (substituiu 4 atribuições directas).
+- `enviarPlantaContexto` captura `seqDoEnvio` antes do `await` e, no sucesso, limpa
+  a flag **só se não houve edições entretanto** (`plantaEdicaoSeqRef.current ===
+  seqDoEnvio`) — evita que uma gravação antiga seja tomada como representativa do
+  estado actual e deixe uma resposta remota atrasada sobrescrever edições novas.
+- `esquecerEdicoesLocais()` em `recarregarPlantaRemota` (adoptar a versão do
+  servidor) e em `descartarPlantaLocal`: nesses casos também deixou de haver edições
+  locais por gravar; a sequência avança para uma gravação em voo não contar como
+  actual.
+
+**Verificação em browser real** (Playwright, `festa-teste-2026`): GET `/planta`
+retido à mão e libertado só depois de a gravação (PUT 200, `v25`) ter sucesso —
+com o `id`/`volta` por outro evento para que o GET retido fosse o da reaproximação.
+A resposta injectada (Mesa A do servidor em 12,88) **foi aplicada**: mesa passou a
+`12%,88%`, cache local reescrita, zero erros. Como a flag só podia estar `false`
+pelo caminho novo (a carga e o arrasto marcaram-na `true`), isto prova a limpeza.
+Na mesma sessão, com a resposta a chegar *antes* da gravação, o comportamento
+mantém-se: a edição local não é sobrescrita (o `'ignorar'` protegido continua
+coberto pelos testes de `decidirPlantaRemota`). Conteúdo do evento reposto
+(Mesa A em 35,35).
+
+**Observação nova** (registada como dívida #12 no `PLAN.md`): ao trocar de evento e
+editar antes de o GET do evento novo resolver, o PUT leva a versão do evento
+anterior → **409** e conflito espúrio (apareceu ao montar esta verificação).
+
+**Gates**: frontend `tsc` limpo, **268/268**, lint sem warnings, build ok.
+
+---
+
 
 **Objectivo**: dívida #6 — o fundo translúcido da zona era obtido concatenando alfa
 ao texto da cor.
