@@ -140,6 +140,25 @@ mesa e relatórios financeiros.
 | 5 | `plantaEditadaDesdeCargaRef` nunca resetada no sucesso | `admin/page.tsx` | Futuros GETs ignorados até trocar de evento (documentado) |
 | 6 | `renderSvgPlanta` assume hex de 6 dígitos | `lib/planta.ts` | Frágil a mudanças de paleta |
 | 7 | Export PNG sem feedback de erro | `admin/page.tsx` | Clique silencioso |
+| 8 | SWC do frontend **truncado** (18,4 MB instalados vs 148,4 MB esperados; magic `MZ`) | `node_modules/@next/swc-win32-x64-msvc` | Fallback WASM; compilação lenta. Corrigir reinstalando `@next/swc-win32-x64-msvc@15.5.24` |
+| 9 | `/health/ready` devolve **HTTP 200** mesmo com dependência `unhealthy` | `health.controller.ts:32-46` | Readiness probe engana load balancers; contrato correcto seria **503** |
+
+---
+
+## Notas operacionais
+
+- **Cron `cleanupExpiredTokens`** (`auth.service.ts:252`, `EVERY_DAY_AT_3AM`) — apaga
+  refresh tokens expirados/revogados. **Não está a correr**: em 2026-10-19 havia
+  **322 tokens expirados há >1 dia** (87 há >7 dias, o mais antigo de 2026-10-05) e
+  **187 revogados há >30 dias**. Suspeita: deploy serverless (Vercel) onde o
+  `@Cron` do `@nestjs/schedule` não dispara por não haver processo persistente.
+  Confirmar e, se aplicável, mover a limpeza para um cron externo (`/api/cron/*`).
+- **Realtime single-instance**: sem Redis o realtime **funciona** numa só instância
+  (emissão local directa em `order.gateway.ts:254`). Degrada apenas em multi-instância
+  (sem fan-out entre réplicas) e nos limites partilhados de join/sockets, que passam
+  a mapas locais (`order.gateway.ts:34-36`).
+- **Crons de arranque**: o arranque do backend não muta dados. O único `@Cron` corre
+  às 3AM, logo arranques fora dessa hora são seguros.
 
 ---
 

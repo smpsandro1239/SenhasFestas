@@ -13,6 +13,51 @@
 
 ---
 
+## 2026-10-19 — Verificação de arranque + descobertas de ambiente
+
+**Objectivo**: verificar se a app arranca contra a BD real e apurar riscos antes
+do teste visual da planta (MCP `cdt`).
+
+**Feito (tudo read-only)**
+- Backend arranca: `Nest application successfully started`, `/api/health` → 200,
+  `/api/health/ready` → 200, `/api/docs` → 200.
+- Frontend arranca na 3001; `/auth/login` → 200; `/` e `/admin` → 307 →
+  `/auth/login?from=…` → 200.
+- DB: Postgres remoto (Neon, us-east-2); migração `FloorPlanZonas1790500000000`
+  aplicada; conta `BOOTSTRAP_ADMIN_EMAIL` existe (35 utilizadores).
+- Arranque **não mutou dados**: `AUDIT_SYSTEM_2H=0`, `AUDIT_QUALQUER_2H=0`; único
+  `@Cron` corre às 3AM (`cleanupExpiredTokens`).
+
+**Descobertas (registadas no `PLAN.md`)**
+- **SWC do frontend truncado**: 18,4 MB instalados vs 148,4 MB esperados
+  (`dist.unpackedSize`); cai para WASM. Corrigir reinstalando
+  `@next/swc-win32-x64-msvc@15.5.24`.
+- **Cron `cleanupExpiredTokens` não corre em produção**: 322 refresh tokens
+  expirados há >1 dia, 187 revogados há >30 dias. Suspeita: serverless sem
+  processo persistente.
+- **`/health/ready` devolve 200 com Redis unhealthy** (corpo diz `"unhealthy"`):
+  bug de contrato, devia ser 503.
+- **Realtime funciona sem Redis** numa só instância (emissão local directa).
+
+**Decisões tomadas**
+- Não corrigir o `/ready` nem o cron nesta sessão — primeiro decidir o alvo do
+  teste visual (o teste escreve `floorPlan` na Neon partilhada).
+- Reinstalar o SWC **depois** do teste visual (não misturar variáveis).
+
+**Commits**
+- (este) `docs: registar descobertas da verificacao de arranque`
+
+**Gates**
+- Só docs; sem alterações ao código da app. BD apenas com `SELECT`.
+
+**Pendente**
+- Confirmar bug do `/ready` (corrigir para 503) — a aguardar decisão.
+- Decidir alvo do teste visual: evento dedicado, BD de dev, ou aceitar poluir.
+- Reinstalar `@next/swc-win32-x64-msvc`.
+- Confirmar se o cron corre em produção; se não, mover para cron externo.
+
+---
+
 ## 2026-10-14 — Planta: zonas + export
 
 **Objectivo**: zonas da sala com pertença de mesas + exportar planta como
