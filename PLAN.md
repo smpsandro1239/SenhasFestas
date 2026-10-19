@@ -107,6 +107,11 @@ mesa e relatórios financeiros.
 3. **Feedback visual no export PNG**
    - **Porquê**: se o `Image.onload` falha, o botão não faz nada.
    - **O quê**: `setPlantaSync('a exportar…')`, `try/catch`, mensagem de erro.
+   - **Estado**: concluído 2026-10-19 — estado dedicado `exportarEstado`
+     (`'' | 'a-exportar' | 'erro'`) em vez de sobrecarregar `plantaSync` (que é
+     a sincronização com o servidor); fluxo `async/await` com `try/catch` real
+     (onerror, `getContext`, `toBlob`); botão desactivado durante o export.
+     Verificado no browser: download real + mensagem de erro forçada.
 
 ### Prioridade média (semanas)
 
@@ -153,7 +158,7 @@ mesa e relatórios financeiros.
 | 4 | `pendenteTs` congelado no render | `admin/page.tsx` | Idade desactualizada |
 | 5 | `plantaEditadaDesdeCargaRef` nunca resetada no sucesso | `admin/page.tsx` | Futuros GETs ignorados até trocar de evento (documentado) |
 | 6 | `renderSvgPlanta` assume hex de 6 dígitos | `lib/planta.ts` | Frágil a mudanças de paleta |
-| 7 | Export PNG sem feedback de erro | `admin/page.tsx` | Clique silencioso |
+| 7 | ~~Export PNG sem feedback de erro~~ **Resolvido 2026-10-19** | `admin/page.tsx` | Estado `exportarEstado` + `try/catch` + mensagem de falha; verificado no browser |
 | 8 | SWC do frontend **truncado** (18,4 MB instalados vs 148,4 MB esperados; magic `MZ`) | `node_modules/@next/swc-win32-x64-msvc` | Fallback WASM; compilação lenta. Corrigir reinstalando `@next/swc-win32-x64-msvc@15.5.24` |
 | 9 | `/health/ready` devolve **HTTP 200** mesmo com dependência `unhealthy` | `health.controller.ts:32-46` | Readiness probe engana load balancers; contrato correcto seria **503** |
 | 10 | ~~CSP (`script-src 'self' 'unsafe-inline'`) bloqueia `eval` do webpack em dev~~ **Resolvido 2026-10-19** | `next.config.js` | `'unsafe-eval'` adicionado só quando `!isProd`; hidratação verificada em dev, produção mantém CSP estrito |

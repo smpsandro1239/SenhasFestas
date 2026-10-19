@@ -13,6 +13,35 @@
 
 ---
 
+## 2026-10-19 — Feedback visual no export PNG
+
+**Objectivo**: roadmap prioridade alta #3 (dívida #7) — o export era silencioso:
+se `Image.onload` falhasse (ou `getContext`/`toBlob` devolvesse nulo), o botão
+não fazia nada.
+
+**Feito**
+- Novo estado dedicado `exportarEstado` (`'' | 'a-exportar' | 'erro'`) — não
+  sobrecarrega `plantaSync`, que continua a significar "sincronização com o
+  servidor".
+- `exportarPlantaPng` reescrito como `async` com `Promise`: `img.onerror`,
+  `getContext('2d')` nulo e `toBlob` nulo passam a cair num `try/catch` real.
+  `URL.revokeObjectURL` do SVG fica num `finally`.
+- Botão "Exportar PNG" desactivado durante o export; aviso `A exportar…` e erro
+  `Falha ao exportar a PNG — tenta de novo` na linha de estado.
+
+**Verificação (browser, Playwright + Chrome real)**
+- Sucesso: download `planta-festa-teste-2026.png` com a nova implementação.
+- Erro: `Image.onerror` forçado → mensagem visível. `PAGE_ERRORS: 0`.
+
+**Commits**
+- `05d8536 feat(frontend): feedback visual no export PNG da planta`
+- `docs: registar o feedback do export PNG` (PLAN.md + este)
+
+**Gates (frontend)**: `tsc` limpo; `vitest` 232/232; `lint` sem warnings;
+`build` OK.
+
+---
+
 ## 2026-10-19 — Undo para zonas da planta
 
 **Objectivo**: roadmap prioridade alta #2 (dívida #2) — apagar uma zona era
