@@ -79,6 +79,18 @@ export class ZonaPlantaDto {
   h: number;
 }
 
+export class DimensoesPlantaDto {
+  @IsNumber({ maxDecimalPlaces: 1 })
+  @Min(1)
+  @Max(200)
+  larguraM: number;
+
+  @IsNumber({ maxDecimalPlaces: 1 })
+  @Min(1)
+  @Max(200)
+  alturaM: number;
+}
+
 export class GuardarPlantaDto {
   @IsArray()
   @ArrayMaxSize(200)
@@ -92,6 +104,11 @@ export class GuardarPlantaDto {
   @ValidateNested({ each: true })
   @Type(() => ZonaPlantaDto)
   zonas?: ZonaPlantaDto[] = [];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DimensoesPlantaDto)
+  dimensoes?: DimensoesPlantaDto;
 
   @IsInt()
   @Min(0)

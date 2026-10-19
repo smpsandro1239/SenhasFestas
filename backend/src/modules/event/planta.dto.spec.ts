@@ -115,4 +115,23 @@ describe('GuardarPlantaDto — validação', () => {
     const erros = await validar(payload({ zonas }));
     expect(erros.some((e) => e.property === 'zonas')).toBe(true);
   });
+
+  it('aceita dimensões em metros com uma decimal', async () => {
+    expect(await validar(payload({ dimensoes: { larguraM: 20.5, alturaM: 12 } }))).toEqual([]);
+  });
+
+  it('rejeita dimensões abaixo de 1 m', async () => {
+    const erros = await validar(payload({ dimensoes: { larguraM: 0.5, alturaM: 12 } }));
+    expect(erros.some((e) => e.property === 'dimensoes')).toBe(true);
+  });
+
+  it('rejeita dimensões acima de 200 m', async () => {
+    const erros = await validar(payload({ dimensoes: { larguraM: 201, alturaM: 12 } }));
+    expect(erros.some((e) => e.property === 'dimensoes')).toBe(true);
+  });
+
+  it('rejeita dimensões com mais de uma decimal', async () => {
+    const erros = await validar(payload({ dimensoes: { larguraM: 20.55, alturaM: 12 } }));
+    expect(erros.some((e) => e.property === 'dimensoes')).toBe(true);
+  });
 });

@@ -684,7 +684,9 @@ describe('EventService — planta (optimistic locking)', () => {
       (anterior) => antes.push(anterior),
     );
 
-    expect(antes).toEqual([{ mesas: [{ id: 'mesa-antiga' }], zonas: [], version: 3 }]);
+    expect(antes).toEqual([
+      { mesas: [{ id: 'mesa-antiga' }], zonas: [], dimensoes: null, version: 3 },
+    ]);
     expect(mockEventRepository.save).toHaveBeenCalled();
   });
 
@@ -710,5 +712,76 @@ describe('EventService — planta (optimistic locking)', () => {
       service.guardarPlanta('naoexiste', ORGANIZADOR, { mesas: [], version: 0 } as any, antesDeGravar),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(antesDeGravar).not.toHaveBeenCalled();
+  });
+
+  it('obterPlanta devolve as dimensões guardadas', async () => {
+    mockEventRepository.findOne.mockResolvedValue({
+      id: 'evt1',
+      floorPlan: { mesas: [], zonas: [], dimensoes: { larguraM: 20, alturaM: 12 } },
+      floorPlanVersion: 1,
+    });
+
+    await expect(service.obterPlanta('evt1', ORGANIZADOR)).resolves.toEqual({
+      mesas: [],
+      zonas: [],
+      dimensoes: { larguraM: 20, alturaM: 12 },
+      version: 1,
+    });
+  });
+
+  it('guardarPlanta grava e devolve as dimensões', async () => {
+    mockEventRepository.findOne.mockResolvedValue({
+      id: 'evt1',
+      floorPlan: { mesas: [], zonas: [] },
+      floorPlanVersion: 0,
+    });
+    mockEventRepository.save.mockImplementation(async (e: any) => e);
+
+    const resultado = await service.guardarPlanta('evt1', ORGANIZADOR, {
+      mesas: [],
+      zonas: [],
+      dimensoes: { larguraM: 20.5, alturaM: 12 },
+      version: 0,
+    } as any);
+
+    expect(resultado.dimensoes).toEqual({ larguraM: 20.5, alturaM: 12 });
+    expect(mockEventRepository.save.mock.calls[0][0].floorPlan.dimensoes).toEqual({
+      larguraM: 20.5,
+      alturaM: 12,
+    });
+  });
+
+  it('guardarPlanta sem dimensões preserva as existentes', async () => {
+    mockEventRepository.findOne.mockResolvedValue({
+      id: 'evt1',
+      floorPlan: { mesas: [], zonas: [], dimensoes: { larguraM: 20, alturaM: 12 } },
+      floorPlanVersion: 2,
+    });
+    mockEventRepository.save.mockImplementation(async (e: any) => e);
+
+    const resultado = await service.guardarPlanta('evt1', ORGANIZADOR, {
+      mesas: [{ id: 'm1' }],
+      zonas: [],
+      version: 2,
+    } as any);
+
+    expect(resultado.dimensoes).toEqual({ larguraM: 20, alturaM: 12 });
+  });
+
+  it('conflito 409 devolve as dimensões actuais', async () => {
+    mockEventRepository.findOne.mockResolvedValue({
+      id: 'evt1',
+      floorPlan: { mesas: [], zonas: [], dimensoes: { larguraM: 15, alturaM: 9 } },
+      floorPlanVersion: 5,
+    });
+
+    const erro = await service
+      .guardarPlanta('evt1', ORGANIZADOR, { mesas: [], version: 4 } as any)
+      .catch((e: any) => e);
+
+    expect(erro).toBeInstanceOf(ConflictException);
+    expect(erro.getResponse()).toEqual(
+      expect.objectContaining({ dimensoes: { larguraM: 15, alturaM: 9 }, version: 5 }),
+    );
   });
 });
