@@ -13,6 +13,39 @@
 
 ---
 
+## 2026-10-19 — Fluxo de pendente da planta: testes do efeito
+
+**Objectivo**: roadmap prioridade alta #1 — testar o **efeito** que chama
+`decidirPlantaRemota` (antes só havia testes da decisão em si).
+
+**Feito**
+- Novo helper puro `resolverPlanoCargaPlanta` (`frontend/src/lib/planta.ts`):
+  entrada `{editadoDesdeCarga, pendente, remoto, local}` → plano discriminado
+  (`aplicar` / `ignorar` / `oferecer-importacao` / `conflito-pendente` /
+  `retomar-pendente`) com o payload completo (mesas, zonas, `version`,
+  `pendenteTs`).
+- O efeito de carga em `admin/page.tsx` deixou de decidir: só **aplica** o plano
+  (refs, estado, `localStorage`). Semântica preservada ramo a ramo — incluindo que
+  `retomar` reenvia as **locais** com a **versão do servidor** e que `conflito`
+  mostra as **remotas** com o `pendenteTs`.
+- 5 novos testes em `planta.test.ts` cobrem os 5 ramos + zonas pendentes no
+  retomar.
+
+**Decisão**: sem teste RTL da página (4254 linhas, dependências de auth/eventos) —
+o projecto segue a convenção de helpers puros testáveis; o efeito ficou com
+mapeamento mecânico.
+
+**Commits**
+- `840b171 refactor(frontend): extrair o plano de carga da planta para helper puro testado`
+- `docs: registar os testes do fluxo de pendente da planta` (PLAN.md + este)
+
+**Gates (frontend)**: `tsc` limpo; `vitest` **232/232** (antes 227); `lint` sem
+warnings; `build` OK.
+
+**Pendente**: restart do opencode para validar o MCP `cdt`.
+
+---
+
 ## 2026-10-19 — Correcção CSP em dev (hidratação)
 
 **Objectivo**: resolver a dívida #10 do `PLAN.md` — o frontend em `npm run dev`

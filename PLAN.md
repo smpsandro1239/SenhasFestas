@@ -87,6 +87,11 @@ mesa e relatórios financeiros.
    - **O quê**: `decidirPlantaRemota` está testada; falta testar o **efeito** que a
      chama.
    - **Ficheiros**: `frontend/src/app/admin/page.tsx`, `frontend/src/lib/planta.test.ts`
+   - **Estado**: concluído 2026-10-19 — o mapeamento decisão→efeito saiu do efeito
+     para o helper puro `resolverPlanoCargaPlanta` (`lib/planta.ts`); o efeito
+     aplica o plano. 5 testes cobrem os 5 ramos (aplicar, ignorar,
+     oferecer-importacao, conflito-pendente com `pendenteTs`, retomar com
+     mesas+zonas pendentes). Antes: 227 testes; agora: 232.
 
 2. **Undo para zonas**
    - **Porquê**: hoje só mesas têm undo. Apagar uma zona com 10 mesas é irreversível.
