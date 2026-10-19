@@ -184,7 +184,7 @@ mesa e relatórios financeiros.
 | 8 | SWC do frontend **truncado** (18,4 MB instalados vs 148,4 MB esperados; magic `MZ`) | `node_modules/@next/swc-win32-x64-msvc` | Fallback WASM; compilação lenta. Corrigir reinstalando `@next/swc-win32-x64-msvc@15.5.24` |
 | 9 | `/health/ready` devolve **HTTP 200** mesmo com dependência `unhealthy` | `health.controller.ts:32-46` | Readiness probe engana load balancers; contrato correcto seria **503** |
 | 10 | ~~CSP (`script-src 'self' 'unsafe-inline'`) bloqueia `eval` do webpack em dev~~ **Resolvido 2026-10-19** | `next.config.js` | `'unsafe-eval'` adicionado só quando `!isProd`; hidratação verificada em dev, produção mantém CSP estrito |
-| 11 | Rótulos acessíveis duplicam o prefixo quando o nome já o tem (`aria-label="Mesa Mesa A, 8 lugares"`, `"Zona Zona 1"`) | `admin/page.tsx` | Leitores de ecrã ouvem o prefixo duas vezes. Fix: não prefixar quando `nome` já começa por `Mesa `/`Zona ` |
+| 11 | ~~Rótulos acessíveis duplicam o prefixo (`"Mesa Mesa A"`, `"Zona Zona 1"`)~~ **Resolvido 2026-10-19** | `lib/planta.ts` (`rotuloAcessivel`) | `aria-label` só prefixa quando o nome não começa já pelo prefixo (palavra inteira), verificável no browser |
 
 ---
 

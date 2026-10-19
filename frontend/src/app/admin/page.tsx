@@ -46,6 +46,7 @@ import {
   dimensoesExport,
   normalizarRotacao,
   PASSO_ROTACAO,
+  rotuloAcessivel,
   renderSvgPlanta,
   normalizarPosicao,
   encaixarGrelha,
@@ -4161,7 +4162,7 @@ function AdminPage() {
                           key={zona.id}
                           role="button"
                           tabIndex={0}
-                          aria-label={`Zona ${zona.nome}`}
+                          aria-label={rotuloAcessivel('Zona', zona.nome)}
                           onPointerDown={(e) => onZonaPointerDown(e, zona)}
                           onFocus={() => setZonaSel(zona.id)}
                           onKeyDown={(e) => onZonaKeyDown(e, zona)}
@@ -4204,7 +4205,7 @@ function AdminPage() {
                           key={mesa.id}
                           role="button"
                           tabIndex={0}
-                          aria-label={`Mesa ${mesa.nome}, ${mesa.lugares} lugares${
+                          aria-label={`${rotuloAcessivel('Mesa', mesa.nome)}, ${mesa.lugares} lugares${
                             mesa.rotacao ? `, rodada ${mesa.rotacao} graus` : ''
                           }`}
                           onPointerDown={(e) => onMesaPointerDown(e, mesa)}

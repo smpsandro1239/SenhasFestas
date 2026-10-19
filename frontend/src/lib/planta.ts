@@ -389,6 +389,17 @@ export function formatarMetros(metros: number): string {
   return `${metros.toFixed(1).replace('.', ',')} m`;
 }
 
+// O nome já costuma incluir o prefixo ("Mesa A", "Zona 1"): evita que os leitores
+// de ecrã ouçam "Mesa Mesa A" / "Zona Zona 1". Exige o prefixo como palavra
+// inteira, para não omitir o prefixo em "Mesalina".
+export function rotuloAcessivel(prefixo: string, nome: string): string {
+  const p = prefixo.trim().toLowerCase();
+  const alvo = nome.trim();
+  if (!alvo) return prefixo.trim();
+  const minusculas = alvo.toLowerCase();
+  return minusculas === p || minusculas.startsWith(`${p} `) ? alvo : `${prefixo} ${alvo}`;
+}
+
 export interface GrupoZona {
   zona: Zona | null;
   mesas: Mesa[];

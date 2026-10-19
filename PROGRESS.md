@@ -13,6 +13,37 @@
 
 ---
 
+## 2026-10-19 — Rótulos acessíveis sem prefixo duplicado (dívida #11)
+
+**Objectivo**: leitores de ecrã ouviam «Mesa Mesa A, 8 lugares» / «Zona Zona 1» no
+editor de planta, porque o nome já inclui o prefixo.
+
+**Feito**
+- `rotuloAcessivel(prefixo, nome)` em `lib/planta.ts`: devolve o nome tal como está
+  quando começa já pelo prefixo **como palavra inteira** (`mesa ` / igual), senão
+  prefixa; nome vazio devolve só o prefixo; comparação sem maiúsculas nem espaços
+  nas pontas. «Mesalina» continua a receber o prefixo.
+- `admin/page.tsx`: `aria-label` da mesa e da zona passam a usar o helper (o da
+  mesa mantém lugares e o ângulo).
+- 5 testes novos (nome-com-prefixo, sem-prefixo, maiúsculas/espaços, vazio,
+  quase-prefixo).
+
+**Decisões**
+- Lógica no helper testável em vez de condicional no JSX (regra do projecto:
+  lógica não-UI fora do componente).
+- Prefixo exigido como palavra inteira para não deixar nomes como «Mesalina» sem
+  contexto; um `startsWith` simples teria esse defeito.
+
+**Commit**: `fix(a11y): rotulo acessivel sem prefixo duplicado` (feature + docs)
+
+**Gates**: frontend `tsc` limpo, **262/262** (257 + 5), build ok, lint sem warnings.
+
+**Verificação (browser)**: Chrome real em `festa-teste-2026` — `aria-label` agora
+`"Mesa A, 8 lugares"`, `"Mesa B, 8 lugares"`, `"Mesa C, 8 lugares"`, `"Zona 1"`,
+sem erros de página.
+
+---
+
 ## 2026-10-19 — Rotação de mesas (graus)
 
 **Objectivo**: roadmap prioridade baixa #9 — mesas não alinhadas com a grelha.

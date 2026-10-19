@@ -44,6 +44,7 @@ import {
   formatarMetros,
   normalizarRotacao,
   PASSO_ROTACAO,
+  rotuloAcessivel,
   MAX_ZONAS_PLANTA,
   ZONA_MIN,
   type Mesa,
@@ -917,6 +918,32 @@ describe('rotação de mesas', () => {
   it('sem rotação não emite grupo de transformação', () => {
     const svg = renderSvgPlanta({ mesas: [mesa({ rotacao: 0 })], zonas: [] });
     expect(svg).not.toContain('<g transform');
+  });
+});
+
+describe('rotuloAcessivel', () => {
+  it('não duplica o prefixo quando o nome já o tem', () => {
+    expect(rotuloAcessivel('Mesa', 'Mesa A')).toBe('Mesa A');
+    expect(rotuloAcessivel('Zona', 'Zona 1')).toBe('Zona 1');
+  });
+
+  it('acrescenta o prefixo quando falta', () => {
+    expect(rotuloAcessivel('Mesa', 'A')).toBe('Mesa A');
+    expect(rotuloAcessivel('Mesa', 'Balcão')).toBe('Mesa Balcão');
+  });
+
+  it('ignora maiúsculas/minúsculas e espaços nas pontas', () => {
+    expect(rotuloAcessivel('Mesa', 'mesa vip')).toBe('mesa vip');
+    expect(rotuloAcessivel('Zona', '  ZONA esplanada ')).toBe('ZONA esplanada');
+  });
+
+  it('devolve só o prefixo quando o nome está vazio', () => {
+    expect(rotuloAcessivel('Mesa', '  ')).toBe('Mesa');
+  });
+
+  it('não confunde prefixos só por começarem pelas mesmas letras', () => {
+    expect(rotuloAcessivel('Mesa', 'Mesalina')).toBe('Mesa Mesalina');
+    expect(rotuloAcessivel('Zona', 'Zonal')).toBe('Zona Zonal');
   });
 });
 
