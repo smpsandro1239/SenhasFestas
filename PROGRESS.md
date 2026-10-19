@@ -13,6 +13,52 @@
 
 ---
 
+## 2026-10-19 — `/health/ready` devolve 503 com dependência unhealthy (dívida #9)
+
+**Objectivo**: dívida #9 — `/api/health/ready` respondia **200** mesmo com
+`status: "unhealthy"`, enganando readiness probes (o load balancer mantinha tráfego
+a uma instância incapaz de servir).
+
+**Feito**
+- `ready()` passa a definir o código HTTP: **503** quando a base de dados falha ou
+  o Redis está configurado e não está `ready`; 200 nos restantes casos. O corpo
+  mantém `status`/`timestamp`/`dependencies`.
+- `dependencies.redis` ganha o estado explícito **`disabled`** quando
+  `REDIS_URL` não está definido — a app funciona em degradação segura sem Redis
+  (`RedisService.isEnabled`), por isso a ausência não pode ser lida como falha.
+  Antes reportava `unhealthy` e mantinha 200 (contraditório).
+- `@Res({ passthrough: true })` para fixar o status sem interferir no corpo (evita
+  entregar a decisão ao filtro global de excepções).
+- 8 testes novos em `health.controller.spec.ts` (200 com Redis desativado/pronto,
+  503 com Redis em `connecting`, 503 com BD em baixo mesmo com Redis pronto,
+  `disabled` no corpo, timestamp ISO, `live` sem tocar em dependências, `check`).
+  O teste e2e da rota passa a verificar o **contrato** (503 ⇔ alguma dependência
+  `unhealthy`) em vez de esperar 200 cego, já que o ambiente e2e pode não ter Redis.
+
+**Decisões**
+- Redis **ausente** ≠ Redis **em baixo**: só o segundo derruba a readiness. Assim o
+  deploy sem Redis (Vercel) não é retirado de rotação, mas uma falha real de Redis
+  é visível para as probes.
+- Correlação status↔corpo testada no e2e para o teste continuar válido com ou sem
+  Redis a correr localmente.
+
+**Commit**: `12e6d35 fix(health): /health/ready devolve 503 com dependencia unhealthy`
+
+**Gates**: backend `tsc` limpo, **412/412** (404 + 8), build ok, lint 4 warnings
+pré-existentes.
+
+**Verificação (execução real)**: duas instâncias do build em portas 3010/3011
+(NODE_ENV=test, sem seeders), usando a BD real:
+- sem `REDIS_URL` → `{"status":"ready",...,"redis":"disabled"}` **HTTP 200**;
+- `REDIS_URL=redis://127.0.0.1:6399` (inacessível) →
+  `{"status":"unhealthy","database":"healthy","redis":"unhealthy"}` **HTTP 503**;
+- `/api/health` continua **200** (não depende de dependências) e `/api/health/live`
+  **200**.\
+Nota: a instância de desenvolvimento em `:3000` (PID do utilizador) continua com o
+código antigo até ser reiniciada.
+
+---
+
 ## 2026-10-19 — Aviso de pendentes derivado do armazenamento + idade do conflito viva (dívidas #3 e #4)
 
 **Objectivo**: dívida #3 — o `plantaAviso` (edição de um evento anterior ficou por
