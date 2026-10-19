@@ -82,6 +82,36 @@ describe('GuardarPlantaDto — validação', () => {
     expect(erros.some((e) => e.property === 'version')).toBe(true);
   });
 
+  it('aceita mesas sem rotação (compatibilidade)', async () => {
+    expect(await validar(payload())).toEqual([]);
+  });
+
+  it('aceita rotação entre 0 e 359', async () => {
+    expect(await validar(payload({ mesas: [mesa({ rotacao: 45 })] }))).toEqual([]);
+    expect(await validar(payload({ mesas: [mesa({ rotacao: 0 })] }))).toEqual([]);
+    expect(await validar(payload({ mesas: [mesa({ rotacao: 359 })] }))).toEqual([]);
+  });
+
+  it('rejeita rotação de 360 ou mais', async () => {
+    const erros = await validar(payload({ mesas: [mesa({ rotacao: 360 })] }));
+    expect(erros.some((e) => e.property === 'mesas')).toBe(true);
+  });
+
+  it('rejeita rotação negativa', async () => {
+    const erros = await validar(payload({ mesas: [mesa({ rotacao: -45 })] }));
+    expect(erros.some((e) => e.property === 'mesas')).toBe(true);
+  });
+
+  it('rejeita rotação com decimais', async () => {
+    const erros = await validar(payload({ mesas: [mesa({ rotacao: 45.5 })] }));
+    expect(erros.some((e) => e.property === 'mesas')).toBe(true);
+  });
+
+  it('rejeita rotação não numérica', async () => {
+    const erros = await validar(payload({ mesas: [mesa({ rotacao: '45' })] }));
+    expect(erros.some((e) => e.property === 'mesas')).toBe(true);
+  });
+
   it('aceita uma planta sem zonas (compatibilidade)', async () => {
     expect(await validar({ mesas: [mesa()], version: 0 })).toEqual([]);
   });

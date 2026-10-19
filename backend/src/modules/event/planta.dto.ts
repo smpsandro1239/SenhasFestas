@@ -41,6 +41,13 @@ export class MesaPlantaDto {
 
   @IsIn(['redonda', 'quadrada'])
   forma: 'redonda' | 'quadrada';
+
+  // Graus inteiros. Opcional: plantas antigas não o têm e assume-se 0.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(359)
+  rotacao?: number;
 }
 
 export class ZonaPlantaDto {
