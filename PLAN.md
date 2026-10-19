@@ -136,8 +136,13 @@ mesa e relatórios financeiros.
 
 6. **Validação de sobreposição de zonas**
    - Avisar quando duas zonas se sobrepõem significativamente.
+   - **Estado**: concluído 2026-10-19 — helper `paresDeSobreposicao` (fracção da
+     menor zona ≥ 20%) + aviso `text-amber` sob a planta. Só avisa: sobreposição
+     intencional (ex.: palco sobre zona) continua permitida.
 
 7. **Aumentar `MAX_ZONAS_PLANTA`** de 50 para 100 (salões grandes).
+   - **Estado**: concluído 2026-10-19 — constante partilhada no DTO
+     (`@ArrayMaxSize`) e no serviço; frontend usa a mesma constante.
 
 ### Prioridade baixa (meses)
 
@@ -197,7 +202,7 @@ mesa e relatórios financeiros.
   (primeira em sobreposição). Sem `Mesa.zonaId`.
 - **Coordenadas em %**: `Mesa.x/y` = centro; `Zona.x/y` = canto superior esquerdo.
   Escala com o ecrã.
-- **Limites**: `MAX_MESAS_PLANTA=200`, `MAX_ZONAS_PLANTA=50`, `MAX_LUGARES_MESA=99`,
+- **Limites**: `MAX_MESAS_PLANTA=200`, `MAX_ZONAS_PLANTA=100`, `MAX_LUGARES_MESA=99`,
   `ZONA_MIN=5`.
 - **Paleta fixa** de 6 cores (não cor livre).
 - **409** devolve `{ message, mesas, zonas, version }`; o cliente reconcilia.

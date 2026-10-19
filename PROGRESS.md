@@ -13,6 +13,40 @@
 
 ---
 
+## 2026-10-19 — Aviso de sobreposição de zonas + limite 100
+
+**Objectivo**: roadmap prioridade média #6 e #7.
+
+**Feito**
+- `planta.ts`: `paresDeSobreposicao(zonas, limiar = 0.2)` devolve pares com a
+  fracção da **menor** zona coberta; encostar (interseccção 0) e sobreposições
+  abaixo de 20% não contam.
+- `admin/page.tsx`: `useMemo` com nomes dos pares; aviso `text-amber-400` sob a
+  planta (mesmo padrão do aviso de nomes duplicados). Só avisa — não bloqueia.
+- `MAX_ZONAS_PLANTA` 50 → 100: constante exportada no `planta.dto.ts`
+  (`@ArrayMaxSize`) e usada no `slice` do serviço; frontend já a importava da
+  lib. Teste do DTO passou a rejeitar 101.
+- Testes: 6 novos em `planta.test.ts` (separadas, encostadas, 15% abaixo do
+  limiar, 25% detectada, contida dá fracção 1, limiar personalizado).
+
+**Decisões**
+- Limiar sobre a menor zona (não sobre a união): é o que distingue "toca ao
+  arrastar" de "uma zona cobre metade da outra".
+- Sem validação no backend: sobreposição pode ser intencional; 400 impediria
+  layouts legítimos.
+
+**Commits**
+- `933c2b3 feat(backend): aumentar o limite de zonas da planta para 100`
+- `de17636 feat(frontend): avisar sobre sobreposicao significativa de zonas`
+- `docs: registar o aviso de zonas e o limite de 100` (PLAN.md + este)
+
+**Gates**: backend `tsc` limpo, 390/390, build ok, lint 4 warnings pré-existentes;
+frontend `tsc` limpo, **238/238**, build ok, lint sem warnings.
+
+**Pendente**: push dos commits locais — só com autorização explícita.
+
+---
+
 ## 2026-10-19 — Auditoria com `before` no PUT da planta
 
 **Objectivo**: roadmap prioridade média #4 (dívida #1) — o `AuditInterceptor`
