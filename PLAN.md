@@ -151,16 +151,25 @@ mesa e relatórios financeiros.
 
 8. **Export PDF com separadores por zona** — cada zona numa folha, com QRs das
    respectivas mesas.
-   - **Estado**: concluído 2026-10-19 — sem dependências novas: o lote de QRs com
+   - **Estado**: concluído 2026-10-20 — sem dependências novas: o lote de QRs com
      "Agrupar por → Zona" passa a compor as folhas por zona (`agruparFolhasPorZona`
      em `lib/qr-lote.ts`; um título de zona por folha, `break-after: page` já
-     existente no `body[data-print='lote']`) e imprime pelo browser (Guardar como
-     PDF). O lote guarda os grupos no momento da geração (a planta pode mudar
-     entretanto). Zonas vazias não geram folha; uma zona que não cabe continua na
-     folha seguinte com o título repetido.
-   - **Verificação**: Playwright em `festa-teste-2026` — 2 folhas ("Zona 1" com a
-     Mesa A; "Sem zona" com B e C), PDF gerado com `data-print='lote'` com 2
-     páginas; de volta a "Ordem da planta" volta a 1 folha sem títulos.
+     existente no `body[data-print='lote']`). Os grupos são fixados na geração e
+     **recalculados ao mudar o selector** para "Zona" com um lote da planta já
+     gerado (senão o selector dizia "Zona" e as folhas continuavam em chunks); um
+     lote manual (diálogo de QRs) repõe o selector em "Ordem da planta". Zonas
+     vazias não geram folha; uma zona que não cabe continua na folha seguinte com
+     o título repetido; lugares já ajustados sobrevivem ao recálculo.
+   - **Decisão (2026-10-20, confirmada)**: **manter "Imprimir → Guardar como PDF"**
+     (zero dependências). `jspdf` (download directo em um clique) fica descartado
+     por agora: exigiria gerar os QRs como imagens e reimplementar a paginação.
+   - **Verificação**: Playwright em `festa-teste-2026` — gerar com "Ordem da
+     planta" (1 folha sem títulos), mudar **só o selector** para "Zona" → 2 folhas
+     ("Zona 1" com a Mesa A; "Sem zona" com B e C), PDF com `data-print='lote'` em
+     2 páginas; volta a "Ordem da planta" → 1 folha sem títulos; lote manual →
+     selector em "Ordem da planta". O texto do PDF não é extraível (fontes
+     subsetadas do Chrome): a prova de conteúdo é o DOM em modo print, que é o que
+     define as quebras de página.
 9. **Rotação de mesas** — útil para layouts não-alinhados.
    - **Estado**: concluído 2026-10-19 — `Mesa.rotacao` (graus inteiros 0–359,
      opcional no DTO; omissão = 0), shape rodada em torno do centro no canvas e no
@@ -284,7 +293,10 @@ mesa e relatórios financeiros.
   substitui o `before` por `{resumo:'resposta extensa'}` e perde-o.
 - `snapshot()` remove `password`/`token`/`refreshToken`/`tokenHash` (profundidade 4,
   arrays cortados a 50); o `before` de `user` usa `toPublicUser` (subconjunto público).
-- Criação e import não têm `before` (não há estado anterior).
+- Rotas **sem** `before` por não haver estado anterior: criação de eventos,
+  produtos, utilizadores, membros, categorias, caixas e pedidos; `POST /import`;
+  login/logout (estas têm acções próprias na auditoria). Não é um buraco: não há
+  o quê capturar antes.
 
 ---
 

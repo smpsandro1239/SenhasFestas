@@ -13,6 +13,47 @@
 
 ---
 
+## 2026-10-20 — Select "Agrupar por" recalcula os grupos (revisão do #8)
+
+**Objectivo**: fechar as pontas da revisão do #8 — a armadilha do selector e o
+estado divergente entre o selector da planta e o lote manual.
+
+**Feito**
+- `loteOrigem: 'planta' | 'manual' | null`; `prepararLotePlanta(modo)` extraído de
+  `gerarQrsDaPlanta`; `gerarQrsDaPlanta(modo = loteAgrupar)`.
+- Selector "Agrupar por": ao **entrar** em "Zona" com lote da planta já gerado →
+  recalcula (`gerarQrsDaPlanta('zona')`); ao **sair** → limpa grupos. Antes: só
+  limpava ao sair, ficando "Zona" com folhas em chunks.
+- `gerarLote` (diálogo de QRs): marca origem `manual`, limpa grupos e repõe o
+  selector em "Ordem da planta" — senão ficava "Zona" sem grupos nenhuns.
+- `descartarLote` limpa também a origem; falha do `gerarLote` limpa grupos/origem.
+- Botão "Gerar QRs das mesas" passa a `onClick={() => gerarQrsDaPlanta()}` — sem
+  isso o evento do click era o argumento `modo`.
+- Lugares já ajustados no painel sobrevivem ao recálculo (merge
+  `prev[mesa] ?? lugares[mesa] ?? loteLugaresPadrao`).
+
+**Verificação** (Playwright, Chrome real, `:3001` com build novo;
+`festa-teste-2026`)
+- Gerar com "Ordem da planta" → 1 folha sem títulos; mudar **só o selector** para
+  "Zona" → 2 folhas: "Zona 1" (Mesa A) e "Sem zona" (Mesa B, C). Volta a "Ordem
+  da planta" → 1 folha; reentrada em "Zona" → 2 folhas.
+- PDF com `data-print='lote'` → 2 páginas; ordem no DOM (define as quebras):
+  Zona 1 → Sem zona. **Texto do PDF não extraído** (fontes subsetadas do Chrome).
+- Lote manual no diálogo de QRs com o selector em "Zona" → selector passa a
+  "Ordem da planta", 1 folha sem títulos.
+- `:3001` morto e scripts temporários removidos no fim.
+
+**Decisão (do utilizador)**: manter "Imprimir → Guardar como PDF" (zero
+dependências); `jspdf` descartado por agora. Push de `main` autorizado.
+
+**Commits**: `3eb9ede fix(frontend): recalcular grupos do lote ao mudar Agrupar por`.
+
+**Gates**: `tsc` 0 erros · vitest 273/273 · lint limpo · `build` OK.
+
+**Pendente**: nenhum para o #8. Seguinte: #11 multi-planta.
+
+---
+
 ## 2026-10-20 — Export PDF por zona (roadmap #8)
 
 **Objectivo**: o gerador de QRs em lote ordenava por zona mas as folhas eram
