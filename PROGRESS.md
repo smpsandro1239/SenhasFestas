@@ -13,6 +13,64 @@
 
 ---
 
+## 2026-10-20 — Contrato `tipo`, room de planta restrita e auditoria de docs (T1–T4b)
+
+**Objectivo**: fechar a análise aberta sobre o #12-backend — desambiguar o rename
+(que não incrementa `version`), restringir o canal de planta a `MANAGEMENT_ROLES`,
+provar a DI nova, e arrumar dívida de docs/segurança antes do push.
+
+**Feito**
+- **T1** — `emitPlantaUpdate(eventId, plantaId, version, tipo)`; `tipo` é
+  `'criada'|'guardada'|'renomeada'|'apagada'` (union exportada `TipoAlteracaoPlanta`).
+  As 5 emissões no `floor-plan.service.ts` passam o tipo (criar/guardar/renomear/
+  apagar/guardarPrincipal).
+- **T1** — a emissão passa a usar a room `event:<id>:planta`, reservada a
+  `MANAGEMENT_ROLES`. Novo handler `joinEventPlanta` reutiliza
+  `MembershipService.roleEfetiva` (herda o bypass de superadmin) e verifica a
+  membership **antes** do rate-limit, para não gastar tentativas nem distinguir
+  existência por erro. A room geral do evento (`event:<id>`, dos pedidos) deixa de
+  receber metadados de planta.
+- **T2** — `backend/src/websocket/order.gateway.spec.ts` (20 testes): emissão local
+  vs. publish com `subscriberAtivo`, teste negativo de room (nunca `event:<id>`),
+  wiring `ready`/`end` do subscriber (via mock do `ioredis`), join restrito
+  (superadmin/organizer entram; kitchen/estranhos não) e a ordem
+  membership-antes-do-rate-limit.
+- **T4b** — auditoria de segredos: só `.env.example` estão tracked; os `.env` reais
+  (raiz, backend, frontend) estão gitignored e nunca aparecem na história;
+  `admin123` vive só no `.env` local (gitignored). `.github/workflows/ci.yml` cobre
+  lint, testes, build, e2e (Postgres+Redis) e migrações no deploy.
+- **T4** — removido heading duplicado no `PROGRESS.md` (bloco órfão 234-237);
+  criado `TODO.md` (índice estado/prioridade/dependências); registada no `PLAN.md`
+  a limitação "WebSocket indisponível em serverless".
+
+**Decisões**
+- **Room dedicada em vez de reutilizar `event:<id>`**: separa autorização de
+  transporte. O `joinEvent` continua aberto a qualquer membro (pedidos/KDS precisam),
+  e só management entra no canal de planta. Não foi preciso tocar no realtime de
+  pedidos.
+- **`tipo` no payload**: resolver sem `version` não permite distinguir um rename
+  (não incrementa `version`) de um ping de no-op. O `tipo` desambigua
+  rename/delete/update sem mexer na semântica 409 do PUT.
+- **Membership antes do rate-limit**: a ordem contrária gastava tentativas de
+  não-membros e devolvia "Demasiados pedidos" em vez de "Não pertence", revelando
+  existência do evento.
+- **WebSocket serverless**: documentado em vez de "corrigido". O entrypoint
+  serverless não regista o gateway; quem quer realtime usa o `main.ts`.
+
+**Commits**: `13d0ca4 feat(backend): tipo e room restrita no plantaUpdated` ·
+`6896af2 test(backend): spec do OrderGateway (fallback Redis e join de planta)` ·
+commit de docs (heading duplicado + `TODO.md` + nota serverless).
+
+**Gates**: backend — `tsc` 0 erros · vitest **482/482** (+20) · `build` OK · lint 4
+warnings pré-existentes · boot `:3011` com `Nest application successfully started`
+(DI de `MembershipService` resolvida, sem `can't resolve`).
+
+**Pendente**: T3 (frontend #12 realtime — `joinEventPlanta`, `decidirAdocaoRemota`,
+eco, `tipo !== 'guardada'` → `getPlantas`) e T5 (push, requer autorização; `main`
+com 9 commits locais à frente de `origin/main`).
+
+---
+
 ## 2026-10-20 — Planta em realtime (roadmap #12, backend)
 
 **Objectivo**: emitir um aviso quando uma planta muda, para outros dispositivos
@@ -230,11 +288,6 @@ dependências); `jspdf` descartado por agora. Push de `main` autorizado.
 **Pendente**: nenhum para o #8. Seguinte: #11 multi-planta.
 
 ---
-
-## 2026-10-20 — Select "Agrupar por" recalcula os grupos (revisão do #8)
-
-**Objectivo**: fechar as pontas da revisão do #8 — a armadilha do selector e o
-estado divergente entre o selector da planta e o lote manual.
 
 ## 2026-10-20 — Export PDF por zona (roadmap #8)
 

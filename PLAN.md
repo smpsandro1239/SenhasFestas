@@ -237,9 +237,13 @@ mesa e relatórios financeiros.
   `@Cron` do `@nestjs/schedule` não dispara por não haver processo persistente.
   Confirmar e, se aplicável, mover a limpeza para um cron externo (`/api/cron/*`).
 - **Realtime single-instance**: sem Redis o realtime **funciona** numa só instância
-  (emissão local directa em `order.gateway.ts:254`). Degrada apenas em multi-instância
+  (emissão local directa em `order.gateway.ts`). Degrada apenas em multi-instância
   (sem fan-out entre réplicas) e nos limites partilhados de join/sockets, que passam
   a mapas locais (`order.gateway.ts:34-36`).
+- **WebSocket indisponível em serverless**: o entrypoint `backend/src/serverless.main.ts`
+  não regista o `OrderGateway`, logo em deploy serverless (Vercel) **não há realtime**
+  — nem `orderUpdated` nem `plantaUpdated`. O deploy com realtime tem de usar o
+  `main.ts` (processo Node persistente).
 - **Crons de arranque**: o arranque do backend não muta dados. O único `@Cron` corre
   às 3AM, logo arranques fora dessa hora são seguros.
 
