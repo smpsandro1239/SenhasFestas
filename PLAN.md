@@ -75,6 +75,7 @@ mesa e relatórios financeiros.
 - [x] Pendente por evento (edição não sincronizada)
 - [x] Auto-organizar por zonas
 - [x] QRs agrupados por zona
+- [x] Export PDF por zona (uma folha por zona)
 
 ---
 
@@ -150,6 +151,16 @@ mesa e relatórios financeiros.
 
 8. **Export PDF com separadores por zona** — cada zona numa folha, com QRs das
    respectivas mesas.
+   - **Estado**: concluído 2026-10-19 — sem dependências novas: o lote de QRs com
+     "Agrupar por → Zona" passa a compor as folhas por zona (`agruparFolhasPorZona`
+     em `lib/qr-lote.ts`; um título de zona por folha, `break-after: page` já
+     existente no `body[data-print='lote']`) e imprime pelo browser (Guardar como
+     PDF). O lote guarda os grupos no momento da geração (a planta pode mudar
+     entretanto). Zonas vazias não geram folha; uma zona que não cabe continua na
+     folha seguinte com o título repetido.
+   - **Verificação**: Playwright em `festa-teste-2026` — 2 folhas ("Zona 1" com a
+     Mesa A; "Sem zona" com B e C), PDF gerado com `data-print='lote'` com 2
+     páginas; de volta a "Ordem da planta" volta a 1 folha sem títulos.
 9. **Rotação de mesas** — útil para layouts não-alinhados.
    - **Estado**: concluído 2026-10-19 — `Mesa.rotacao` (graus inteiros 0–359,
      opcional no DTO; omissão = 0), shape rodada em torno do centro no canvas e no

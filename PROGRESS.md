@@ -13,6 +13,48 @@
 
 ---
 
+## 2026-10-20 — Export PDF por zona (roadmap #8)
+
+**Objectivo**: o gerador de QRs em lote ordenava por zona mas as folhas eram
+chunks de `colunas × linhas`, podendo misturar zonas e partir zonas no meio de uma
+folha. Uma zona por folha.
+
+**Feito**
+- `lib/qr-lote.ts`: `agruparFolhasPorZona(grupos, porFolha)` (uma folha por zona,
+  `titulo` repetido quando a zona não cabe, zonas vazias não geram folha) — 5 testes.
+- `components/admin/qr-folhas.tsx`: componente `QrFolhas` com a folha + QRs +
+  título (antes havia o mesmo JSX duplicado no preview e na área de impressão).
+- `admin/page.tsx`: estado `loteGrupos` (grupos fixados **no momento da geração**,
+  a partir de `agruparMesasPorZona`); memo `folhasLote` (por zona se houver
+  grupos, senão o chunking de sempre); o selector "Agrupar por" limpa os grupos
+  quando se volta a "Ordem da planta"; `descartarLote`/`gerarLote` limparam
+  também.
+- `globals.css`: `.qr-sheet-titulo` (ocupa a linha toda do grid; claro em ecrã,
+  preto no print).
+
+**Decisões**
+- Sem dependências novas: "Imprimir" continua a ser o botão e o browser dá
+  "Guardar como PDF" (já há `@page A4`, `body[data-print='lote']` e
+  `break-after: page` — só faltava o título e o agrupamento por zona).
+- Os grupos entram no estado do lote, não são recalculados na impressão: se a
+  planta mudar depois de gerar os QRs, o lote impresso não muda (como já
+  acontecia com `loteGerado`).
+
+**Verificação** (Playwright, Chrome real, `:3001` com build novo; evento
+`festa-teste-2026`): "Agrupar por → Zona" + "Gerar QRs das mesas" → 2 folhas —
+"Zona 1" com a Mesa A; "Sem zona" com as Mesas B e C; `page.pdf()` com
+`data-print='lote'` → **2 páginas**; voltando a "Ordem da planta" → 1 folha sem
+títulos. Instância morta e script temporário removido no fim.
+
+**Commits**: `7ec86f8 feat(qr): uma folha por zona no lote de QRs (roadmap #8)`.
+
+**Gates**: `tsc` 0 erros · vitest **273/273** (eram 268, +5) · lint limpo ·
+`build` OK.
+
+**Pendente**: nenhum para o roadmap #8. (Dívida nova: nenhuma.)
+
+---
+
 ## 2026-10-19 — Auditoria com `before` em todas as rotas de escrita (dívida #1)
 
 **Objectivo**: fechar a dívida #1 — o interceptor global de auditoria já capturava
