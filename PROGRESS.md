@@ -13,6 +13,54 @@
 
 ---
 
+## 2026-10-20 — Planta em realtime (roadmap #12, backend)
+
+**Objectivo**: emitir um aviso quando uma planta muda, para outros dispositivos
+do mesmo evento o saberem sem dependerem do 409 no próximo PUT. Âmbito desta
+batch: **só backend** (o frontend fica para batch própria).
+
+**Feito**
+
+- `websocket/order.gateway.ts`: canal `planta:updates` + `emitPlantaUpdate(eventId,
+  plantaId, version)`; o subscriber Redis passou a subscrever `order:updates` e
+  `planta:updates` e a distinguir por canal, re-emitindo `plantaUpdated`
+  (`{plantaId, version}`) para a room `event:<id>`. O evento **não** leva o
+  documento.
+- `modules/event/floor-plan.service.ts`: injecção do `OrderGateway` e emissão
+  depois de cada mutação bem-sucedida — `criar`, `guardar`, `renomear`, `apagar`,
+  `guardarPrincipal`. Nos `throw` (409/404/400) não emite.
+- **Robustez (bug pré-existente)**: `emitOrderUpdate`/`emitPlantaUpdate` só
+  publicam no Redis quando o subscriber está efectivamente `ready`
+  (`subscriberAtivo`); com Redis em baixo caem na emissão local directa. Antes,
+  com `REDIS_URL` definido mas Redis inacessível, o `publish` falhava e o evento
+  era perdido — reproduzido no E2E com Redis parado.
+- `floor-plan.service.spec.ts`: mock do gateway, actualizadas as 4 construções e
+  testes de emissão/não-emissão em criar e guardar + asserts em renomear/apagar/
+  guardarPrincipal.
+
+**Verificação**
+
+- Gates backend: `tsc` limpo · vitest **462/462** (antes 458; +4) · `build` OK ·
+  `lint` (4 warnings pré-existentes, nenhum novo).
+- E2E real (socket.io + HTTP, evento temporário apagado no fim): login → cliente
+  socket faz `joinEvent` na room → `PATCH` renomear planta → chega
+  `plantaUpdated {plantaId, version}` correctos. Corrido com Redis parado, o que
+  prova o caminho de fallback local (sem a correcção, não chegava nada).
+
+**Decisões**
+
+- Reutilizar o `OrderGateway` (mesma auth/rooms/membership/rate-limit) em vez de
+  criar um segundo gateway: `WebSocketModule` é `@Global` e já exporta o gateway.
+- O evento transporta só `{plantaId, version}`; o cliente decide se refaz o GET
+  (evita acoplar o WS ao formato do documento e a payloads grandes).
+
+**Pendente**
+
+- Frontend: subscrever `plantaUpdated`, adoptar a versão remota quando não há
+  edições locais por sincronizar; senão manter o painel de conflito actual.
+
+---
+
 ## 2026-10-20 — Multi-planta (roadmap #11)
 
 **Objectivo**: várias plantas por evento (salão + esplanada), deixando de haver
