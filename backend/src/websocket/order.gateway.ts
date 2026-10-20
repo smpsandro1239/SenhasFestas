@@ -11,6 +11,7 @@ import { RedisService } from '../common/redis/redis.service';
 
 const ORDER_STATUS_CACHE_TTL = 60 * 60 * 24;
 const CHANNEL = 'order:updates';
+const PLANTA_CHANNEL = 'planta:updates';
 
 const JOIN_WINDOW_MS = 60_000;
 const JOIN_LIMIT = 10;
@@ -32,6 +33,7 @@ const MAX_SOCKETS_PER_USER = 3;
 export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   private readonly logger = new Logger(OrderGateway.name);
   private subscriber: Redis | null = null;
+  private subscriberAtivo = false;
   private readonly joinCountersLocal = new Map<string, { count: number; windowStart: number }>();
   private readonly userSocketsLocal = new Map<string, Set<string>>();
   private cleanupTimer: NodeJS.Timeout | null = null;
@@ -69,8 +71,27 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     subscriber.on('error', (error) => {
       this.logger.warn(`Subscriber Redis: ${error.message}`);
     });
+    subscriber.on('ready', () => {
+      this.subscriberAtivo = true;
+    });
+    subscriber.on('end', () => {
+      this.subscriberAtivo = false;
+    });
     subscriber.on('message', (_channel, rawMessage) => {
       try {
+        if (_channel === PLANTA_CHANNEL) {
+          const payload = JSON.parse(rawMessage) as { plantaId?: string; version?: number; eventId?: string };
+          if (!payload?.plantaId || !payload.eventId) {
+            return;
+          }
+          if (this.server) {
+            this.server.to(`event:${payload.eventId}`).emit('plantaUpdated', {
+              plantaId: payload.plantaId,
+              version: payload.version,
+            });
+          }
+          return;
+        }
         const payload = JSON.parse(rawMessage) as { orderId?: string; status?: string; eventId?: string };
         if (!payload?.orderId) {
           return;
@@ -80,11 +101,11 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
           this.server.to(room).emit('orderUpdated', { orderId: payload.orderId, status: payload.status });
         }
       } catch {
-        this.logger.warn('Mensagem malformada no canal order:updates');
+        this.logger.warn('Mensagem malformada no canal de updates');
       }
     });
-    subscriber.subscribe(CHANNEL).catch((error) => {
-      this.logger.warn(`Não foi possível subscrever ${CHANNEL}: ${error.message}`);
+    subscriber.subscribe(CHANNEL, PLANTA_CHANNEL).catch((error) => {
+      this.logger.warn(`Não foi possível subscrever os canais de updates: ${error.message}`);
     });
     this.subscriber = subscriber;
   }
@@ -211,6 +232,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     if (this.subscriber) {
       await this.subscriber.quit().catch(() => undefined);
       this.subscriber = null;
+      this.subscriberAtivo = false;
     }
   }
 
@@ -241,6 +263,15 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     client.join(`event:${eventId}`);
   }
 
+  /**
+   * Só distribui via Redis quando o subscriber está operacional. Com Redis em
+   * baixo (ou a arrancar) cai na emissão local direta, em vez de perder o evento
+   * num publish que falha.
+   */
+  private get distribuirViaRedis(): boolean {
+    return this.subscriber !== null && this.subscriberAtivo;
+  }
+
   emitOrderUpdate(orderId: string, status: string, eventId?: string) {
     const room = eventId ? `event:${eventId}` : 'public';
     const payload = JSON.stringify({ orderId, status, eventId, at: new Date().toISOString() });
@@ -248,11 +279,26 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     // Com subscriber ativo, a re-emissão local para os sockets desta instância é feita
     // pelo subscriber (evita duplicação de eventos com múltiplas réplicas).
     // Sem Redis, cai no modo degradado de emissão local direta.
-    if (this.subscriber) {
+    if (this.distribuirViaRedis) {
       void this.redisService.publish(CHANNEL, payload);
     } else if (this.server) {
       this.server.to(room).emit('orderUpdated', { orderId, status });
     }
     this.redisService.set(`order:status:${orderId}`, status, ORDER_STATUS_CACHE_TTL);
+  }
+
+  /**
+   * Avisa os clientes do evento que uma planta foi criada, alterada, renomeada
+   * ou apagada. Não transporta o documento: o cliente volta a pedi-lo por HTTP.
+   * Com subscriber ativo a re-emissão local é feita pelo subscriber (multi-réplica);
+   * sem Redis cai na emissão local direta.
+   */
+  emitPlantaUpdate(eventId: string, plantaId: string, version: number) {
+    const payload = JSON.stringify({ eventId, plantaId, version, at: new Date().toISOString() });
+    if (this.distribuirViaRedis) {
+      void this.redisService.publish(PLANTA_CHANNEL, payload);
+    } else if (this.server) {
+      this.server.to(`event:${eventId}`).emit('plantaUpdated', { plantaId, version });
+    }
   }
 }

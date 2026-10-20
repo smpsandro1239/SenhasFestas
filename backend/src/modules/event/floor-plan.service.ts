@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EventEntity, FloorPlanEntity, UserEntity } from '../../entities';
 import { EventService } from './event.service';
+import { OrderGateway } from '../../websocket/order.gateway';
 import {
   CriarPlantaDto,
   GuardarPlantaDto,
@@ -109,6 +110,7 @@ export class FloorPlanService {
     @InjectRepository(FloorPlanEntity)
     private readonly floorPlanRepository: Repository<FloorPlanEntity>,
     private readonly eventService: EventService,
+    private readonly orderGateway: OrderGateway,
   ) {}
 
   async listar(
@@ -153,6 +155,7 @@ export class FloorPlanService {
       throw err;
     }
     arquivar?.({ entidadeId: guardada.id, eventId, extras: { nome } });
+    this.orderGateway.emitPlantaUpdate(eventId, guardada.id, guardada.version);
     return { id: guardada.id, nome: guardada.nome, version: guardada.version };
   }
 
@@ -190,6 +193,7 @@ export class FloorPlanService {
     linha.documento = construido.documento;
     linha.version = linha.version + 1;
     await this.floorPlanRepository.save(linha);
+    this.orderGateway.emitPlantaUpdate(eventId, linha.id, linha.version);
     return {
       id: linha.id,
       nome: linha.nome,
@@ -231,6 +235,7 @@ export class FloorPlanService {
       }
       throw err;
     }
+    this.orderGateway.emitPlantaUpdate(eventId, linha.id, linha.version);
     return { id: linha.id, nome: linha.nome, version: linha.version };
   }
 
@@ -253,6 +258,7 @@ export class FloorPlanService {
       eventId,
     });
     await this.floorPlanRepository.remove(linha);
+    this.orderGateway.emitPlantaUpdate(eventId, plantaId, linha.version);
     return { id: plantaId, nome: linha.nome, version: linha.version };
   }
 
@@ -326,6 +332,7 @@ export class FloorPlanService {
       }
       throw err;
     }
+    this.orderGateway.emitPlantaUpdate(eventId, linha.id, linha.version);
     return {
       mesas: construido.documento.mesas,
       zonas: construido.documento.zonas,

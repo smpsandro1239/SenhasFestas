@@ -19,6 +19,10 @@ const mockEventService = {
   findOne: vi.fn(),
 };
 
+const mockOrderGateway = {
+  emitPlantaUpdate: vi.fn(),
+};
+
 const ORGANIZADOR = { id: 'organizador', role: 'organizer' } as any;
 
 function novaLinha(extra: any = {}) {
@@ -39,6 +43,7 @@ describe('FloorPlanService — listagem e criação', () => {
     service = new FloorPlanService(
       mockFloorPlanRepository as any,
       mockEventService as any,
+      mockOrderGateway as any,
     );
     mockEventService.findOne.mockResolvedValue({ id: 'evt1' });
   });
@@ -122,6 +127,25 @@ describe('FloorPlanService — listagem e criação', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(mockFloorPlanRepository.save).not.toHaveBeenCalled();
   });
+
+  it('criar emite plantaUpdated com o id e a version da nova planta', async () => {
+    mockFloorPlanRepository.findOne.mockResolvedValue(null);
+    mockFloorPlanRepository.create.mockReturnValue(novaLinha({ id: 'p2', nome: 'Esplanada' }));
+    mockFloorPlanRepository.save.mockResolvedValue(novaLinha({ id: 'p2', nome: 'Esplanada' }));
+
+    await service.criar('evt1', ORGANIZADOR, { nome: 'Esplanada' } as any);
+
+    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p2', 0);
+  });
+
+  it('criar não emite quando falha (nome duplicado)', async () => {
+    mockFloorPlanRepository.findOne.mockResolvedValue(novaLinha({ nome: 'Esplanada' }));
+
+    await expect(
+      service.criar('evt1', ORGANIZADOR, { nome: 'Esplanada' } as any),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(mockOrderGateway.emitPlantaUpdate).not.toHaveBeenCalled();
+  });
 });
 
 describe('FloorPlanService — obter/guardar (optimistic locking)', () => {
@@ -132,6 +156,7 @@ describe('FloorPlanService — obter/guardar (optimistic locking)', () => {
     service = new FloorPlanService(
       mockFloorPlanRepository as any,
       mockEventService as any,
+      mockOrderGateway as any,
     );
     mockEventService.findOne.mockResolvedValue({ id: 'evt1' });
     mockFloorPlanRepository.save.mockImplementation(async (e: any) => e);
@@ -301,6 +326,23 @@ describe('FloorPlanService — obter/guardar (optimistic locking)', () => {
     expect(arquivar).not.toHaveBeenCalled();
   });
 
+  it('guardar emite plantaUpdated com a nova version', async () => {
+    mockFloorPlanRepository.findOne.mockResolvedValue(novaLinha({ id: 'p1', version: 3 }));
+
+    await service.guardar('evt1', 'p1', ORGANIZADOR, { mesas: [], zonas: [], version: 3 } as any);
+
+    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p1', 4);
+  });
+
+  it('guardar não emite no conflito (409)', async () => {
+    mockFloorPlanRepository.findOne.mockResolvedValue(novaLinha({ version: 5 }));
+
+    await expect(
+      service.guardar('evt1', 'p1', ORGANIZADOR, { mesas: [], version: 4 } as any),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(mockOrderGateway.emitPlantaUpdate).not.toHaveBeenCalled();
+  });
+
   it('guardar grava e devolve as dimensões', async () => {
     mockFloorPlanRepository.findOne.mockResolvedValue(novaLinha());
 
@@ -362,6 +404,7 @@ describe('FloorPlanService — renomear e apagar', () => {
     service = new FloorPlanService(
       mockFloorPlanRepository as any,
       mockEventService as any,
+      mockOrderGateway as any,
     );
     mockEventService.findOne.mockResolvedValue({ id: 'evt1' });
     mockFloorPlanRepository.save.mockImplementation(async (e: any) => e);
@@ -383,6 +426,7 @@ describe('FloorPlanService — renomear e apagar', () => {
       eventId: 'evt1',
     });
     expect(mockFloorPlanRepository.save).toHaveBeenCalled();
+    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p1', 0);
   });
 
   it('renomear → 409 se o nome já estiver noutre planta do evento', async () => {
@@ -431,6 +475,7 @@ describe('FloorPlanService — renomear e apagar', () => {
       entidadeId: 'p1',
       eventId: 'evt1',
     });
+    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p1', 0);
   });
 
   it('apagar → 400 quando é a última planta do evento', async () => {
@@ -460,6 +505,7 @@ describe('FloorPlanService — compatibilidade /events/:id/planta ("Principal")'
     service = new FloorPlanService(
       mockFloorPlanRepository as any,
       mockEventService as any,
+      mockOrderGateway as any,
     );
     mockEventService.findOne.mockResolvedValue({ id: 'evt1' });
     mockFloorPlanRepository.save.mockImplementation(async (e: any) => e);
@@ -534,6 +580,7 @@ describe('FloorPlanService — compatibilidade /events/:id/planta ("Principal")'
       eventId: 'evt1',
     });
     expect(mockFloorPlanRepository.create).not.toHaveBeenCalled();
+    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p1', 4);
   });
 
   it('guardarPrincipal sem linha e com version != 0 → 409 com o estado vazio', async () => {
