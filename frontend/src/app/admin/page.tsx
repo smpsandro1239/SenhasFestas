@@ -217,6 +217,7 @@ function AdminPage() {
     nome: string;
   } | null>(null);
   const [plantaDialogoErro, setPlantaDialogoErro] = useState('');
+  const [plantaDialogoAProcessar, setPlantaDialogoAProcessar] = useState(false);
   const [planta, setPlanta] = useState<Mesa[]>([]);
   const [plantaZonas, setPlantaZonas] = useState<Zona[]>([]);
   const [plantaDimensoes, setPlantaDimensoes] = useState<Dimensoes | null>(null);
@@ -1361,11 +1362,14 @@ function AdminPage() {
           );
         } catch {}
       } catch (e) {
+        if (plantaId && plantaId !== plantaArranque) return;
         if (e instanceof ApiError && e.status === 404) {
-          // A planta já não existe no servidor (apagada noutro dispositivo):
-          // limpa a referência e volta a buscar a lista.
+          // A planta já não existe neste evento (apagada noutro dispositivo, ou
+          // id que pertencia a um evento anterior): limpa a referência e volta a
+          // buscar a lista. Só quando a activa guardada ainda é esta planta —
+          // caso contrário estaríamos a apagar a preferência de outro evento.
+          if (lerPlantaAtiva() !== plantaArranque) return;
           if (cancelado || plantaCarregadaRef.current !== chaveArranque) return;
-          if (plantaId && plantaId !== plantaArranque) return;
           try {
             localStorage.removeItem(chavePlantaAtiva(plantaShortCode));
           } catch {}
@@ -1699,6 +1703,7 @@ function AdminPage() {
 
   const abrirPlantaDialogo = (tipo: 'criar' | 'renomear' | 'apagar') => {
     setPlantaDialogoErro('');
+    setPlantaDialogoAProcessar(false);
     const activa = plantas.find((p) => p.id === plantaId);
     const nome = tipo === 'renomear' ? (activa?.nome ?? '') : `Planta ${plantas.length + 1}`;
     setPlantaDialogo({ tipo, nome });
@@ -1706,13 +1711,14 @@ function AdminPage() {
 
   const confirmarPlantaDialogo = async () => {
     const dialogo = plantaDialogo;
-    if (!dialogo || !plantaEventoId || !plantaShortCode) return;
+    if (!dialogo || !plantaEventoId || !plantaShortCode || plantaDialogoAProcessar) return;
     const nome = dialogo.nome.trim();
     if (dialogo.tipo !== 'apagar' && !nome) {
       setPlantaDialogoErro('O nome da planta é obrigatório.');
       return;
     }
     setPlantaDialogoErro('');
+    setPlantaDialogoAProcessar(true);
     try {
       if (dialogo.tipo === 'criar') {
         const nova = await criarPlanta(plantaEventoId, nome);
@@ -1734,7 +1740,7 @@ function AdminPage() {
         } catch {}
         const restantes = plantas.filter((p) => p.id !== apagadaId);
         const nova = restantes.find((p) => p.nome === 'Principal') ?? restantes[0];
-        setPlantas(restantes);
+        setPlantas((prev) => prev.filter((p) => p.id !== apagadaId));
         if (nova) {
           guardarPlantaAtiva(nova.id);
           setPlantaId(nova.id);
@@ -1747,6 +1753,8 @@ function AdminPage() {
       setPlantaDialogoErro(
         e instanceof ApiError ? e.message : 'Não foi possível concluir. Tenta de novo.',
       );
+    } finally {
+      setPlantaDialogoAProcessar(false);
     }
   };
 
@@ -4916,12 +4924,14 @@ function AdminPage() {
         }
         footer={
           <>
-            <Button variant="outline" onClick={() => setPlantaDialogo(null)}>
+            <Button variant="outline" onClick={() => setPlantaDialogo(null)} disabled={plantaDialogoAProcessar}>
               Cancelar
             </Button>
             <Button
               variant={plantaDialogo?.tipo === 'apagar' ? 'danger' : 'primary'}
               onClick={() => void confirmarPlantaDialogo()}
+              loading={plantaDialogoAProcessar}
+              disabled={plantaDialogoAProcessar}
             >
               {plantaDialogo?.tipo === 'apagar' ? 'Apagar' : 'Guardar'}
             </Button>
@@ -4946,7 +4956,7 @@ function AdminPage() {
           </label>
         )}
         {plantaDialogoErro && (
-          <p className="mt-3 text-xs text-amber-400">{plantaDialogoErro}</p>
+          <p role="alert" className="mt-3 text-xs text-amber-400">{plantaDialogoErro}</p>
         )}
       </Dialog>
     </>
