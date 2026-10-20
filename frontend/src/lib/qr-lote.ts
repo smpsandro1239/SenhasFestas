@@ -25,6 +25,32 @@ export function agruparFolhas<T>(itens: T[], porFolha: number): T[][] {
   return folhas;
 }
 
+export interface GrupoZonaQr {
+  titulo: string;
+  mesas: string[];
+}
+
+export interface FolhaQr {
+  titulo: string | null;
+  mesas: string[];
+}
+
+/**
+ * Uma folha por zona. Uma zona com mais mesas do que cabem numa folha continua
+ * nas folhas seguintes, repetindo o título; zonas sem mesas não geram folha.
+ */
+export function agruparFolhasPorZona(
+  grupos: GrupoZonaQr[],
+  porFolha: number,
+): FolhaQr[] {
+  return grupos.flatMap((grupo) =>
+    agruparFolhas(grupo.mesas, porFolha).map((mesas) => ({
+      titulo: grupo.titulo,
+      mesas,
+    })),
+  );
+}
+
 export function normalizarLugares(valor: number, max = MAX_LUGARES_MESA): number {
   if (!Number.isFinite(valor)) return 0;
   const n = Math.trunc(valor);

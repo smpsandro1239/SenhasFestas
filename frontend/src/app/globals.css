@@ -219,6 +219,15 @@
   max-width: 100%;
 }
 
+.qr-sheet-titulo {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #e4e4e7;
+}
+
 /* Mesa da planta: tamanho fluido para não se sobrepor em ecrãs estreitos. */
 .planta-mesa {
   width: clamp(44px, 11%, 76px);
@@ -268,6 +277,9 @@
   }
   body[data-print='lote'] .qr-sheet:last-child {
     break-after: auto;
+  }
+  body[data-print='lote'] .qr-sheet-titulo {
+    color: #000000;
   }
   body[data-print='lote'] [data-print-hide] {
     display: none !important;

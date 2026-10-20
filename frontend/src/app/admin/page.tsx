@@ -23,11 +23,14 @@ import { montarUrlMesa } from '@/lib/mesa-qr';
 import {
   numerosDeIntervalo,
   agruparFolhas,
+  agruparFolhasPorZona,
   normalizarLugares,
   aplicarLugaresTodas,
   totalLugares,
   MAX_MESAS_LOTE,
   MAX_LUGARES_MESA,
+  type FolhaQr,
+  type GrupoZonaQr,
 } from '@/lib/qr-lote';
 import {
   criarMesa,
@@ -73,6 +76,7 @@ import {
   type FormaMesa,
 } from '@/lib/planta';
 import { QrLoteControlos } from '@/components/admin/qr-lote-controlos';
+import { QrFolhas } from '@/components/admin/qr-folhas';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
   superadmin: 'brand',
@@ -194,6 +198,7 @@ function AdminPage() {
   const [loteErro, setLoteErro] = useState('');
   const [loteShortCode, setLoteShortCode] = useState('');
   const [loteAgrupar, setLoteAgrupar] = useState<'nenhum' | 'zona'>('nenhum');
+  const [loteGrupos, setLoteGrupos] = useState<GrupoZonaQr[] | null>(null);
   const [plantaEventoId, setPlantaEventoId] = useState('');
   const [planta, setPlanta] = useState<Mesa[]>([]);
   const [plantaZonas, setPlantaZonas] = useState<Zona[]>([]);
@@ -1296,6 +1301,7 @@ function AdminPage() {
     }
     setLoteGerado(mesas);
     setLoteShortCode(qrEvento.shortCode);
+    setLoteGrupos(null);
     setLoteLugares((prev) => {
       const next: Record<string, number> = {};
       for (const mesa of mesas) next[mesa] = prev[mesa] ?? loteLugaresPadrao;
@@ -1790,17 +1796,28 @@ function AdminPage() {
   };
 
   const gerarQrsDaPlanta = () => {
-    const mesas =
+    const grupos =
       loteAgrupar === 'zona'
-        ? agruparMesasPorZona(plantaEstadoRef.current, plantaZonasEstadoRef.current).flatMap(
-            (grupo) => grupo.mesas,
-          )
-        : plantaEstadoRef.current;
+        ? agruparMesasPorZona(plantaEstadoRef.current, plantaZonasEstadoRef.current)
+        : null;
+    const mesas = grupos
+      ? grupos.flatMap((grupo) => grupo.mesas)
+      : plantaEstadoRef.current;
     const { nomes, lugares } = mesasParaQrs(mesas);
     if (!nomes.length) return;
     setLoteGerado(nomes);
     setLoteLugares(lugares);
     setLoteShortCode(plantaShortCode);
+    setLoteGrupos(
+      grupos
+        ? grupos
+            .map((grupo) => ({
+              titulo: grupo.zona?.nome.trim() || 'Sem zona',
+              mesas: mesasParaQrs(grupo.mesas).nomes,
+            }))
+            .filter((grupo) => grupo.mesas.length > 0)
+        : null,
+    );
     if (plantaShortCode) {
       try {
         localStorage.setItem(`sf:qr-lugares:${plantaShortCode}`, JSON.stringify(lugares));
@@ -1891,6 +1908,7 @@ function AdminPage() {
     setLoteGerado(null);
     setLoteLugares({});
     setLoteShortCode('');
+    setLoteGrupos(null);
   };
 
   const descarregarQr = () => {
@@ -1921,6 +1939,12 @@ function AdminPage() {
     () => !!loteGerado && !!loteShortCode && !!qrEvento && loteShortCode !== qrEvento.shortCode,
     [loteGerado, loteShortCode, qrEvento],
   );
+  const folhasLote = useMemo<FolhaQr[]>(() => {
+    if (!loteGerado) return [];
+    const porFolha = loteColunas * loteLinhas;
+    if (loteGrupos && loteGrupos.length > 0) return agruparFolhasPorZona(loteGrupos, porFolha);
+    return agruparFolhas(loteGerado, porFolha).map((mesas) => ({ titulo: null, mesas }));
+  }, [loteGerado, loteGrupos, loteColunas, loteLinhas]);
 
   return (
     <>
@@ -2240,8 +2264,7 @@ function AdminPage() {
                             Imprimir
                           </Button>
                           <span className="text-xs text-zinc-400">
-                            {loteGerado.length} mesa(s) •{' '}
-                            {agruparFolhas(loteGerado, loteColunas * loteLinhas).length} folha(s)
+                            {loteGerado.length} mesa(s) • {folhasLote.length} folha(s)
                           </span>
                         </>
                       )}
@@ -2278,23 +2301,14 @@ function AdminPage() {
                     {loteGerado && loteGerado.length > 0 && (
                       <div className="mt-4 max-h-80 overflow-auto rounded-xl border border-border bg-zinc-900/40 p-3">
                         <div className="min-w-max space-y-3">
-                          {agruparFolhas(loteGerado, loteColunas * loteLinhas).map((folha, fi) => (
-                            <div key={fi}>
-                              <div className="qr-sheet" style={{ ['--qr-cols' as any]: loteColunas }}>
-                                {folha.map((mesa) => (
-                                  <div key={mesa} className="qr-card">
-                                    <QRCodeSVG
-                                      value={montarUrlMesa(window.location.origin, loteShortCode, mesa)}
-                                      size={loteTamanho}
-                                      level="M"
-                                      className="max-w-full h-auto"
-                                    />
-                                    <span className="qr-card-label">{mesa}{(loteLugares[mesa] ?? 0) > 0 ? ` · ${loteLugares[mesa]} lugares` : ''}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
+                          <QrFolhas
+                            folhas={folhasLote}
+                            colunas={loteColunas}
+                            tamanho={loteTamanho}
+                            shortCode={loteShortCode}
+                            lugares={loteLugares}
+                            origem={window.location.origin}
+                          />
                         </div>
                       </div>
                     )}
@@ -4509,7 +4523,11 @@ function AdminPage() {
                         Agrupar por
                         <select
                           value={loteAgrupar}
-                          onChange={(e) => setLoteAgrupar(e.target.value as 'nenhum' | 'zona')}
+                          onChange={(e) => {
+                            const valor = e.target.value as 'nenhum' | 'zona';
+                            setLoteAgrupar(valor);
+                            if (valor !== 'zona') setLoteGrupos(null);
+                          }}
                           className="bg-surface-solid border border-border rounded-xl px-2.5 py-1.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
                         >
                           <option value="nenhum">Ordem da planta</option>
@@ -4557,25 +4575,14 @@ function AdminPage() {
 
       {loteShortCode && loteGerado && loteGerado.length > 0 && (
         <div className="qr-lote-print">
-          {agruparFolhas(loteGerado, loteColunas * loteLinhas).map((folha, fi) => (
-            <div
-              key={fi}
-              className="qr-sheet"
-              style={{ ['--qr-cols' as any]: loteColunas }}
-            >
-              {folha.map((mesa) => (
-                <div key={mesa} className="qr-card">
-                  <QRCodeSVG
-                    value={montarUrlMesa(window.location.origin, loteShortCode, mesa)}
-                    size={loteTamanho}
-                    level="M"
-                    className="max-w-full h-auto"
-                  />
-                  <span className="qr-card-label">{mesa}{(loteLugares[mesa] ?? 0) > 0 ? ` · ${loteLugares[mesa]} lugares` : ''}</span>
-                </div>
-              ))}
-            </div>
-          ))}
+          <QrFolhas
+            folhas={folhasLote}
+            colunas={loteColunas}
+            tamanho={loteTamanho}
+            shortCode={loteShortCode}
+            lugares={loteLugares}
+            origem={window.location.origin}
+          />
         </div>
       )}
 

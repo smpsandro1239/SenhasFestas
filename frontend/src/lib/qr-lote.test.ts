@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   numerosDeIntervalo,
   agruparFolhas,
+  agruparFolhasPorZona,
   normalizarLugares,
   aplicarLugaresTodas,
   totalLugares,
@@ -57,6 +58,57 @@ describe('agruparFolhas', () => {
 
   it('porFolha inválido cai para 1 por folha', () => {
     expect(agruparFolhas(['a', 'b'], 0)).toEqual([['a'], ['b']]);
+  });
+});
+
+describe('agruparFolhasPorZona', () => {
+  it('põe cada zona na sua folha', () => {
+    expect(
+      agruparFolhasPorZona(
+        [
+          { titulo: 'Zona 1', mesas: ['1', '2'] },
+          { titulo: 'Zona 2', mesas: ['3'] },
+        ],
+        4,
+      ),
+    ).toEqual([
+      { titulo: 'Zona 1', mesas: ['1', '2'] },
+      { titulo: 'Zona 2', mesas: ['3'] },
+    ]);
+  });
+
+  it('uma zona que não cabe continua na folha seguinte com o título repetido', () => {
+    expect(
+      agruparFolhasPorZona([{ titulo: 'Zona 1', mesas: ['1', '2', '3'] }], 2),
+    ).toEqual([
+      { titulo: 'Zona 1', mesas: ['1', '2'] },
+      { titulo: 'Zona 1', mesas: ['3'] },
+    ]);
+  });
+
+  it('zona sem mesas não gera folha', () => {
+    expect(
+      agruparFolhasPorZona(
+        [
+          { titulo: 'Zona 1', mesas: [] },
+          { titulo: 'Zona 2', mesas: ['7'] },
+        ],
+        4,
+      ),
+    ).toEqual([{ titulo: 'Zona 2', mesas: ['7'] }]);
+  });
+
+  it('sem grupos devolve zero folhas', () => {
+    expect(agruparFolhasPorZona([], 4)).toEqual([]);
+  });
+
+  it('porFolha inválido cai para 1 por folha', () => {
+    expect(
+      agruparFolhasPorZona([{ titulo: 'Zona 1', mesas: ['a', 'b'] }], -3),
+    ).toEqual([
+      { titulo: 'Zona 1', mesas: ['a'] },
+      { titulo: 'Zona 1', mesas: ['b'] },
+    ]);
   });
 });
 
