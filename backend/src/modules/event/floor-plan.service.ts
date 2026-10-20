@@ -155,7 +155,7 @@ export class FloorPlanService {
       throw err;
     }
     arquivar?.({ entidadeId: guardada.id, eventId, extras: { nome } });
-    this.orderGateway.emitPlantaUpdate(eventId, guardada.id, guardada.version);
+    this.orderGateway.emitPlantaUpdate(eventId, guardada.id, guardada.version, 'criada');
     return { id: guardada.id, nome: guardada.nome, version: guardada.version };
   }
 
@@ -193,7 +193,7 @@ export class FloorPlanService {
     linha.documento = construido.documento;
     linha.version = linha.version + 1;
     await this.floorPlanRepository.save(linha);
-    this.orderGateway.emitPlantaUpdate(eventId, linha.id, linha.version);
+    this.orderGateway.emitPlantaUpdate(eventId, linha.id, linha.version, 'guardada');
     return {
       id: linha.id,
       nome: linha.nome,
@@ -235,7 +235,7 @@ export class FloorPlanService {
       }
       throw err;
     }
-    this.orderGateway.emitPlantaUpdate(eventId, linha.id, linha.version);
+    this.orderGateway.emitPlantaUpdate(eventId, linha.id, linha.version, 'renomeada');
     return { id: linha.id, nome: linha.nome, version: linha.version };
   }
 
@@ -258,7 +258,7 @@ export class FloorPlanService {
       eventId,
     });
     await this.floorPlanRepository.remove(linha);
-    this.orderGateway.emitPlantaUpdate(eventId, plantaId, linha.version);
+    this.orderGateway.emitPlantaUpdate(eventId, plantaId, linha.version, 'apagada');
     return { id: plantaId, nome: linha.nome, version: linha.version };
   }
 
@@ -332,7 +332,7 @@ export class FloorPlanService {
       }
       throw err;
     }
-    this.orderGateway.emitPlantaUpdate(eventId, linha.id, linha.version);
+    this.orderGateway.emitPlantaUpdate(eventId, linha.id, linha.version, 'guardada');
     return {
       mesas: construido.documento.mesas,
       zonas: construido.documento.zonas,

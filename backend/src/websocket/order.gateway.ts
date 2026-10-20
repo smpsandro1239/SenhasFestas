@@ -8,6 +8,10 @@ import { Repository } from 'typeorm';
 import { Redis } from 'ioredis';
 import { EventUserEntity } from '../entities';
 import { RedisService } from '../common/redis/redis.service';
+import { MembershipService } from '../common/membership.service';
+import { MANAGEMENT_ROLES } from '../common/roles';
+
+export type TipoAlteracaoPlanta = 'criada' | 'guardada' | 'renomeada' | 'apagada';
 
 const ORDER_STATUS_CACHE_TTL = 60 * 60 * 24;
 const CHANNEL = 'order:updates';
@@ -45,6 +49,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
+    private readonly membershipService: MembershipService,
     @InjectRepository(EventUserEntity)
     private readonly eventUserRepository: Repository<EventUserEntity>,
   ) {
@@ -80,14 +85,15 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     subscriber.on('message', (_channel, rawMessage) => {
       try {
         if (_channel === PLANTA_CHANNEL) {
-          const payload = JSON.parse(rawMessage) as { plantaId?: string; version?: number; eventId?: string };
+          const payload = JSON.parse(rawMessage) as { plantaId?: string; version?: number; tipo?: TipoAlteracaoPlanta; eventId?: string };
           if (!payload?.plantaId || !payload.eventId) {
             return;
           }
           if (this.server) {
-            this.server.to(`event:${payload.eventId}`).emit('plantaUpdated', {
+            this.server.to(`event:${payload.eventId}:planta`).emit('plantaUpdated', {
               plantaId: payload.plantaId,
               version: payload.version,
+              tipo: payload.tipo,
             });
           }
           return;
@@ -264,6 +270,41 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
   }
 
   /**
+   * Room própria para as alterações de planta, restrita a MANAGEMENT_ROLES: o
+   * `joinEvent` aceita qualquer membro do evento, mas as rotas de planta são só
+   * para superadmin/organizer. Sem esta separação, um role operacional (caixa,
+   * cozinha) receberia metadados de planta que não pode obter por HTTP.
+   */
+  @SubscribeMessage('joinEventPlanta')
+  async handleJoinEventPlanta(@ConnectedSocket() client: Socket, @MessageBody() eventId: string) {
+    const user = client.data?.user;
+    if (!user) {
+      client.emit('error', { message: 'Não autenticado' });
+      return;
+    }
+    if (!eventId || typeof eventId !== 'string') {
+      client.emit('error', { message: 'eventId inválido' });
+      return;
+    }
+    let role: string;
+    try {
+      role = await this.membershipService.roleEfetiva(user, eventId);
+    } catch {
+      client.emit('error', { message: 'Não pertence a este evento' });
+      return;
+    }
+    if (!MANAGEMENT_ROLES.includes(role)) {
+      client.emit('error', { message: 'Sem permissão para a planta deste evento' });
+      return;
+    }
+    if (!(await this.contarJoin(user.id))) {
+      client.emit('error', { message: 'Demasiados pedidos, aguarde um pouco' });
+      return;
+    }
+    client.join(`event:${eventId}:planta`);
+  }
+
+  /**
    * Só distribui via Redis quando o subscriber está operacional. Com Redis em
    * baixo (ou a arrancar) cai na emissão local direta, em vez de perder o evento
    * num publish que falha.
@@ -293,12 +334,12 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
    * Com subscriber ativo a re-emissão local é feita pelo subscriber (multi-réplica);
    * sem Redis cai na emissão local direta.
    */
-  emitPlantaUpdate(eventId: string, plantaId: string, version: number) {
-    const payload = JSON.stringify({ eventId, plantaId, version, at: new Date().toISOString() });
+  emitPlantaUpdate(eventId: string, plantaId: string, version: number, tipo: TipoAlteracaoPlanta) {
+    const payload = JSON.stringify({ eventId, plantaId, version, tipo, at: new Date().toISOString() });
     if (this.distribuirViaRedis) {
       void this.redisService.publish(PLANTA_CHANNEL, payload);
     } else if (this.server) {
-      this.server.to(`event:${eventId}`).emit('plantaUpdated', { plantaId, version });
+      this.server.to(`event:${eventId}:planta`).emit('plantaUpdated', { plantaId, version, tipo });
     }
   }
 }

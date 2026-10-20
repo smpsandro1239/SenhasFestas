@@ -135,7 +135,7 @@ describe('FloorPlanService — listagem e criação', () => {
 
     await service.criar('evt1', ORGANIZADOR, { nome: 'Esplanada' } as any);
 
-    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p2', 0);
+    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p2', 0, 'criada');
   });
 
   it('criar não emite quando falha (nome duplicado)', async () => {
@@ -331,7 +331,7 @@ describe('FloorPlanService — obter/guardar (optimistic locking)', () => {
 
     await service.guardar('evt1', 'p1', ORGANIZADOR, { mesas: [], zonas: [], version: 3 } as any);
 
-    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p1', 4);
+    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p1', 4, 'guardada');
   });
 
   it('guardar não emite no conflito (409)', async () => {
@@ -426,7 +426,7 @@ describe('FloorPlanService — renomear e apagar', () => {
       eventId: 'evt1',
     });
     expect(mockFloorPlanRepository.save).toHaveBeenCalled();
-    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p1', 0);
+    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p1', 0, 'renomeada');
   });
 
   it('renomear → 409 se o nome já estiver noutre planta do evento', async () => {
@@ -475,7 +475,7 @@ describe('FloorPlanService — renomear e apagar', () => {
       entidadeId: 'p1',
       eventId: 'evt1',
     });
-    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p1', 0);
+    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p1', 0, 'apagada');
   });
 
   it('apagar → 400 quando é a última planta do evento', async () => {
@@ -580,7 +580,7 @@ describe('FloorPlanService — compatibilidade /events/:id/planta ("Principal")'
       eventId: 'evt1',
     });
     expect(mockFloorPlanRepository.create).not.toHaveBeenCalled();
-    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p1', 4);
+    expect(mockOrderGateway.emitPlantaUpdate).toHaveBeenCalledWith('evt1', 'p1', 4, 'guardada');
   });
 
   it('guardarPrincipal sem linha e com version != 0 → 409 com o estado vazio', async () => {
