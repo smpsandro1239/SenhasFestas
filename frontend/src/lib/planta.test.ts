@@ -14,6 +14,8 @@ import {
   parsePlanta,
   decidirPlantaRemota,
   resolverPlanoCargaPlanta,
+  decidirAdocaoRemota,
+  type EventoPlantaRemota,
   type PlantaPendente,
   parsePlantaPendente,
   descreverIdade,
@@ -1129,6 +1131,71 @@ describe('dimensões reais', () => {
       JSON.stringify({ mesas: [], zonas: [], dimensoes: { larguraM: 'x' } }),
     );
     expect(doc.dimensoes).toBeUndefined();
+  });
+});
+
+describe('decidirAdocaoRemota', () => {
+  const base = {
+    plantaAtivaId: 'p1',
+    versaoConhecida: 3,
+    temEdicaoLocal: false,
+    temConflito: false,
+  };
+  const evento = (patch: Partial<EventoPlantaRemota>): EventoPlantaRemota => ({
+    plantaId: 'p1',
+    version: 4,
+    tipo: 'guardada',
+    ...patch,
+  });
+
+  it('ignora evento de outra planta', () => {
+    expect(decidirAdocaoRemota({ ...base, evento: evento({ plantaId: 'p2' }) })).toBe('ignorar');
+  });
+
+  it('ignora o eco da própria gravação (mesma versão)', () => {
+    expect(
+      decidirAdocaoRemota({ ...base, evento: evento({ version: 3 }) }),
+    ).toBe('ignorar-eco');
+  });
+
+  it('adopta quando não há edições locais nem conflito', () => {
+    expect(decidirAdocaoRemota({ ...base, evento: evento({}) })).toBe('adoptar');
+  });
+
+  it('avisa quando há edições locais por sincronizar', () => {
+    expect(
+      decidirAdocaoRemota({ ...base, temEdicaoLocal: true, evento: evento({}) }),
+    ).toBe('avisar');
+  });
+
+  it('avisa quando há conflito aberto', () => {
+    expect(
+      decidirAdocaoRemota({ ...base, temConflito: true, evento: evento({}) }),
+    ).toBe('avisar');
+  });
+
+  it('refetch da lista em renomeada', () => {
+    expect(
+      decidirAdocaoRemota({ ...base, evento: evento({ tipo: 'renomeada', version: 4 }) }),
+    ).toBe('refetch-lista');
+  });
+
+  it('refetch da lista em apagada (getPlanta daria 404)', () => {
+    expect(
+      decidirAdocaoRemota({ ...base, evento: evento({ tipo: 'apagada', version: 4 }) }),
+    ).toBe('refetch-lista');
+  });
+
+  it('tipo ausente (mensagem antiga) cai em refetch-lista por segurança', () => {
+    expect(
+      decidirAdocaoRemota({ ...base, evento: evento({ tipo: null }) }),
+    ).toBe('refetch-lista');
+  });
+
+  it('adopta uma criação quando é a planta activa', () => {
+    expect(
+      decidirAdocaoRemota({ ...base, versaoConhecida: null, evento: evento({ tipo: 'criada', version: 0 }) }),
+    ).toBe('adoptar');
   });
 });
 

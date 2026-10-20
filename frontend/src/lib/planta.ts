@@ -263,6 +263,51 @@ export function resolverPlanoCargaPlanta(entrada: EntradaCargaPlanta): PlanoCarg
   }
 }
 
+export type TipoAlteracaoPlanta = 'criada' | 'guardada' | 'renomeada' | 'apagada';
+
+export interface EventoPlantaRemota {
+  plantaId: string;
+  version: number | null;
+  tipo: TipoAlteracaoPlanta | null;
+}
+
+export type DecisaoAdocaoRemota =
+  | 'ignorar'
+  | 'ignorar-eco'
+  | 'adoptar'
+  | 'avisar'
+  | 'refetch-lista';
+
+/**
+ * O que fazer quando chega um `plantaUpdated` de outro dispositivo. Só decide o
+ * tipo de acção; o efeito (GET, aviso, refetch da lista) fica no componente.
+ *
+ * - evento de outra planta → `ignorar`;
+ * - `tipo` de estrutura (`renomeada`/`apagada`) → `refetch-lista` (a planta pode
+ *   já não existir, logo `getPlanta` daria 404); um `tipo` ausente (mensagem
+ *   antiga) cai aqui por segurança;
+ * - eco da própria gravação (mesma `version`) → `ignorar-eco`;
+ * - edições locais por sincronizar ou conflito aberto → `avisar` (não perder);
+ * - caso contrário → `adoptar`.
+ */
+export function decidirAdocaoRemota(entrada: {
+  evento: EventoPlantaRemota;
+  plantaAtivaId: string;
+  versaoConhecida: number | null;
+  temEdicaoLocal: boolean;
+  temConflito: boolean;
+}): DecisaoAdocaoRemota {
+  const { evento, plantaAtivaId, versaoConhecida, temEdicaoLocal, temConflito } = entrada;
+  if (evento.plantaId !== plantaAtivaId) return 'ignorar';
+  if (evento.tipo === 'renomeada' || evento.tipo === 'apagada') return 'refetch-lista';
+  if (evento.tipo !== 'criada' && evento.tipo !== 'guardada') return 'refetch-lista';
+  if (evento.version !== null && versaoConhecida !== null && evento.version === versaoConhecida) {
+    return 'ignorar-eco';
+  }
+  if (temEdicaoLocal || temConflito) return 'avisar';
+  return 'adoptar';
+}
+
 export interface PlantaPendente {
   mesas: Mesa[];
   zonas: Zona[];

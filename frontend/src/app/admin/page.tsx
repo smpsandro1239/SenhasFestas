@@ -55,6 +55,8 @@ import {
   encaixarGrelha,
   resolverPlanoCargaPlanta,
   parsePlantaPendente,
+  decidirAdocaoRemota,
+  type EventoPlantaRemota,
   chavePlantaPendente,
   chaveCachePlanta,
   chaveContextoPlanta,
@@ -81,6 +83,7 @@ import {
 } from '@/lib/planta';
 import { QrLoteControlos } from '@/components/admin/qr-lote-controlos';
 import { QrFolhas } from '@/components/admin/qr-folhas';
+import { usePlantaSocket } from '@/lib/use-planta-socket';
 
 const roleVariant: Record<string, 'brand' | 'warning' | 'success'> = {
   superadmin: 'brand',
@@ -246,6 +249,7 @@ function AdminPage() {
   } | null>(null);
   const [plantaImportarDisponivel, setPlantaImportarDisponivel] = useState(false);
   const [plantaPendentesOutros, setPlantaPendentesOutros] = useState<string[]>([]);
+  const [plantaAvisoRemoto, setPlantaAvisoRemoto] = useState(false);
   const [agoraIdade, setAgoraIdade] = useState(() => Date.now());
   const [plantaLimpar, setPlantaLimpar] = useState(false);
   const [eventEditing, setEventEditing] = useState<any>(null);
@@ -1269,6 +1273,7 @@ function AdminPage() {
     limparUndo();
     setPlantaConflito(null);
     setPlantaImportarDisponivel(false);
+    setPlantaAvisoRemoto(false);
     atualizarPendentesPlanta();
     setPlantaSync('');
     const eventoId = plantaEventoId;
@@ -1667,6 +1672,91 @@ function AdminPage() {
     }
     setPlantaConflito(null);
     setPlantaSync('');
+  };
+
+  // Aplica uma planta remota adoptada (sem edições locais nem conflito). Espelha
+  // o que o efeito de carga faz no ramo 'aplicar', mas sem passar pelo efeito
+  // (que reinicia o estado a partir da cache e descartaria a decisão).
+  const adoptarPlantaRemota = async (plantaIdRemoto: string) => {
+    const eventoId = plantaEventoId;
+    if (!eventoId || !plantaShortCode) return;
+    const chave = chaveContextoPlanta(plantaShortCode, plantaIdRemoto);
+    try {
+      const remoto = await getPlanta(eventoId, plantaIdRemoto);
+      if (plantaCarregadaRef.current !== chave) return;
+      if (plantaEditadaDesdeCargaRef.current) return;
+      const versaoServidor = typeof remoto?.version === 'number' ? remoto.version : 0;
+      const docRemoto = parseDocumentoPlanta(JSON.stringify(remoto ?? null));
+      plantaVersoesRef.current[chave] = versaoServidor;
+      if (docRemoto.dimensoes) aplicarDimensoes(docRemoto.dimensoes);
+      plantaEstadoRef.current = docRemoto.mesas;
+      plantaZonasEstadoRef.current = docRemoto.zonas;
+      setPlanta(docRemoto.mesas);
+      setPlantaZonas(docRemoto.zonas);
+      setPlantaSel(null);
+      setZonaSel(null);
+      limparUndo();
+      setPlantaAvisoRemoto(false);
+      try {
+        localStorage.setItem(
+          chaveCachePlanta(plantaShortCode, plantaIdRemoto),
+          JSON.stringify({
+            mesas: docRemoto.mesas,
+            zonas: docRemoto.zonas,
+            ...(docRemoto.dimensoes ? { dimensoes: docRemoto.dimensoes } : {}),
+          }),
+        );
+      } catch {}
+    } catch {}
+  };
+
+  const tratarPlantaRemota = (evento: EventoPlantaRemota) => {
+    if (!plantaEventoId || !plantaShortCode) return;
+    if (evento.plantaId !== plantaId) return;
+    const chave = chaveContextoPlanta(plantaShortCode, plantaId);
+    const decisao = decidirAdocaoRemota({
+      evento,
+      plantaAtivaId: plantaId,
+      versaoConhecida: plantaVersoesRef.current[chave] ?? null,
+      temEdicaoLocal:
+        plantaEditadaDesdeCargaRef.current || plantaPendenteRef.current !== null,
+      temConflito: plantaConflito !== null,
+    });
+    if (decisao === 'adoptar') {
+      void adoptarPlantaRemota(evento.plantaId);
+      return;
+    }
+    if (decisao === 'avisar') {
+      setPlantaAvisoRemoto(true);
+      return;
+    }
+    if (decisao === 'refetch-lista') {
+      // Renomeada/apagada: a planta pode já não existir (getPlanta daria 404).
+      setPlantaId('');
+      setPlantaListaTentativa((n) => n + 1);
+    }
+  };
+
+  usePlantaSocket(plantaEventoId || null, tratarPlantaRemota);
+
+  // Aviso de alteração remota: ao recarregar, guarda a edição local como pendente
+  // (recuperável pelo aviso de pendentes) antes de adoptar a versão do servidor.
+  const recarregarPlantaAvisoRemoto = () => {
+    if (
+      plantaEditadaDesdeCargaRef.current &&
+      plantaShortCode &&
+      plantaId
+    ) {
+      registarPendentePlanta(
+        plantaShortCode,
+        plantaId,
+        plantaEstadoRef.current,
+        plantaZonasEstadoRef.current,
+        plantaVersoesRef.current[chavePlanta],
+      );
+    }
+    esquecerEdicoesLocais();
+    void adoptarPlantaRemota(plantaId);
   };
 
   const forcarGuardarPlanta = () => {
@@ -4524,6 +4614,22 @@ function AdminPage() {
                           Manter a minha
                         </Button>
                         <Button size="sm" onClick={recarregarPlantaRemota}>
+                          Recarregar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {plantaAvisoRemoto && !plantaConflito && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                      <span className="text-xs text-amber-200">
+                        A planta mudou noutro dispositivo. Tens alterações por sincronizar aqui.
+                      </span>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setPlantaAvisoRemoto(false)}>
+                          Ignorar
+                        </Button>
+                        <Button size="sm" onClick={recarregarPlantaAvisoRemoto}>
                           Recarregar
                         </Button>
                       </div>
