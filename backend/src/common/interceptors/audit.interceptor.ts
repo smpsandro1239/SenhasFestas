@@ -239,6 +239,12 @@ export class AuditInterceptor implements NestInterceptor {
         break;
       }
     }
+    // /plantas/:plantaId termina num uuid, por isso o sufixo não apanha:
+    // as mutações de planta (criar/renomear/apagar/gravar) ficam todas como
+    // PLANTA, igual ao /planta legado.
+    if (segmentos.includes('plantas')) {
+      acao = 'PLANTA';
+    }
 
     const entityId = segmentos.find((segmento) => UUID_REGEX.test(segmento));
     const eventParam = (req.params?.eventId as string) || (req.body?.eventId as string);

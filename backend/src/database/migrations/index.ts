@@ -17,3 +17,4 @@ export { AddEventShortCode1790200000000 } from './1790200000000-AddEventShortCod
 export { BackfillOrphanBalanceMembers1790300000000 } from './1790300000000-BackfillOrphanBalanceMembers';
 export { AddEventFloorPlan1790400000000 } from './1790400000000-AddEventFloorPlan';
 export { FloorPlanZonas1790500000000 } from './1790500000000-FloorPlanZonas';
+export { CreateFloorPlans1790600000000 } from './1790600000000-CreateFloorPlans';

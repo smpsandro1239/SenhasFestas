@@ -17,7 +17,6 @@ import {
   BalanceEntity,
 } from '../../entities';
 import { CreateEventDto, UpdateEventDto, AddMemberDto, EventSettingsDto } from './dto';
-import { GuardarPlantaDto, MAX_ZONAS_PLANTA } from './planta.dto';
 import { AuditService } from '../audit/audit.service';
 import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';
 import { eventWindowMessage, isEventWindowOpen } from '../../common/event-window';
@@ -27,73 +26,6 @@ import {
   gerarShortCode,
   escolherShortCode,
 } from '../../common/short-code';
-
-interface ZonaPlantaDoc {
-  id: string;
-  nome: string;
-  cor: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
-function clampNumero(valor: unknown, min: number, max: number): number {
-  const n = typeof valor === 'number' ? valor : Number(valor);
-  if (!Number.isFinite(n)) return min;
-  return Math.min(max, Math.max(min, n));
-}
-
-function normalizarZonaPlanta(zona: any): ZonaPlantaDoc {
-  const w = clampNumero(zona?.w, 1, 100);
-  const h = clampNumero(zona?.h, 1, 100);
-  return {
-    id: typeof zona?.id === 'string' ? zona.id : '',
-    nome: typeof zona?.nome === 'string' ? zona.nome : '',
-    cor: typeof zona?.cor === 'string' ? zona.cor : '',
-    x: clampNumero(zona?.x, 0, 100 - w),
-    y: clampNumero(zona?.y, 0, 100 - h),
-    w,
-    h,
-  };
-}
-
-export interface DimensoesPlantaDoc {
-  larguraM: number;
-  alturaM: number;
-}
-
-function normalizarDimensoes(dimensoes: any): DimensoesPlantaDoc | null {
-  if (!dimensoes || typeof dimensoes !== 'object') return null;
-  const larguraM = Number(dimensoes.larguraM);
-  const alturaM = Number(dimensoes.alturaM);
-  if (!Number.isFinite(larguraM) || !Number.isFinite(alturaM)) return null;
-  const arredondar = (v: number) => Math.round(clampNumero(v, 1, 200) * 10) / 10;
-  return { larguraM: arredondar(larguraM), alturaM: arredondar(alturaM) };
-}
-
-/**
- * Normaliza o campo `floorPlan` para o documento { mesas, zonas, dimensoes }.
- * Aceita o formato legado (array só de mesas) para não perder plantas já
- * gravadas.
- */
-function lerFloorPlan(floorPlan: any): {
-  mesas: any[];
-  zonas: ZonaPlantaDoc[];
-  dimensoes: DimensoesPlantaDoc | null;
-} {
-  if (Array.isArray(floorPlan)) {
-    return { mesas: floorPlan, zonas: [], dimensoes: null };
-  }
-  if (floorPlan && typeof floorPlan === 'object') {
-    return {
-      mesas: Array.isArray(floorPlan.mesas) ? floorPlan.mesas : [],
-      zonas: Array.isArray(floorPlan.zonas) ? floorPlan.zonas.map(normalizarZonaPlanta) : [],
-      dimensoes: normalizarDimensoes(floorPlan.dimensoes),
-    };
-  }
-  return { mesas: [], zonas: [], dimensoes: null };
-}
 
 @Injectable()
 export class EventService {
@@ -267,10 +199,7 @@ export class EventService {
       }
       dto = { ...dto, shortCode: normalizado };
     }
-    // O floorPlan (mesas/zonas) fica de fora: num evento grande ultrapassaria o
-    // corte de 8000 chars do interceptor e o snapshot perdia-se por inteiro.
-    const { floorPlan: _floorPlan, ...camposEvento } = event;
-    arquivar?.({ antes: camposEvento, eventId: id });
+    arquivar?.({ antes: { ...event }, eventId: id });
     Object.assign(event, dto);
     return this.eventRepository.save(event);
   }
@@ -399,80 +328,6 @@ export class EventService {
     event.settings = { ...(event.settings ?? {}), ...settings };
     await this.eventRepository.save(event);
     return event.settings;
-  }
-
-  /**
-   * Planta de mesas. Ao contrário do resto da operação, edita-se em qualquer
-   * estado do evento (rascunho/encerrado) — o layout não depende da janela.
-   */
-  async obterPlanta(
-    eventId: string,
-    user: UserEntity,
-  ): Promise<{ mesas: any[]; zonas: any[]; dimensoes?: DimensoesPlantaDoc; version: number }> {
-    const event = await this.findOne(eventId, user);
-    const doc = lerFloorPlan(event.floorPlan);
-    return {
-      mesas: doc.mesas,
-      zonas: doc.zonas,
-      ...(doc.dimensoes ? { dimensoes: doc.dimensoes } : {}),
-      version: event.floorPlanVersion ?? 0,
-    };
-  }
-
-  /**
-   * Grava a planta com optimistic locking: a `version` enviada tem de bater
-   * certo com a guardada. Sem isso, dois dispositivos a editar em paralelo
-   * sobrepunham-se em silêncio. No conflito devolve o estado actual para o
-   * cliente reconciliar.
-   */
-  async guardarPlanta(
-    eventId: string,
-    user: UserEntity,
-    dto: GuardarPlantaDto,
-    // Snapshot do estado anterior para a auditoria: o interceptor grava-o como
-    // `before` (o serviço não tem acesso ao `req`).
-    antesDeGravar?: (anterior: {
-      mesas: any[];
-      zonas: any[];
-      dimensoes: DimensoesPlantaDoc | null;
-      version: number;
-    }) => void,
-  ): Promise<{ mesas: any[]; zonas: any[]; dimensoes?: DimensoesPlantaDoc; version: number }> {
-    const event = await this.findOne(eventId, user);
-    const versionAtual = event.floorPlanVersion ?? 0;
-    const atual = lerFloorPlan(event.floorPlan);
-    if (dto.version !== versionAtual) {
-      throw new ConflictException({
-        message: 'A planta foi alterada noutro dispositivo',
-        mesas: atual.mesas,
-        zonas: atual.zonas,
-        ...(atual.dimensoes ? { dimensoes: atual.dimensoes } : {}),
-        version: versionAtual,
-      });
-    }
-    antesDeGravar?.({
-      mesas: atual.mesas,
-      zonas: atual.zonas,
-      dimensoes: atual.dimensoes,
-      version: versionAtual,
-    });
-    const zonas = (dto.zonas ?? []).map(normalizarZonaPlanta).slice(0, MAX_ZONAS_PLANTA);
-    // Sem `dimensoes` no payload (clientes antigos, drag de mesas) preserva-se
-    // o valor guardado em vez de o apagar.
-    const dimensoes = dto.dimensoes ? normalizarDimensoes(dto.dimensoes) : atual.dimensoes;
-    event.floorPlan = {
-      mesas: dto.mesas,
-      zonas,
-      ...(dimensoes ? { dimensoes } : {}),
-    };
-    event.floorPlanVersion = versionAtual + 1;
-    await this.eventRepository.save(event);
-    return {
-      mesas: event.floorPlan.mesas,
-      zonas: event.floorPlan.zonas,
-      ...(dimensoes ? { dimensoes } : {}),
-      version: event.floorPlanVersion,
-    };
   }
 
   async addUserRole(eventId: string, userId: string, role: string): Promise<EventUserEntity> {

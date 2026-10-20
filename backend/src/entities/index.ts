@@ -102,18 +102,6 @@ export class EventEntity {
   })
   settings: Record<string, any>;
 
-  // Planta do salão: documento { mesas: [...], zonas: [...] }. As mesas e zonas
-  // usam coordenadas percentuais (0-100). Coexiste com a cópia em localStorage
-  // do /admin. A migração 1790500000000 converte o formato antigo (array) para
-  // este documento.
-  @Column({ type: 'jsonb', default: () => `'{"mesas": [], "zonas": []}'` })
-  floorPlan: any;
-
-  // Incrementa a cada gravação da planta; usada para detecção de conflitos
-  // (optimistic locking) entre dispositivos.
-  @Column({ type: 'int', default: 0 })
-  floorPlanVersion: number;
-
   @CreateDateColumn()
   createdAt: Date;
 
@@ -122,6 +110,34 @@ export class EventEntity {
 
   @DeleteDateColumn()
   deletedAt?: Date;
+}
+
+// Planta de mesas de um evento (salão, esplanada, ...). Cada linha guarda o
+// seu documento { mesas, zonas, dimensoes } e a sua versão de optimistic
+// locking — o mesmo evento pode ter várias plantas independentes.
+@Entity('floor_plans')
+@Index(['event', 'nome'], { unique: true })
+export class FloorPlanEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => EventEntity, { onDelete: 'CASCADE' })
+  event: EventEntity;
+
+  @Column({ type: 'varchar', length: 60 })
+  nome: string;
+
+  @Column({ type: 'jsonb', default: () => `'{"mesas": [], "zonas": []}'` })
+  documento: any;
+
+  @Column({ type: 'int', default: 0 })
+  version: number;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }
 
 @Entity('event_users')

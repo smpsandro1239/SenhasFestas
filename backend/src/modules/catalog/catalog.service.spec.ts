@@ -583,7 +583,7 @@ describe('CatalogService', () => {
 
   describe('snapshot anterior para auditoria (arquivar)', () => {
     it('update arquiva o produto anterior e o evento (sem a relação pesada)', async () => {
-      const existing = { id: 'p1', name: 'Bifana', price: 3.5, event: { id: 'evt1', floorPlan: { mesas: [] } } };
+      const existing = { id: 'p1', name: 'Bifana', price: 3.5, event: { id: 'evt1', settings: {} } };
       mockProductRepository.findOne.mockResolvedValue(existing);
       mockProductRepository.save.mockImplementation(async (data: any) => data);
       const arquivar = vi.fn();

@@ -10,10 +10,25 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 
 export const MAX_ZONAS_PLANTA = 100;
+
+export class CriarPlantaDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  nome: string;
+}
+
+export class RenomearPlantaDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  nome: string;
+}
 
 export class MesaPlantaDto {
   @IsString()

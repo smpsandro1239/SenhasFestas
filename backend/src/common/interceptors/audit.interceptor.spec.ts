@@ -141,4 +141,28 @@ describe('AuditInterceptor — before/after', () => {
     expect(record.mock.calls[0][0].before).toBeUndefined();
     expect(record.mock.calls[0][0].details).toMatchObject({ origem: 'caixa' });
   });
+
+  it('mutações em /plantas/:plantaId ficam com acção PLANTA', async () => {
+    // O path termina num uuid, por isso o sufixo '/planta' não apanha: a regra
+    // por segmento é que mapeia criar/renomear/apagar para PLANTA.
+    const req = fazerReq('POST', `/api/events/${EVENT_ID}/plantas`);
+    arquivarAuditoria(req)({ entidadeId: EVENT_ID, eventId: EVENT_ID, extras: { nome: 'Esplanada' } });
+
+    await correr(req, { id: 'planta-nova' });
+
+    expect(record.mock.calls[0][0].action).toBe('PLANTA');
+    expect(record.mock.calls[0][0].entity).toBe('event');
+  });
+
+  it('PUT /plantas/:plantaId usa o entityId (planta) e o eventId do path', async () => {
+    const PLANTA_ID = 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e';
+    const req = fazerReq('PUT', `/api/events/${EVENT_ID}/plantas/${PLANTA_ID}`);
+    arquivarAuditoria(req)({ entidadeId: PLANTA_ID, eventId: EVENT_ID });
+
+    await correr(req, { id: PLANTA_ID });
+
+    expect(record.mock.calls[0][0].action).toBe('PLANTA');
+    expect(record.mock.calls[0][0].entityId).toBe(PLANTA_ID);
+    expect(record.mock.calls[0][0].eventId).toBe(EVENT_ID);
+  });
 });

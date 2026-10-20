@@ -200,7 +200,7 @@ export class CatalogService {
     if (product.event?.id) {
       await this.membershipService.assertMember(user, product.event.id);
     }
-    // A relação `event` traria o floorPlan inteiro para o log; com >8000 chars o
+    // A relação `event` traria o evento inteiro para o log; com >8000 chars o
     // snapshot era cortado e perdia-se. Guarda-se o resto e o id do evento.
     const { event, ...camposProduto } = product;
     arquivar?.({ antes: camposProduto, eventId: event?.id });
