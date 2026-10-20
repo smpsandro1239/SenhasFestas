@@ -190,18 +190,23 @@ mesa e relatórios financeiros.
       chaves legadas (sem id) para a planta activa. Sem limite de plantas por
       evento. `events.floorPlan`/`floorPlanVersion` removidos.
 12. **Planta em realtime (WebSocket)** — em vez de polling + PUT manual.
-    - **Estado**: backend concluído 2026-10-20 — o `OrderGateway` (socket.io) passou
-      a ter `emitPlantaUpdate(eventId, plantaId, version)` num canal próprio
-      (`planta:updates`), com re-emissão `plantaUpdated` para a room `event:<id>`;
-      o `FloorPlanService` emite após cada mutação bem-sucedida
-      (criar/guardar/renomear/apagar/guardarPrincipal). O evento **não** transporta
-      o documento (o cliente refaz o GET). Robustez: o gateway só distribui via
-      Redis quando o subscriber está `ready`; com Redis em baixo cai na emissão
-      local directa (antes perdia o evento num `publish` que falhava — afectava
-      também `orderUpdated`).
-    - **Pendente**: frontend (subscrever `plantaUpdated`, adoptar a versão remota
-      quando não há edições locais por sincronizar; senão manter o painel de
-      conflito). Fica para batch própria.
+    - **Estado**: **concluído 2026-10-20** (backend + frontend).
+    - **Backend**: o `OrderGateway` (socket.io) emite `emitPlantaUpdate(eventId,
+      plantaId, version, tipo)` num canal próprio (`planta:updates`), com re-emissão
+      `plantaUpdated` para a room **`event:<id>:planta`** (reservada a
+      `MANAGEMENT_ROLES` via `joinEventPlanta`; a room geral dos pedidos deixou de
+      receber metadados de planta). `tipo` ∈ `criada|guardada|renomeada|apagada`
+      desambigua o rename (que não incrementa `version`). O `FloorPlanService` emite
+      após cada mutação bem-sucedida (não em 409/404/400). O evento **não** transporta
+      o documento (o cliente refaz o GET). Robustez: o gateway só distribui via Redis
+      quando o subscriber está `ready`; com Redis em baixo cai na emissão local
+      directa.
+    - **Frontend**: `use-planta-socket` liga ao canal e reemite; `decidirAdocaoRemota`
+      (helper puro, 9 testes) decide entre ignorar (outra planta), ignorar-eco
+      (mesma `version`), refetch da lista (renomeada/apagada — `getPlanta` daria 404),
+      avisar (edições locais/conflito, guardadas como pendentes ao recarregar) ou
+      adoptar (GET + aplica com guards). O mecanismo 409 mantém-se como rede de
+      segurança; sem polling novo.
 13. **Bump periódico do `chrome-devtools-mcp`** — está pinado em `1.11.0` (o
     `@latest` dava superfície de ferramentas não-determinística: 30 numa execução,
     32 noutra). O pin exige bump manual para receber correcções de bugs e

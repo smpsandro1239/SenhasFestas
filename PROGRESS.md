@@ -13,6 +13,43 @@
 
 ---
 
+## 2026-10-20 — Frontend #12: planta em realtime (T3)
+
+**Objectivo**: consumir no `/admin` o `plantaUpdated` emitido pelo backend, sem
+perder edições locais nem somar polling.
+
+**Feito**
+- `frontend/src/lib/use-planta-socket.ts` (novo): liga a `NEXT_PUBLIC_WS_URL`,
+  emite `joinEventPlanta` no `connect`/`reconnect` e reemite `plantaUpdated`; a
+  auth segue o padrão do `use-order-socket` (token do `getAccessToken`).
+- `frontend/src/lib/planta.ts`: `decidirAdocaoRemota` (helper puro) + tipos
+  `TipoAlteracaoPlanta`/`EventoPlantaRemota`/`DecisaoAdocaoRemota`.
+- `admin/page.tsx`: `tratarPlantaRemota` chama o helper e aplica a decisão —
+  `adoptar` → GET + aplica com guards de eco/edição local; `avisar` → banner com
+  "Recarregar" (guarda a edição local como pendente antes de adoptar) e "Ignorar";
+  `refetch-lista` → limpa `plantaId` e re-pede a lista (renomeada/apagada).
+
+**Decisões**
+- **`tipo` ausente = refetch da lista**: uma mensagem antiga sem `tipo` cai no ramo
+  estrutural por segurança (não se assume que é um update inofensivo).
+- **Aviso, não adopção, quando há trabalho local**: a rota `avisar` preserva sempre
+  as edições por sincronizar; o "Recarregar" do aviso grava-as como pendente
+  (recuperáveis pelo aviso de pendentes) antes de adoptar o servidor.
+- **Sem polling**: o socket complementa o 409 existente; nada de `setInterval` novo.
+
+**Commits**: `9e10b37 feat(frontend): receber plantaUpdated em realtime (adopta ou avisa)`.
+
+**Gates**: frontend — `tsc` 0 erros · vitest **287/287** (+9) · `build` OK · lint
+limpo. E2E real (socket.io, backend `:3000`, dois clientes management):
+login → ambos `joinEventPlanta` → PATCH renomear → ambos recebem
+`{plantaId, version, tipo:'renomeada'}`. Estado de `festa-teste-2026` reposto
+(planta renomeada de novo para "Principal").
+
+**Pendente**: T5 (push de `main`, requer autorização explícita; `main` com 11
+commits locais à frente de `origin/main`).
+
+---
+
 ## 2026-10-20 — Contrato `tipo`, room de planta restrita e auditoria de docs (T1–T4b)
 
 **Objectivo**: fechar a análise aberta sobre o #12-backend — desambiguar o rename
@@ -66,8 +103,7 @@ warnings pré-existentes · boot `:3011` com `Nest application successfully star
 (DI de `MembershipService` resolvida, sem `can't resolve`).
 
 **Pendente**: T3 (frontend #12 realtime — `joinEventPlanta`, `decidirAdocaoRemota`,
-eco, `tipo !== 'guardada'` → `getPlantas`) e T5 (push, requer autorização; `main`
-com 9 commits locais à frente de `origin/main`).
+eco, `tipo !== 'guardada'` → `getPlantas`).
 
 ---
 

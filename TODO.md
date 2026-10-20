@@ -14,8 +14,8 @@ Legenda de estado: `[ ]` pendente · `[~]` em curso · `[x]` concluído · `[!]`
 | `[x]` | T2 spec do `OrderGateway` (20 testes: fallback Redis, wiring ready/end, join restrito) | realtime | alta | T1 | commit `6896af2` |
 | `[x]` | T4b auditoria de segredos (`.env` tracked, `.gitignore`, CI) | segurança | alta | — | só `.env.example` tracked; `.env` gitignored; `ci.yml` cobre lint/test/build/e2e/migrações |
 | `[x]` | T4 limpar heading duplicado `PROGRESS.md` + `TODO.md` + limitação serverless no `PLAN.md` | docs | média | — | `uniq -d` vazio; `-5` linhas; nota WS serverless em `PLAN.md` |
-| `[ ]` | T3 frontend #12: subscrever `plantaUpdated`, `joinEventPlanta`, helper `decidirAdocaoRemota`, ignorar eco, `tipo !== 'guardada'` → `getPlantas` | realtime | alta | T1 | ver `PLAN.md` #12; sem polling novo; 409 mantém-se |
-| `[!]` | T5 push de `main` | release | alta | T3 + autorização explícita | 9 commits locais à frente de `origin/main`; nunca encadear com commit |
+| `[x]` | T3 frontend #12: `use-planta-socket`, helper `decidirAdocaoRemota`, aviso/eco/refetch-lista | realtime | alta | T1 | commit `9e10b37`; vitest FE 287/287 (+9); E2E socket dois clientes ok |
+| `[!]` | T5 push de `main` | release | alta | autorização explícita | 11 commits locais à frente de `origin/main`; nunca encadear com commit |
 | `[!]` | #5 validação visual com `cdt` | — | média | restart do opencode | tools `cdt_*` não carregadas na sessão |
 | `[ ]` | #13 bump `chrome-devtools-mcp` (pinado `@1.11.0`) | — | baixa | — | `PLAN.md` |
 
