@@ -182,6 +182,13 @@ mesa e relatórios financeiros.
       preserva as dimensões guardadas quando o payload as omite (drag de mesas
       não as apaga).
 11. **Multi-planta** — salão + esplanada por evento.
+    - **Estado**: concluído 2026-10-20 — tabela `floor_plans` (nome único por
+      evento, JSONB `documento`, `version` por planta), CRUD em
+      `/events/:id/plantas` e compatibilidade com `/events/:id/planta` (linha
+      `"Principal"`). No admin há selector de planta, criar/renomear/apagar (nunca
+      a última), cache/pendente em `localStorage` **por planta** e migração das
+      chaves legadas (sem id) para a planta activa. Sem limite de plantas por
+      evento. `events.floorPlan`/`floorPlanVersion` removidos.
 12. **Planta em realtime (WebSocket)** — em vez de polling + PUT manual.
 13. **Bump periódico do `chrome-devtools-mcp`** — está pinado em `1.11.0` (o
     `@latest` dava superfície de ferramentas não-determinística: 30 numa execução,

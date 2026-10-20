@@ -13,7 +13,74 @@
 
 ---
 
-## 2026-10-20 — Select "Agrupar por" recalcula os grupos (revisão do #8)
+## 2026-10-20 — Multi-planta (roadmap #11)
+
+**Objectivo**: várias plantas por evento (salão + esplanada), deixando de haver
+uma única `events.floorPlan`.
+
+**Backend**
+
+- Tabela `floor_plans` (`1790600000000-CreateFloorPlans`): `eventId` (FK
+  `ON DELETE CASCADE`), `nome` único por evento, `documento` JSONB, `version`,
+  timestamps. Backfill `"Principal"` a partir de `events.floorPlan`/`floorPlanVersion`
+  e limpeza das colunas antigas; `down()` reconstrói as colunas e repõe a
+  `"Principal"`. A migração **foi corrida** contra a BD Neon.
+- `FloorPlanEntity`; `EventEntity` perde `floorPlan`/`floorPlanVersion`.
+- `FloorPlanService` (novo) com `listar/criar/obter/guardar/renomear/apagar` e os
+  compat `obterPrincipal/guardarPrincipal`. Helpers de documento movidos do
+  `EventService` (`lerFloorPlan`, `normalizarZonaPlanta`, `normalizarDimensoes`,
+  `clampNumero`, `ehViolacaoUnica`).
+- `FloorPlanController` (novo): 8 rotas sob `/events/:id/plantas` (a última não
+  pode ser apagada → 400; nome duplicado → 409; `PUT` com `version` divergente →
+  409) e o compat `/events/:id/planta` sobre a linha `"Principal"`.
+- Auditoria: regra de segmento `plantas` → acção `PLANTA` no interceptor (o
+  sufixo `/planta` do compat cai na mesma regra).
+
+**Frontend**
+
+- `lib/api.ts`: `getPlantas`, `criarPlanta`, `getPlanta(eventId, plantaId)`,
+  `guardarPlanta(eventId, plantaId, dados)`, `renomearPlanta`, `apagarPlanta`
+  (`PlantaResumo`); removidos os wrappers compat-only.
+- `lib/planta.ts`: `chaveCachePlanta`/`chavePlantaPendente` passam a aceitar id
+  (`sf:planta:<sc>[:<id>]`), `chavePlantaAtiva(sc)` guarda a última planta
+  conhecida por evento, `chaveContextoPlanta(sc, id)` dá a identidade das refs em
+  memória (legado sem id = `legado:<sc>`), e `migrarChavesLegadasPlanta` copia
+  legacy→id (só se a nova não existir) e remove sempre a legacy.
+- `admin/page.tsx`: efeito de lista (auto-cria `"Principal"` só se vazio e o
+  separador estiver aberto ou houver pendente legado; 404 do GET por id volta a
+  pedir a lista), efeito de carga por planta com save adiado/pendente por
+  contexto, `podeEditarPlanta` bloqueia edições enquanto a lista não resolve, e o
+  arranque usa já a última planta guardada (paraleliza lista + carga) com guarda
+  para não adoptar documento de outro evento. UI: selector de planta, botões
+  Nova/Renomear/Apagar (desactivado com uma só planta) e diálogo único.
+
+**Decisões**
+
+- Versão-base e pendente são **por planta** (`legado:<sc>` enquanto o id não é
+  conhecido), não por evento como antes — era a única forma de duas plantas do
+  mesmo evento não partilharem versão.
+- `migrarChavesLegadasPlanta` corre **sempre** que a lista resolve, não só com
+  lista nova: um pendente legado do evento actual ficaria invisível para sempre.
+- Auto-criar `"Principal"` fica atrás de (`activeTab === 'planta'` ou pendente
+  legado) para não escrever no backend só por abrir o admin sem visitar o
+  separador.
+
+**Feito e verificado**
+
+- Gates backend: `tsc` limpo, `vitest` **458/458**, `build`, `lint` (4 warnings
+  pré-existentes).
+- Gates frontend: `tsc` limpo, `vitest` **278/278**, `build`, `lint` sem avisos.
+- Playwright (Chrome headless, evento temporário apagado no fim): auto-criação da
+  `"Principal"`; editar a Principal e criar `"Esplanada"` sem perder a primeira;
+  mesa por planta; renomear; reload mantém a planta activa e o cache por id;
+  apagar a segunda volta à Principal e limpa o cache; botão Apagar desactivado com
+  uma só planta. Sem tocar em `festa-teste-2026`.
+
+**Pendente**
+
+- Nada funcional. Revisão de batch por fazer.
+
+---
 
 **Objectivo**: fechar as pontas da revisão do #8 — a armadilha do selector e o
 estado divergente entre o selector da planta e o lote manual.
@@ -53,6 +120,11 @@ dependências); `jspdf` descartado por agora. Push de `main` autorizado.
 **Pendente**: nenhum para o #8. Seguinte: #11 multi-planta.
 
 ---
+
+## 2026-10-20 — Select "Agrupar por" recalcula os grupos (revisão do #8)
+
+**Objectivo**: fechar as pontas da revisão do #8 — a armadilha do selector e o
+estado divergente entre o selector da planta e o lote manual.
 
 ## 2026-10-20 — Export PDF por zona (roadmap #8)
 
