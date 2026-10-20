@@ -78,9 +78,71 @@ uma única `events.floorPlan`.
 
 **Pendente**
 
-- Nada funcional. Revisão de batch por fazer.
+- Nada funcional. Revisão de batch na entrada seguinte.
 
 ---
+
+## 2026-10-20 — Revisão de batch do #11 (multi-planta)
+
+Revisão lançada a dois subagentes (`backend-specialist` + `frontend-specialist`).
+
+### O que está bem
+
+- **Migração aditiva e reversível**: `1790600000000-CreateFloorPlans` cria
+  `floor_plans`, faz backfill da `"Principal"` a partir de
+  `events.floorPlan`/`floorPlanVersion` e só então remove as colunas antigas;
+  `down()` reconstrói as colunas e repõe a `"Principal"`. Registada em
+  `migrations/index.ts`. Corrida contra a BD Neon (facto: output do script).
+- **Isolamento por planta do optimistic locking**: `version` vive na linha da
+  tabela, não no evento — duas plantas do mesmo evento não partilham versão
+  (`floor-plan.service.ts`, `guardar`).
+- **Contrato HTTP consistente** (`floor-plan.controller.ts`): 409 em `PUT` com
+  `version` divergente e em nome duplicado; 400 ao apagar a última planta;
+  compat `/events/:id/planta` sobre a linha `"Principal"`.
+- **Frontend — guard pós-await**: `enviarPlantaContexto`/efeito de carga fecham
+  com guarda por `chaveContextoPlanta`/`plantaArranque`; nenhum caminho async
+  escreve estado de outro evento (linhas ~1310, ~1371 em `admin/page.tsx`).
+- **Helpers puros testados**: `lib/planta.ts` (chaves por planta, migração de
+  legacy) com `planta.test.ts` — 128/128.
+
+### O que está mal / a verificar
+
+- [corrigido] ⚠️ **Catch 404 apagava a preferência de outro evento**: sem o guard
+  `lerPlantaAtiva() !== plantaArranque` antes de limpar `sf:planta-ativa`, um GET
+  404 de um id herdado de outro evento apagava a planta activa do evento
+  destino. Reposto o guard (linha ~1371); provado por E2E — com o guard removido
+  o caso 6 falha.
+- [corrigido] ⚠️ **Diálogo sem estado de processamento**: `confirmarPlantaDialogo`
+  não bloqueava duplo clique nem `Enter` repetido. Acrescentado
+  `plantaDialogoAProcessar` (guarda no início, `loading`/`disabled` nos botões,
+  `finally`).
+- [corrigido] ⚠️ **Closure de `plantas` na remoção**: o ramo `apagar` computava
+  `restantes` a partir da closure e fazia `setPlantas(restantes)` — passível de
+  reverter uma lista actualizada entretanto. Trocado por actualização funcional
+  `setPlantas((prev) => prev.filter(...))`.
+- [corrigido] ⚠️ **Erro do diálogo sem `role="alert"`**: leitor de ecrã não
+  anunciava. Acrescentado.
+- [a verificar] A análise do subagente backend chegou truncada; os pontos de
+  `down()`/FK `ON DELETE CASCADE`/unique `(event, nome)` foram lidos no código,
+  não confirmados por execução da migração inversa.
+
+### O que acrescentar
+
+- Teste de integração do efeito que chama `decidirPlantaRemota`/`migrarChaves…`
+  (a cobertura actual é de helpers puros + E2E).
+- Alternativa ao `role="alert"` dentro do `<Dialog>` se o `Dialog` passar a gerir
+  `aria-describedby`.
+- [a verificar] Confirmar comportamento do compat `/planta` quando não existe
+  linha `"Principal"` mas existem outras (hoje: PUT cria; GET devolve vazio).
+
+### Veredicto
+
+Sólido; correcções aplicadas e gates verdes. Pode avançar. Dívida nova: nenhuma
+crítica — as duas notas "a acrescentar" são melhorias, registadas aqui.
+
+---
+
+## 2026-10-20 — Select "Agrupar por" recalcula os grupos (revisão do #8)
 
 **Objectivo**: fechar as pontas da revisão do #8 — a armadilha do selector e o
 estado divergente entre o selector da planta e o lote manual.
