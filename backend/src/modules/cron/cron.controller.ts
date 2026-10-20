@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Headers, ForbiddenException, Logger } from '@nestjs/common';
+import { createHash, timingSafeEqual } from 'crypto';
 import { EventService } from '../event/event.service';
 import { BalanceService } from '../balance/balance.service';
+import { AuthService } from '../auth/auth.service';
 
 const CRON_SECRET_ENV = 'CRON_SECRET';
 
@@ -16,6 +18,7 @@ export class CronController {
   constructor(
     private readonly eventService: EventService,
     private readonly balanceService: BalanceService,
+    private readonly authService: AuthService,
   ) {}
 
   @Get('close-events')
@@ -58,6 +61,25 @@ export class CronController {
     return this.archiveBalances(authorization, secret);
   }
 
+  @Get('cleanup-tokens')
+  async cleanupTokens(
+    @Headers('authorization') authorization?: string,
+    @Headers('x-cron-secret') secret?: string,
+  ): Promise<{ removidos: number }> {
+    this.assertAutorizado(authorization, secret);
+    const removidos = await this.authService.cleanupExpiredTokens();
+    this.logger.log(`Cron cleanup-tokens executado: ${removidos} token(s) removido(s)`);
+    return { removidos };
+  }
+
+  @Post('cleanup-tokens')
+  async cleanupTokensPost(
+    @Headers('authorization') authorization?: string,
+    @Headers('x-cron-secret') secret?: string,
+  ): Promise<{ removidos: number }> {
+    return this.cleanupTokens(authorization, secret);
+  }
+
   private assertAutorizado(authorization?: string, secret?: string): void {
     const esperado = process.env[CRON_SECRET_ENV];
     if (!esperado) {
@@ -71,11 +93,8 @@ export class CronController {
   }
 
   private safeEqual(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
-    let diff = 0;
-    for (let i = 0; i < a.length; i += 1) {
-      diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    }
-    return diff === 0;
+    const hashA = createHash('sha256').update(a).digest();
+    const hashB = createHash('sha256').update(b).digest();
+    return timingSafeEqual(hashA, hashB);
   }
 }

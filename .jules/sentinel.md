@@ -1,0 +1,4 @@
+## 2026-10-20 - Serverless Cron Execution for Refresh Token Cleanup & Timing Attacks
+**Vulnerability:** In serverless deployments (Vercel), NestJS `@Cron` schedule decorators do not run automatically due to the lack of a persistent background process, causing expired and revoked refresh tokens to accumulate indefinitely in the database. Additionally, secret comparison in `CronController` checked length first, introducing potential timing side-channels.
+**Learning:** In serverless architectures, periodic tasks must be exposed as authenticated HTTP endpoints triggered by an external scheduler (e.g. Vercel Crons) rather than relying on in-memory decorators.
+**Prevention:** Always expose maintenance and cleanup jobs as endpoints secured with `CRON_SECRET` and constant-time string comparison (`crypto.timingSafeEqual` with SHA-256 digests), and register scheduled paths in `vercel.json`.
