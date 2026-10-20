@@ -199,6 +199,7 @@ function AdminPage() {
   const [loteShortCode, setLoteShortCode] = useState('');
   const [loteAgrupar, setLoteAgrupar] = useState<'nenhum' | 'zona'>('nenhum');
   const [loteGrupos, setLoteGrupos] = useState<GrupoZonaQr[] | null>(null);
+  const [loteOrigem, setLoteOrigem] = useState<'planta' | 'manual' | null>(null);
   const [plantaEventoId, setPlantaEventoId] = useState('');
   const [planta, setPlanta] = useState<Mesa[]>([]);
   const [plantaZonas, setPlantaZonas] = useState<Zona[]>([]);
@@ -1292,6 +1293,8 @@ function AdminPage() {
         : loteNomes.map((n) => n.trim()).filter(Boolean);
     if (!mesas.length) {
       setLoteGerado(null);
+      setLoteGrupos(null);
+      setLoteOrigem(null);
       setLoteErro(
         loteModo === 'intervalo'
           ? `Intervalo inválido. Usa mesas a partir da 1 e no máximo ${MAX_MESAS_LOTE} de uma vez.`
@@ -1302,6 +1305,10 @@ function AdminPage() {
     setLoteGerado(mesas);
     setLoteShortCode(qrEvento.shortCode);
     setLoteGrupos(null);
+    setLoteOrigem('manual');
+    // Lote manual não segue a planta, logo o "Agrupar por" da planta volta a
+    // "Ordem da planta": fica senão a dizer "Zona" sem grupos nenhuns.
+    setLoteAgrupar('nenhum');
     setLoteLugares((prev) => {
       const next: Record<string, number> = {};
       for (const mesa of mesas) next[mesa] = prev[mesa] ?? loteLugaresPadrao;
@@ -1795,21 +1802,21 @@ function AdminPage() {
     }
   };
 
-  const gerarQrsDaPlanta = () => {
+  const prepararLotePlanta = (
+    modo: 'nenhum' | 'zona',
+  ): { nomes: string[]; lugares: Record<string, number>; grupos: GrupoZonaQr[] | null } => {
     const grupos =
-      loteAgrupar === 'zona'
+      modo === 'zona'
         ? agruparMesasPorZona(plantaEstadoRef.current, plantaZonasEstadoRef.current)
         : null;
     const mesas = grupos
       ? grupos.flatMap((grupo) => grupo.mesas)
       : plantaEstadoRef.current;
     const { nomes, lugares } = mesasParaQrs(mesas);
-    if (!nomes.length) return;
-    setLoteGerado(nomes);
-    setLoteLugares(lugares);
-    setLoteShortCode(plantaShortCode);
-    setLoteGrupos(
-      grupos
+    return {
+      nomes,
+      lugares,
+      grupos: grupos
         ? grupos
             .map((grupo) => ({
               titulo: grupo.zona?.nome.trim() || 'Sem zona',
@@ -1817,10 +1824,22 @@ function AdminPage() {
             }))
             .filter((grupo) => grupo.mesas.length > 0)
         : null,
-    );
+    };
+  };
+
+  const gerarQrsDaPlanta = (modo: 'nenhum' | 'zona' = loteAgrupar) => {
+    const { nomes, lugares, grupos } = prepararLotePlanta(modo);
+    if (!nomes.length) return;
+    setLoteGerado(nomes);
+    setLoteShortCode(plantaShortCode);
+    setLoteGrupos(grupos);
+    setLoteOrigem('planta');
+    const merged: Record<string, number> = {};
+    for (const mesa of nomes) merged[mesa] = loteLugares[mesa] ?? lugares[mesa] ?? loteLugaresPadrao;
+    setLoteLugares(merged);
     if (plantaShortCode) {
       try {
-        localStorage.setItem(`sf:qr-lugares:${plantaShortCode}`, JSON.stringify(lugares));
+        localStorage.setItem(`sf:qr-lugares:${plantaShortCode}`, JSON.stringify(merged));
       } catch {}
     }
   };
@@ -1909,6 +1928,7 @@ function AdminPage() {
     setLoteLugares({});
     setLoteShortCode('');
     setLoteGrupos(null);
+    setLoteOrigem(null);
   };
 
   const descarregarQr = () => {
@@ -4526,7 +4546,14 @@ function AdminPage() {
                           onChange={(e) => {
                             const valor = e.target.value as 'nenhum' | 'zona';
                             setLoteAgrupar(valor);
-                            if (valor !== 'zona') setLoteGrupos(null);
+                            if (valor !== 'zona') {
+                              setLoteGrupos(null);
+                              return;
+                            }
+                            // Entrar em "Zona" com um lote da planta já gerado
+                            // tem de recalcular: senão o select diz "Zona" mas as
+                            // folhas continuam em chunks.
+                            if (loteGerado && loteOrigem === 'planta') gerarQrsDaPlanta(valor);
                           }}
                           className="bg-surface-solid border border-border rounded-xl px-2.5 py-1.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
                         >
@@ -4534,7 +4561,7 @@ function AdminPage() {
                           <option value="zona">Zona</option>
                         </select>
                       </label>
-                      <Button size="sm" onClick={gerarQrsDaPlanta} disabled={!planta.length}>
+                      <Button size="sm" onClick={() => gerarQrsDaPlanta()} disabled={!planta.length}>
                         Gerar QRs das mesas
                       </Button>
                       <Button
