@@ -524,17 +524,55 @@ export async function updateEventSettings(eventId: string, data: any): Promise<a
   });
 }
 
-export async function getPlanta(eventId: string): Promise<any> {
-  return apiRequest(`/events/${eventId}/planta`);
+export interface PlantaResumo {
+  id: string;
+  nome: string;
+  version: number;
+}
+
+export async function getPlantas(eventId: string): Promise<PlantaResumo[]> {
+  return apiRequest(`/events/${eventId}/plantas`);
+}
+
+export async function criarPlanta(eventId: string, nome: string): Promise<PlantaResumo> {
+  return apiRequest(`/events/${eventId}/plantas`, {
+    method: 'POST',
+    body: JSON.stringify({ nome }),
+  });
+}
+
+export async function getPlanta(eventId: string, plantaId: string): Promise<any> {
+  return apiRequest(`/events/${eventId}/plantas/${plantaId}`);
 }
 
 export async function guardarPlanta(
   eventId: string,
-  data: { mesas: any[]; zonas?: any[]; version: number },
+  plantaId: string,
+  data: { mesas: any[]; zonas?: any[]; version: number; dimensoes?: any },
 ): Promise<any> {
-  return apiRequest(`/events/${eventId}/planta`, {
+  return apiRequest(`/events/${eventId}/plantas/${plantaId}`, {
     method: 'PUT',
     body: JSON.stringify(data),
+  });
+}
+
+export async function renomearPlanta(
+  eventId: string,
+  plantaId: string,
+  nome: string,
+): Promise<PlantaResumo> {
+  return apiRequest(`/events/${eventId}/plantas/${plantaId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ nome }),
+  });
+}
+
+export async function apagarPlanta(
+  eventId: string,
+  plantaId: string,
+): Promise<PlantaResumo> {
+  return apiRequest(`/events/${eventId}/plantas/${plantaId}`, {
+    method: 'DELETE',
   });
 }
 

@@ -16,7 +16,7 @@ import { Alert } from '@/components/ui/alert';
 import { SettingsIcon, CalendarIcon, UserIcon, ClipboardIcon, ShieldCheckIcon, CloseIcon, PencilIcon, TrashIcon, CopyIcon, WalletIcon } from '@/components/ui/icons';
 import { Dialog } from '@/components/ui/dialog';
 import { deveAvisarSessao, marcarAvisoSessao } from '@/lib/saldo-aviso';
-import { importProducts, getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, ajustarStock, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances, getReports, extendBalance, unarchiveBalance, markBalanceNotified, getPlanta, guardarPlanta, ApiError } from '@/lib/api';
+import { importProducts, getEvents, createEvent, updateEvent, updateEventStatus, deleteEvent, getUsers, updateUser, getProducts, getCategories, createProduct, updateProduct, deleteProduct, duplicateProduct, ajustarStock, getEventMembers, addEventMember, removeEventMember, getAudit, exportAuditCsv, getEventSettings, updateEventSettings, getOutstandingBalances, getReports, extendBalance, unarchiveBalance, markBalanceNotified, getPlantas, criarPlanta, getPlanta, guardarPlanta, renomearPlanta, apagarPlanta, ApiError, type PlantaResumo } from '@/lib/api';
 import { stockBaixo, esgotado } from '@/lib/stock';
 import { downloadTextFile } from '@/lib/download';
 import { montarUrlMesa } from '@/lib/mesa-qr';
@@ -56,6 +56,10 @@ import {
   resolverPlanoCargaPlanta,
   parsePlantaPendente,
   chavePlantaPendente,
+  chaveCachePlanta,
+  chaveContextoPlanta,
+  chavePlantaAtiva,
+  migrarChavesLegadasPlanta,
   descreverIdade,
   pendentesOrfaos,
   pendentesDeOutrosEventos,
@@ -167,15 +171,17 @@ function AdminPage() {
   >(null);
   const undoSnapshotRef = useRef<{ mesas: Mesa[]; zonas: Zona[] } | null>(null);
   const undoTimerRef = useRef<number | null>(null);
-  // Versão conhecida por evento (`shortCode`). Fica sem entrada enquanto o GET do
-  // evento não responde: gravar nessa janela enviaria a versão de outro evento
-  // (409, conflito espúrio), por isso a gravação é adiada até a versão chegar.
+  // Versão conhecida por contexto de planta (`chaveContextoPlanta`). Fica sem
+  // entrada enquanto o GET não responde: gravar nessa janela enviaria a versão de
+  // outra planta (409, conflito espúrio), por isso a gravação é adiada até a
+  // versão chegar.
   const plantaVersoesRef = useRef<Record<string, number>>({});
   const plantaGravarAdiadoRef = useRef<Record<string, true>>({});
   const plantaSaveTimerRef = useRef<number | null>(null);
   const plantaPendenteRef = useRef<{
     eventoId: string;
     shortCode: string;
+    plantaId: string;
     mesas: Mesa[];
     zonas: Zona[];
     dimensoes?: Dimensoes | null;
@@ -201,6 +207,16 @@ function AdminPage() {
   const [loteGrupos, setLoteGrupos] = useState<GrupoZonaQr[] | null>(null);
   const [loteOrigem, setLoteOrigem] = useState<'planta' | 'manual' | null>(null);
   const [plantaEventoId, setPlantaEventoId] = useState('');
+  const [plantas, setPlantas] = useState<PlantaResumo[]>([]);
+  const [plantaId, setPlantaId] = useState('');
+  const [plantaListaACarregar, setPlantaListaACarregar] = useState(false);
+  const [plantaListaErro, setPlantaListaErro] = useState(false);
+  const [plantaListaTentativa, setPlantaListaTentativa] = useState(0);
+  const [plantaDialogo, setPlantaDialogo] = useState<{
+    tipo: 'criar' | 'renomear' | 'apagar';
+    nome: string;
+  } | null>(null);
+  const [plantaDialogoErro, setPlantaDialogoErro] = useState('');
   const [planta, setPlanta] = useState<Mesa[]>([]);
   const [plantaZonas, setPlantaZonas] = useState<Zona[]>([]);
   const [plantaDimensoes, setPlantaDimensoes] = useState<Dimensoes | null>(null);
@@ -1100,6 +1116,29 @@ function AdminPage() {
     } catch {}
   };
 
+  const chavePlanta = chaveContextoPlanta(plantaShortCode, plantaId);
+  const podeEditarPlanta = !!plantaId || plantaListaErro;
+
+  const lerPlantaAtiva = () => {
+    try {
+      return localStorage.getItem(chavePlantaAtiva(plantaShortCode)) ?? '';
+    } catch {
+      return '';
+    }
+  };
+  const guardarPlantaAtiva = (id: string) => {
+    try {
+      localStorage.setItem(chavePlantaAtiva(plantaShortCode), id);
+    } catch {}
+  };
+  const temPendenteLegado = () => {
+    try {
+      return localStorage.getItem(chavePlantaPendente(plantaShortCode)) !== null;
+    } catch {
+      return false;
+    }
+  };
+
   useEffect(() => {
     // A idade mostrada no painel de conflito envelhece com o tempo: recalcula-a
     // enquanto esse painel estiver aberto.
@@ -1109,39 +1148,115 @@ function AdminPage() {
     return () => window.clearInterval(t);
   }, [plantaConflito?.pendenteTs]);
 
+  // Lista de plantas do evento. Em modo offline guarda a última planta conhecida
+  // (para arrancar pela chave por id) e deixa a carga da planta para o efeito
+  // seguinte. Só cria "Principal" quando ainda não existe nenhuma planta.
+  useEffect(() => {
+    if (!plantaEventoId) {
+      setPlantas([]);
+      setPlantaId('');
+      setPlantaListaACarregar(false);
+      return;
+    }
+    let cancelado = false;
+    void (async () => {
+      setPlantaListaACarregar(true);
+      setPlantaListaErro(false);
+      try {
+        let lista = await getPlantas(plantaEventoId);
+        if (lista.length === 0 && (activeTab === 'planta' || temPendenteLegado())) {
+          try {
+            lista = [await criarPlanta(plantaEventoId, 'Principal')];
+          } catch (e) {
+            if (!(e instanceof ApiError && e.status === 409)) throw e;
+            lista = await getPlantas(plantaEventoId);
+          }
+        }
+        if (cancelado) return;
+        if (lista.length === 0) {
+          setPlantas([]);
+          setPlantaId('');
+          return;
+        }
+        const alvo =
+          lista.find((p) => p.id === lerPlantaAtiva()) ??
+          lista.find((p) => p.nome === 'Principal') ??
+          lista[0];
+        migrarChavesLegadasPlanta(localStorage, plantaShortCode, alvo.id);
+        guardarPlantaAtiva(alvo.id);
+        const legado = chaveContextoPlanta(plantaShortCode);
+        if (plantaGravarAdiadoRef.current[legado] && legado !== alvo.id) {
+          plantaGravarAdiadoRef.current[alvo.id] = true;
+          delete plantaGravarAdiadoRef.current[legado];
+        }
+        setPlantas(lista);
+        setPlantaId((atual) => (lista.some((p) => p.id === atual) ? atual : alvo.id));
+      } catch {
+        if (cancelado) return;
+        // Sem ligação: a última planta conhecida mantém a chave por id; sem
+        // histórico, o contexto é o legado (sem id) — a carga seguinte decide.
+        setPlantas([]);
+        setPlantaId(lerPlantaAtiva());
+        setPlantaListaErro(true);
+      } finally {
+        if (!cancelado) setPlantaListaACarregar(false);
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plantaEventoId, plantaShortCode, activeTab, plantaListaTentativa]);
+
   useEffect(() => {
     if (!plantaEventoId || !plantaShortCode) return;
-    // Se mudou de evento, compromete o save pendente do evento anterior em vez de o descartar.
-    if (plantaSaveTimerRef.current) {
-      window.clearTimeout(plantaSaveTimerRef.current);
-      plantaSaveTimerRef.current = null;
-    }
+    // Sem planta resolvida (lista ainda a carregar) não há contexto a carregar.
+    if (!plantaId && !plantaListaErro) return;
+    // Mudou de evento ou de planta: compromete o save pendente do contexto
+    // anterior em vez de o descartar.
     const pendente = plantaPendenteRef.current;
-    plantaPendenteRef.current = null;
-    if (pendente && pendente.shortCode !== plantaShortCode) {
+    const chaveDoPendente = pendente
+      ? chaveContextoPlanta(pendente.shortCode, pendente.plantaId)
+      : '';
+    if (pendente && chaveDoPendente !== chavePlanta) {
+      if (plantaSaveTimerRef.current) {
+        window.clearTimeout(plantaSaveTimerRef.current);
+        plantaSaveTimerRef.current = null;
+      }
+      plantaPendenteRef.current = null;
       // A edição ficou guardada com a versão que era conhecida nessa altura.
       if (typeof pendente.version === 'number') {
-        plantaVersoesRef.current[pendente.shortCode] = pendente.version;
+        plantaVersoesRef.current[chaveDoPendente] = pendente.version;
       }
       void enviarPlantaContexto(
         pendente.eventoId,
         pendente.shortCode,
+        pendente.plantaId,
         pendente.mesas,
         pendente.zonas,
         pendente.dimensoes ?? undefined,
       );
     }
     let pendenteInicial: ReturnType<typeof parsePlantaPendente> = null;
+    // Arranque do evento: ainda sem planta escolhida, mas com a última conhecida
+    // gravada. Usa-a já para o carregamento poder correr em paralelo com a lista —
+    // não se gravam edições nesse intervalo (podeEditarPlanta continua falso).
+    const plantaArranque = plantaId || lerPlantaAtiva();
+    const chaveArranque = chaveContextoPlanta(plantaShortCode, plantaArranque);
     try {
-      pendenteInicial = parsePlantaPendente(localStorage.getItem(chavePlantaPendente(plantaShortCode)));
+      pendenteInicial = parsePlantaPendente(
+        localStorage.getItem(chavePlantaPendente(plantaShortCode, plantaArranque)),
+      );
     } catch {}
-    const docCache = parseDocumentoPlanta(localStorage.getItem(`sf:planta:${plantaShortCode}`));
+    const docCache = parseDocumentoPlanta(
+      localStorage.getItem(chaveCachePlanta(plantaShortCode, plantaArranque)),
+    );
     const docInicial = pendenteInicial
       ? { mesas: pendenteInicial.mesas, zonas: pendenteInicial.zonas }
       : docCache;
     const carregadas = docInicial.mesas;
     const zonasCarregadas = docInicial.zonas;
-    plantaCarregadaRef.current = plantaShortCode;
+    plantaCarregadaRef.current = chaveArranque;
     plantaEditadaDesdeCargaRef.current = false;
     plantaEstadoRef.current = carregadas;
     plantaZonasEstadoRef.current = zonasCarregadas;
@@ -1157,19 +1272,44 @@ function AdminPage() {
     setPlantaSync('');
     const eventoId = plantaEventoId;
     let cancelado = false;
+    const semLigacao = () => {
+      if (cancelado || plantaCarregadaRef.current !== chaveArranque) return;
+      // Offline ou servidor indisponível: mantém a cópia local. Se havia uma
+      // gravação à espera da versão, fica registada como pendente para o aviso.
+      setPlantaSync('offline');
+      if (plantaGravarAdiadoRef.current[chaveArranque]) {
+        delete plantaGravarAdiadoRef.current[chaveArranque];
+        registarPendentePlanta(
+          plantaShortCode,
+          plantaArranque,
+          plantaEstadoRef.current,
+          plantaZonasEstadoRef.current,
+          undefined,
+        );
+      }
+    };
     void (async () => {
+      if (!plantaArranque) {
+        // Sem planta conhecida desde o arranque (sem ligação): só a cópia local.
+        semLigacao();
+        return;
+      }
       try {
-        const remoto = await getPlanta(eventoId);
-        if (cancelado || plantaCarregadaRef.current !== plantaShortCode) return;
+        const remoto = await getPlanta(eventoId, plantaArranque);
+        if (cancelado || plantaCarregadaRef.current !== chaveArranque) return;
         const versaoServidor = typeof remoto?.version === 'number' ? remoto.version : 0;
         const docRemoto = parseDocumentoPlanta(JSON.stringify(remoto ?? null));
         if (docRemoto.dimensoes) aplicarDimensoes(docRemoto.dimensoes);
         // Actualiza a version base mesmo que não apliquemos as mesas, para o próximo save
         // não partir de uma version desactualizada.
-        plantaVersoesRef.current[plantaShortCode] = versaoServidor;
+        plantaVersoesRef.current[chaveArranque] = versaoServidor;
+        // O carregamento pode ter arrancado antes de a lista resolver: se a
+        // planta guardada já não é esta (o efeito da lista corrigiu para outra
+        // deste evento), o estado pertence a essa — não adoptar este documento.
+        if (plantaId === plantaArranque && lerPlantaAtiva() !== plantaArranque) return;
         // Uma gravação adiada por a versão ser desconhecida já pode seguir.
-        if (plantaGravarAdiadoRef.current[plantaShortCode]) {
-          delete plantaGravarAdiadoRef.current[plantaShortCode];
+        if (plantaGravarAdiadoRef.current[chaveArranque]) {
+          delete plantaGravarAdiadoRef.current[chaveArranque];
           agendarGuardarPlanta(plantaEstadoRef.current);
         }
         const plano = resolverPlanoCargaPlanta({
@@ -1202,6 +1342,7 @@ function AdminPage() {
           void enviarPlantaContexto(
             eventoId,
             plantaShortCode,
+            plantaArranque,
             plano.mesas,
             plano.zonas,
           );
@@ -1211,7 +1352,7 @@ function AdminPage() {
         setPlantaZonas(plano.zonas);
         try {
           localStorage.setItem(
-            `sf:planta:${plantaShortCode}`,
+            chaveCachePlanta(plantaShortCode, plantaArranque),
             JSON.stringify({
               mesas: plano.mesas,
               zonas: plano.zonas,
@@ -1219,27 +1360,27 @@ function AdminPage() {
             }),
           );
         } catch {}
-      } catch {
-        if (cancelado || plantaCarregadaRef.current !== plantaShortCode) return;
-        // Offline ou servidor indisponível: mantém a cópia local. Se havia uma
-        // gravação à espera da versão, fica registada como pendente para o aviso.
-        setPlantaSync('offline');
-        if (plantaGravarAdiadoRef.current[plantaShortCode]) {
-          delete plantaGravarAdiadoRef.current[plantaShortCode];
-          registarPendentePlanta(
-            plantaShortCode,
-            plantaEstadoRef.current,
-            plantaZonasEstadoRef.current,
-            undefined,
-          );
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) {
+          // A planta já não existe no servidor (apagada noutro dispositivo):
+          // limpa a referência e volta a buscar a lista.
+          if (cancelado || plantaCarregadaRef.current !== chaveArranque) return;
+          if (plantaId && plantaId !== plantaArranque) return;
+          try {
+            localStorage.removeItem(chavePlantaAtiva(plantaShortCode));
+          } catch {}
+          setPlantaId('');
+          setPlantaListaTentativa((n) => n + 1);
+          return;
         }
+        semLigacao();
       }
     })();
     return () => {
       cancelado = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plantaEventoId, plantaShortCode]);
+  }, [plantaEventoId, plantaShortCode, plantaId, plantaListaErro]);
 
   useEffect(() => {
     if (events.length === 0) return;
@@ -1318,10 +1459,10 @@ function AdminPage() {
 
   const gravarPlanta = (mesas: Mesa[]) => {
     if (!plantaShortCode) return;
-    if (plantaCarregadaRef.current !== plantaShortCode) return;
+    if (plantaCarregadaRef.current !== chavePlanta) return;
     try {
       localStorage.setItem(
-        `sf:planta:${plantaShortCode}`,
+        chaveCachePlanta(plantaShortCode, plantaId),
         JSON.stringify({
           mesas,
           zonas: plantaZonasEstadoRef.current,
@@ -1348,13 +1489,14 @@ function AdminPage() {
   // aviso de pendentes (a carga seguinte decide entre retomar ou pedir escolha).
   const registarPendentePlanta = (
     shortCode: string,
+    plantaIdPendente: string,
     mesas: Mesa[],
     zonas: Zona[],
     version: number | undefined,
   ) => {
     try {
       localStorage.setItem(
-        chavePlantaPendente(shortCode),
+        chavePlantaPendente(shortCode, plantaIdPendente),
         JSON.stringify({
           mesas,
           zonas,
@@ -1370,18 +1512,31 @@ function AdminPage() {
   const enviarPlantaContexto = async (
     eventoId: string,
     shortCode: string,
+    plantaIdContexto: string,
     mesas: Mesa[],
     zonas: Zona[],
     dimensoes?: Dimensoes,
   ) => {
     if (!eventoId || !shortCode) return;
-    const ativo = () => plantaCarregadaRef.current === shortCode;
+    const chave = chaveContextoPlanta(shortCode, plantaIdContexto);
+    const ativo = () => plantaCarregadaRef.current === chave;
     const seqDoEnvio = plantaEdicaoSeqRef.current;
-    const version = plantaVersoesRef.current[shortCode];
-    if (version === undefined) {
-      // O GET do evento ainda não trouxe a versão: gravar agora enviaria a versão
-      // de outro evento. Fica adiada e é reenviada assim que a versão chegar.
-      plantaGravarAdiadoRef.current[shortCode] = true;
+    const version = plantaVersoesRef.current[chave];
+    if (version === undefined || !plantaIdContexto) {
+      // A versão ainda não chegou ou não há planta resolvida: gravar agora
+      // enviaria a versão errada (ou não teria para onde gravar). Fica adiada e
+      // registada como pendente, para não se perder num reload.
+      plantaGravarAdiadoRef.current[chave] = true;
+      const anterior = parsePlantaPendente(
+        localStorage.getItem(chavePlantaPendente(shortCode, plantaIdContexto)),
+      );
+      registarPendentePlanta(
+        shortCode,
+        plantaIdContexto,
+        mesas,
+        zonas,
+        anterior ? anterior.version : undefined,
+      );
       if (ativo()) setPlantaSync('saving');
       return;
     }
@@ -1392,19 +1547,22 @@ function AdminPage() {
     };
     if (ativo()) setPlantaSync('saving');
     try {
-      const r = await guardarPlanta(eventoId, {
+      const r = await guardarPlanta(eventoId, plantaIdContexto, {
         mesas,
         zonas,
         version,
         ...(dimensoes ? { dimensoes } : {}),
       });
       try {
-        localStorage.setItem(`sf:planta:${shortCode}`, JSON.stringify(docCache));
-        localStorage.removeItem(chavePlantaPendente(shortCode));
+        localStorage.setItem(
+          chaveCachePlanta(shortCode, plantaIdContexto),
+          JSON.stringify(docCache),
+        );
+        localStorage.removeItem(chavePlantaPendente(shortCode, plantaIdContexto));
       } catch {}
       atualizarPendentesPlanta();
       if (!ativo()) return;
-      plantaVersoesRef.current[shortCode] =
+      plantaVersoesRef.current[chave] =
         typeof r?.version === 'number' ? r.version : version + 1;
       // A gravação representa o estado actual: deixa de haver edições por gravar.
       if (plantaEdicaoSeqRef.current === seqDoEnvio) plantaEditadaDesdeCargaRef.current = false;
@@ -1412,7 +1570,7 @@ function AdminPage() {
       setPlantaSync('saved');
     } catch (e) {
       // Persiste a edição por sincronizar para não se perder num reload/troca de evento.
-      registarPendentePlanta(shortCode, mesas, zonas, version);
+      registarPendentePlanta(shortCode, plantaIdContexto, mesas, zonas, version);
       if (!ativo()) {
         // O evento já não está activo (flush ao trocar de evento): não podemos mostrar o
         // conflito no contexto do evento actual, mas a edição ficou guardada localmente e o
@@ -1437,10 +1595,11 @@ function AdminPage() {
   };
 
   const enviarPlanta = (mesas: Mesa[]) => {
-    if (plantaCarregadaRef.current !== plantaShortCode) return;
+    if (plantaCarregadaRef.current !== chavePlanta) return;
     void enviarPlantaContexto(
       plantaEventoId,
       plantaShortCode,
+      plantaId,
       mesas,
       plantaZonasEstadoRef.current,
     );
@@ -1448,14 +1607,15 @@ function AdminPage() {
 
   const agendarGuardarPlanta = (mesas: Mesa[]) => {
     if (!plantaEventoId || !plantaShortCode) return;
-    if (plantaCarregadaRef.current !== plantaShortCode) return;
+    if (plantaCarregadaRef.current !== chavePlanta) return;
     plantaPendenteRef.current = {
       eventoId: plantaEventoId,
       shortCode: plantaShortCode,
+      plantaId,
       mesas,
       zonas: plantaZonasEstadoRef.current,
       dimensoes: plantaDimensoesRef.current,
-      version: plantaVersoesRef.current[plantaShortCode],
+      version: plantaVersoesRef.current[chavePlanta],
     };
     if (plantaSaveTimerRef.current) window.clearTimeout(plantaSaveTimerRef.current);
     plantaSaveTimerRef.current = window.setTimeout(() => {
@@ -1466,6 +1626,7 @@ function AdminPage() {
         void enviarPlantaContexto(
           pendente.eventoId,
           pendente.shortCode,
+          pendente.plantaId,
           pendente.mesas,
           pendente.zonas,
           pendente.dimensoes ?? undefined,
@@ -1477,7 +1638,7 @@ function AdminPage() {
   const recarregarPlantaRemota = () => {
     const conflito = plantaConflito;
     if (!conflito) return;
-    plantaVersoesRef.current[plantaShortCode] = conflito.version;
+    plantaVersoesRef.current[chavePlanta] = conflito.version;
     plantaEstadoRef.current = conflito.mesas;
     plantaZonasEstadoRef.current = conflito.zonas;
     aplicarDimensoes(conflito.dimensoes ?? null);
@@ -1490,14 +1651,14 @@ function AdminPage() {
     if (plantaShortCode) {
       try {
         localStorage.setItem(
-          `sf:planta:${plantaShortCode}`,
+          chaveCachePlanta(plantaShortCode, plantaId),
           JSON.stringify({
             mesas: conflito.mesas,
             zonas: conflito.zonas,
             ...(conflito.dimensoes ? { dimensoes: conflito.dimensoes } : {}),
           }),
         );
-        localStorage.removeItem(chavePlantaPendente(plantaShortCode));
+        localStorage.removeItem(chavePlantaPendente(plantaShortCode, plantaId));
       } catch {}
     }
     setPlantaConflito(null);
@@ -1507,7 +1668,7 @@ function AdminPage() {
   const forcarGuardarPlanta = () => {
     const conflito = plantaConflito;
     if (!conflito) return;
-    plantaVersoesRef.current[plantaShortCode] = conflito.version;
+    plantaVersoesRef.current[chavePlanta] = conflito.version;
     setPlantaConflito(null);
     void enviarPlanta(plantaEstadoRef.current);
   };
@@ -1519,7 +1680,7 @@ function AdminPage() {
 
   const descartarPlantaLocal = () => {
     setPlantaImportarDisponivel(false);
-    plantaVersoesRef.current[plantaShortCode] = 0;
+    plantaVersoesRef.current[chavePlanta] = 0;
     plantaEstadoRef.current = [];
     plantaZonasEstadoRef.current = [];
     setPlanta([]);
@@ -1530,9 +1691,62 @@ function AdminPage() {
     esquecerEdicoesLocais();
     if (plantaShortCode) {
       try {
-        localStorage.removeItem(`sf:planta:${plantaShortCode}`);
-        localStorage.removeItem(chavePlantaPendente(plantaShortCode));
+        localStorage.removeItem(chaveCachePlanta(plantaShortCode, plantaId));
+        localStorage.removeItem(chavePlantaPendente(plantaShortCode, plantaId));
       } catch {}
+    }
+  };
+
+  const abrirPlantaDialogo = (tipo: 'criar' | 'renomear' | 'apagar') => {
+    setPlantaDialogoErro('');
+    const activa = plantas.find((p) => p.id === plantaId);
+    const nome = tipo === 'renomear' ? (activa?.nome ?? '') : `Planta ${plantas.length + 1}`;
+    setPlantaDialogo({ tipo, nome });
+  };
+
+  const confirmarPlantaDialogo = async () => {
+    const dialogo = plantaDialogo;
+    if (!dialogo || !plantaEventoId || !plantaShortCode) return;
+    const nome = dialogo.nome.trim();
+    if (dialogo.tipo !== 'apagar' && !nome) {
+      setPlantaDialogoErro('O nome da planta é obrigatório.');
+      return;
+    }
+    setPlantaDialogoErro('');
+    try {
+      if (dialogo.tipo === 'criar') {
+        const nova = await criarPlanta(plantaEventoId, nome);
+        migrarChavesLegadasPlanta(localStorage, plantaShortCode, nova.id);
+        guardarPlantaAtiva(nova.id);
+        setPlantas((prev) => [...prev, nova]);
+        setPlantaId(nova.id);
+      } else if (dialogo.tipo === 'renomear') {
+        if (!plantaId) return;
+        const actualizada = await renomearPlanta(plantaEventoId, plantaId, nome);
+        setPlantas((prev) => prev.map((p) => (p.id === plantaId ? actualizada : p)));
+      } else {
+        if (!plantaId) return;
+        const apagadaId = plantaId;
+        await apagarPlanta(plantaEventoId, apagadaId);
+        try {
+          localStorage.removeItem(chaveCachePlanta(plantaShortCode, apagadaId));
+          localStorage.removeItem(chavePlantaPendente(plantaShortCode, apagadaId));
+        } catch {}
+        const restantes = plantas.filter((p) => p.id !== apagadaId);
+        const nova = restantes.find((p) => p.nome === 'Principal') ?? restantes[0];
+        setPlantas(restantes);
+        if (nova) {
+          guardarPlantaAtiva(nova.id);
+          setPlantaId(nova.id);
+        }
+        setPlantaSel(null);
+        setZonaSel(null);
+      }
+      setPlantaDialogo(null);
+    } catch (e) {
+      setPlantaDialogoErro(
+        e instanceof ApiError ? e.message : 'Não foi possível concluir. Tenta de novo.',
+      );
     }
   };
 
@@ -1544,6 +1758,8 @@ function AdminPage() {
   };
 
   const definirDocumento = (mesas: Mesa[], zonas: Zona[]) => {
+    // Sem planta carregada (lista ainda a resolver) não há para onde gravar.
+    if (plantaCarregadaRef.current !== chavePlanta) return;
     plantaEstadoRef.current = mesas;
     plantaZonasEstadoRef.current = zonas;
     marcarPlantaEditada();
@@ -1846,6 +2062,7 @@ function AdminPage() {
 
   const guardarDimensoesPlanta = () => {
     if (!plantaEventoId || !plantaShortCode) return;
+    if (!podeEditarPlanta) return;
     const atuais = plantaDimensoesRef.current;
     const larguraTexto = plantaLarguraM.trim();
     const alturaTexto = plantaAlturaM.trim();
@@ -1872,6 +2089,7 @@ function AdminPage() {
     void enviarPlantaContexto(
       plantaEventoId,
       plantaShortCode,
+      plantaId,
       plantaEstadoRef.current,
       plantaZonasEstadoRef.current,
       novas,
@@ -4121,6 +4339,57 @@ function AdminPage() {
                         ))}
                       </select>
                     </label>
+                    <label className="block min-w-48">
+                      <span className="block text-sm font-medium text-zinc-400 mb-1.5">Planta</span>
+                      <select
+                        value={plantaId}
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+                          guardarPlantaAtiva(e.target.value);
+                          setPlantaId(e.target.value);
+                        }}
+                        disabled={plantas.length === 0}
+                        className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40 disabled:opacity-60"
+                      >
+                        {plantas.length > 0 ? (
+                          plantas.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.nome}
+                            </option>
+                          ))
+                        ) : (
+                          <option value={plantaId}>
+                            {plantaId ? 'Última planta (sem ligação)' : 'Sem ligação'}
+                          </option>
+                        )}
+                      </select>
+                    </label>
+                    <div className="flex items-end gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => abrirPlantaDialogo('criar')}
+                        disabled={!plantaEventoId || plantaListaErro || plantaListaACarregar}
+                      >
+                        Nova planta
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => abrirPlantaDialogo('renomear')}
+                        disabled={!plantaId || plantas.length === 0 || plantaListaErro}
+                      >
+                        Renomear
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => abrirPlantaDialogo('apagar')}
+                        disabled={!plantaId || plantas.length <= 1 || plantaListaErro}
+                      >
+                        Apagar
+                      </Button>
+                    </div>
                     <label className="block w-48">
                       <span className="block text-sm font-medium text-zinc-400 mb-1.5">Nova mesa</span>
                       <input
@@ -4130,14 +4399,14 @@ function AdminPage() {
                         className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
                       />
                     </label>
-                    <Button size="sm" onClick={adicionarMesaPlanta} disabled={!plantaEventoId}>
+                    <Button size="sm" onClick={adicionarMesaPlanta} disabled={!plantaEventoId || !podeEditarPlanta}>
                       Adicionar mesa
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={adicionarZonaPlanta}
-                      disabled={!plantaEventoId || plantaZonas.length >= MAX_ZONAS_PLANTA}
+                      disabled={!plantaEventoId || !podeEditarPlanta || plantaZonas.length >= MAX_ZONAS_PLANTA}
                     >
                       Adicionar zona
                     </Button>
@@ -4145,7 +4414,7 @@ function AdminPage() {
                       size="sm"
                       variant="danger"
                       onClick={() => setPlantaLimpar(true)}
-                      disabled={!planta.length}
+                      disabled={!podeEditarPlanta || !planta.length}
                     >
                       Limpar planta
                     </Button>
@@ -4153,7 +4422,7 @@ function AdminPage() {
                       size="sm"
                       variant="outline"
                       onClick={autoOrganizarPlanta}
-                      disabled={planta.length < 2}
+                      disabled={!podeEditarPlanta || planta.length < 2}
                     >
                       Auto-organizar
                     </Button>
@@ -4170,7 +4439,7 @@ function AdminPage() {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') e.currentTarget.blur();
                         }}
-                        disabled={!plantaEventoId}
+                        disabled={!plantaEventoId || !podeEditarPlanta}
                         aria-label="Largura da planta em metros"
                         className="w-20 rounded-lg border border-border bg-surface-solid px-2 py-1.5 text-sm text-zinc-100 focus:border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/40"
                       />
@@ -4189,7 +4458,7 @@ function AdminPage() {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') e.currentTarget.blur();
                         }}
-                        disabled={!plantaEventoId}
+                        disabled={!plantaEventoId || !podeEditarPlanta}
                         aria-label="Altura da planta em metros"
                         className="w-20 rounded-lg border border-border bg-surface-solid px-2 py-1.5 text-sm text-zinc-100 focus:border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/40"
                       />
@@ -4629,6 +4898,57 @@ function AdminPage() {
           </>
         }
       />
+
+      <Dialog
+        open={plantaDialogo !== null}
+        onClose={() => setPlantaDialogo(null)}
+        title={
+          plantaDialogo?.tipo === 'renomear'
+            ? 'Renomear planta'
+            : plantaDialogo?.tipo === 'apagar'
+              ? 'Apagar planta'
+              : 'Nova planta'
+        }
+        description={
+          plantaDialogo?.tipo === 'apagar'
+            ? `«${plantas.find((p) => p.id === plantaId)?.nome ?? ''}» deixa de estar disponível, com o seu layout.`
+            : undefined
+        }
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setPlantaDialogo(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant={plantaDialogo?.tipo === 'apagar' ? 'danger' : 'primary'}
+              onClick={() => void confirmarPlantaDialogo()}
+            >
+              {plantaDialogo?.tipo === 'apagar' ? 'Apagar' : 'Guardar'}
+            </Button>
+          </>
+        }
+      >
+        {plantaDialogo && plantaDialogo.tipo !== 'apagar' && (
+          <label className="block">
+            <span className="block text-sm font-medium text-zinc-400 mb-1.5">Nome</span>
+            <input
+              value={plantaDialogo.nome}
+              onChange={(e) =>
+                setPlantaDialogo((atual) => (atual ? { ...atual, nome: e.target.value } : atual))
+              }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void confirmarPlantaDialogo();
+              }}
+              autoFocus
+              maxLength={60}
+              className="w-full bg-surface-solid border border-border rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+            />
+          </label>
+        )}
+        {plantaDialogoErro && (
+          <p className="mt-3 text-xs text-amber-400">{plantaDialogoErro}</p>
+        )}
+      </Dialog>
     </>
   );
 }

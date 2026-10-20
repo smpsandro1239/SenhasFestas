@@ -20,6 +20,10 @@ import {
   pendentesOrfaos,
   pendentesDeOutrosEventos,
   chavePlantaPendente,
+  chaveCachePlanta,
+  chaveContextoPlanta,
+  chavePlantaAtiva,
+  migrarChavesLegadasPlanta,
   MAX_MESAS_PLANTA,
   corZona,
   fundoZona,
@@ -525,6 +529,72 @@ describe('pendentesDeOutrosEventos', () => {
       chavePlantaPendente(''),
     ];
     expect(pendentesDeOutrosEventos(chaves, '')).toEqual(['alfa', 'zulu']);
+  });
+
+  it('lê o shortCode de chaves por planta (<sc>:<plantaId>)', () => {
+    const chaves = [
+      chavePlantaPendente('festa', 'p1'),
+      chavePlantaPendente('magusto', 'p2'),
+      chavePlantaPendente('festa'),
+    ];
+    expect(pendentesDeOutrosEventos(chaves, 'festa')).toEqual(['magusto']);
+    expect(pendentesOrfaos(chaves, ['festa', 'magusto'])).toEqual([]);
+    expect(pendentesOrfaos([chavePlantaPendente('apagado', 'p3')], ['festa'])).toEqual([
+      chavePlantaPendente('apagado', 'p3'),
+    ]);
+  });
+});
+
+describe('chaves de planta', () => {
+  it('inclui o plantaId no pendente, no cache e no contexto', () => {
+    expect(chavePlantaPendente('festa')).toBe('sf:planta-pendente:festa');
+    expect(chavePlantaPendente('festa', 'p1')).toBe('sf:planta-pendente:festa:p1');
+    expect(chaveCachePlanta('festa')).toBe('sf:planta:festa');
+    expect(chaveCachePlanta('festa', 'p1')).toBe('sf:planta:festa:p1');
+    expect(chavePlantaAtiva('festa')).toBe('sf:planta-ativa:festa');
+    expect(chaveContextoPlanta('festa', 'p1')).toBe('p1');
+    expect(chaveContextoPlanta('festa')).toBe('legado:festa');
+  });
+});
+
+describe('migrarChavesLegadasPlanta', () => {
+  function storageCom(inicial: Record<string, string>) {
+    const mapa = new Map(Object.entries(inicial));
+    return {
+      getItem: (k: string) => mapa.get(k) ?? null,
+      setItem: (k: string, v: string) => void mapa.set(k, v),
+      removeItem: (k: string) => void mapa.delete(k),
+      mapa,
+    };
+  }
+
+  it('move cache e pendente legados para a chave da planta', () => {
+    const s = storageCom({
+      'sf:planta:festa': '{"mesas":[]}',
+      'sf:planta-pendente:festa': '{"mesas":[],"ts":1}',
+    });
+    migrarChavesLegadasPlanta(s, 'festa', 'p1');
+    expect(s.mapa.get('sf:planta:festa:p1')).toBe('{"mesas":[]}');
+    expect(s.mapa.get('sf:planta-pendente:festa:p1')).toBe('{"mesas":[],"ts":1}');
+    expect(s.mapa.has('sf:planta:festa')).toBe(false);
+    expect(s.mapa.has('sf:planta-pendente:festa')).toBe(false);
+  });
+
+  it('não sobrescreve a cópia que já existe na chave da planta', () => {
+    const s = storageCom({
+      'sf:planta:festa': '{"antigo":true}',
+      'sf:planta:festa:p1': '{"novo":true}',
+    });
+    migrarChavesLegadasPlanta(s, 'festa', 'p1');
+    expect(s.mapa.get('sf:planta:festa:p1')).toBe('{"novo":true}');
+    expect(s.mapa.has('sf:planta:festa')).toBe(false);
+  });
+
+  it('ignora shortCode ou plantaId vazios', () => {
+    const s = storageCom({ 'sf:planta:festa': 'x' });
+    migrarChavesLegadasPlanta(s, '', 'p1');
+    migrarChavesLegadasPlanta(s, 'festa', '');
+    expect(s.mapa.get('sf:planta:festa')).toBe('x');
   });
 });
 

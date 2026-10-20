@@ -271,9 +271,39 @@ export interface PlantaPendente {
 }
 
 export const PREFIXO_PLANTA_PENDENTE = 'sf:planta-pendente:';
+export const PREFIXO_PLANTA = 'sf:planta:';
+export const PREFIXO_PLANTA_ATIVA = 'sf:planta-ativa:';
 
-export function chavePlantaPendente(shortCode: string): string {
-  return `${PREFIXO_PLANTA_PENDENTE}${shortCode}`;
+/**
+ * Chave do pendente por planta. Sem `plantaId` fica a chave legada (uma planta
+ * só por evento, anteriores à multi-planta) para os pendentes antigos continuarem
+ * a ser lidos.
+ */
+export function chavePlantaPendente(shortCode: string, plantaId?: string): string {
+  return `${PREFIXO_PLANTA_PENDENTE}${shortCode}${plantaId ? `:${plantaId}` : ''}`;
+}
+
+/** Chave do documento em cache. Idem quanto à chave legada sem `plantaId`. */
+export function chaveCachePlanta(shortCode: string, plantaId?: string): string {
+  return `${PREFIXO_PLANTA}${shortCode}${plantaId ? `:${plantaId}` : ''}`;
+}
+
+/** Última planta conhecida de um evento (para arrancar em modo offline). */
+export function chavePlantaAtiva(shortCode: string): string {
+  return `${PREFIXO_PLANTA_ATIVA}${shortCode}`;
+}
+
+/**
+ * Identidade da planta activa para as refs em memória (versões, gravações
+ * adiadas). Sem `plantaId` o contexto é o legado, único por evento.
+ */
+export function chaveContextoPlanta(shortCode: string, plantaId?: string): string {
+  return plantaId || `legado:${shortCode}`;
+}
+
+/** O `shortCode` embutido numa chave de pendente (`<sc>` ou `<sc>:<plantaId>`). */
+function shortCodeDaChavePendente(chave: string): string {
+  return chave.slice(PREFIXO_PLANTA_PENDENTE.length).split(':')[0];
 }
 
 export function parsePlantaPendente(raw: string | null): PlantaPendente | null {
@@ -317,7 +347,7 @@ export function pendentesOrfaos(chaves: string[], shortCodesValidos: string[]): 
   return chaves.filter(
     (chave) =>
       chave.startsWith(PREFIXO_PLANTA_PENDENTE) &&
-      !validos.has(chave.slice(PREFIXO_PLANTA_PENDENTE.length)),
+      !validos.has(shortCodeDaChavePendente(chave)),
   );
 }
 
@@ -332,10 +362,35 @@ export function pendentesDeOutrosEventos(
   const outros = new Set<string>();
   for (const chave of chaves) {
     if (!chave.startsWith(PREFIXO_PLANTA_PENDENTE)) continue;
-    const shortCode = chave.slice(PREFIXO_PLANTA_PENDENTE.length);
+    const shortCode = shortCodeDaChavePendente(chave);
     if (shortCode && shortCode !== shortCodeAtual) outros.add(shortCode);
   }
   return [...outros].sort();
+}
+
+/**
+ * Migra as chaves legadas (sem `plantaId`) para a primeira planta real do
+ * evento: o cache e o pendente antigos passam a viver na chave da planta,
+ * escolhendo sempre a cópia nova quando esta já existe. As chaves antigas são
+ * removidas para não ficarem pendentes invisíveis.
+ */
+export function migrarChavesLegadasPlanta(
+  storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
+  shortCode: string,
+  plantaId: string,
+): void {
+  if (!shortCode || !plantaId) return;
+  try {
+    const migra = (chaveAntiga: string, chaveNova: string) => {
+      const valor = storage.getItem(chaveAntiga);
+      if (valor !== null && storage.getItem(chaveNova) === null) {
+        storage.setItem(chaveNova, valor);
+      }
+      storage.removeItem(chaveAntiga);
+    };
+    migra(chaveCachePlanta(shortCode), chaveCachePlanta(shortCode, plantaId));
+    migra(chavePlantaPendente(shortCode), chavePlantaPendente(shortCode, plantaId));
+  } catch {}
 }
 
 export interface Zona {
