@@ -19,7 +19,7 @@ Legenda de estado: `[ ]` pendente · `[~]` em curso · `[x]` concluído · `[!]`
 | `[x]` | T7 E2E UI dois contextos | testes | alta | T6 | evento `e2e-*` criado/apagado; `festa-teste-2026` intacto |
 | `[x]` | T8 spec `use-planta-socket` | testes | média | — | commit `41077d8`; 8 testes jsdom |
 | `[x]` | T9 corrigir nota serverless do `PLAN.md` | docs | média | — | commit `0451ded`; causa real = runtime serverless sem WS |
-| `[!]` | T5 push de `main` | release | alta | autorização explícita | 13 commits locais à frente de `origin/main`; nunca encadear com commit |
+| `[!]` | T5 push de `main` | release | alta | autorização explícita | 15 commits locais à frente de `origin/main`; nunca encadear com commit |
 | `[!]` | #5 validação visual com `cdt` | — | média | restart do opencode | tools `cdt_*` não carregadas na sessão |
 | `[ ]` | #13 bump `chrome-devtools-mcp` (pinado `@1.11.0`) | — | baixa | — | `PLAN.md` |
 
