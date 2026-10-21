@@ -67,7 +67,7 @@ describe('App e2e (Postgres + Redis)', () => {
         password: await bcrypt.hash(password, 10),
         name: 'Teste E2E',
         role: 'client',
-        accessCode: '123456',
+        accessCode: Math.floor(100000 + Math.random() * 900000).toString(),
         isActive: true,
       }),
     );
