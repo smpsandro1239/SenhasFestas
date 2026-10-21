@@ -252,12 +252,12 @@ mesa e relatórios financeiros.
 
 ## Notas operacionais
 
-- **Cron `cleanupExpiredTokens`** (`auth.service.ts:252`, `EVERY_DAY_AT_3AM`) — apaga
-  refresh tokens expirados/revogados. **Não está a correr**: em 2026-10-19 havia
-  **322 tokens expirados há >1 dia** (87 há >7 dias, o mais antigo de 2026-10-05) e
-  **187 revogados há >30 dias**. Suspeita: deploy serverless (Vercel) onde o
-  `@Cron` do `@nestjs/schedule` não dispara por não haver processo persistente.
-  Confirmar e, se aplicável, mover a limpeza para um cron externo (`/api/cron/*`).
+- **Cron `cleanupExpiredTokens`** (`auth.service.ts:252`, `EVERY_DAY_AT_3AM`) — **Resolvido 2026-10-21**:
+  passou a existir `/api/cron/cleanup-tokens` (GET/POST, gated por `CRON_SECRET`),
+  ligado no `vercel.json` (`0 3 * * *`), para correr em serverless onde o `@Cron`
+  não dispara. Contagens observadas antes do fix (322 expirados, 187 revogados >30d)
+  continuam a justificar correr a limpeza. O `@Cron` mantém-se para o modo processo
+  (`main.ts`).
 - **Realtime single-instance**: sem Redis o realtime **funciona** numa só instância
   (emissão local directa em `order.gateway.ts`). Degrada apenas em multi-instância
   (sem fan-out entre réplicas) e nos limites partilhados de join/sockets, que passam

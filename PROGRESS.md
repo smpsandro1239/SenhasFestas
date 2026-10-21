@@ -13,6 +13,41 @@
 
 ---
 
+## 2026-10-21 — Cron externo de limpeza de tokens (`/api/cron/cleanup-tokens`)
+
+**Objectivo**: o `@Cron cleanupExpiredTokens` (3AM) não dispara em serverless — havia
+322 tokens expirados e 187 revogados >30d por apagar. Fechar a via de limpeza onde a
+app realmente corre (Vercel).
+
+**Feito**
+- `CronController`: novos `GET`/`POST /api/cron/cleanup-tokens` que chamam
+  `AuthService.cleanupExpiredTokens()`, com o mesmo gating `CRON_SECRET`
+  (`Authorization: Bearer` do Vercel ou `x-cron-secret` manual).
+- `CronModule` importa `AuthModule` (`AuthService` já era exportado; sem ciclo — o
+  `AuthModule` não importa o `CronModule`).
+- `vercel.json`: entrou `/api/cron/cleanup-tokens` → `0 3 * * *`.
+- `cron.controller.spec.ts` (novo, 7 testes): recusa sem `CRON_SECRET`/segredo errado,
+  aceita Bearer e `x-cron-secret`, devolve contagem, zero sem falhar, e **verifica
+  antes de agir** (não chama o serviço se não autorizado).
+
+**Decisões**
+- **Só a via HTTP, sem duplicar o `@Cron`**: mantém-se o `@Cron` para o deploy por
+  processo (`main.ts`), o endpoint cobre serverless. Os dois convergem no mesmo
+  `AuthService.cleanupExpiredTokens()` — uma só implementação.
+- **Reutilizar o padrão existente** (`close-events`/`archive-balances`) em vez de
+  inventar outro mecanismo; o `assertAutorizado`/`safeEqual` são partilhados.
+
+**Gates (backend)**: `tsc` limpo · vitest **489/489** (+7) · build OK · lint 4
+warnings pré-existentes (nenhum novo). **Verificado em boot real** (`:3011`):
+`CronModule dependencies initialized`, rotas `cleanup-tokens` GET/POST mapeadas,
+`GET` sem segredo → **403** (não 404).
+
+**Commit**: `feat(cron): endpoint /api/cron/cleanup-tokens para limpeza em serverless`.
+
+**Pendente**: T10 (push de `main`, autorização).
+
+---
+
 ## 2026-10-21 — Dívida #14: indicador de realtime na planta
 
 **Objectivo**: paridade com o `useOrderSocket` — expor o `status` da ligação de
