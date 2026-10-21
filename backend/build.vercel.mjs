@@ -17,6 +17,10 @@ mkdirSync(funcDir, { recursive: true });
 mkdirSync(depsDir, { recursive: true });
 writeFileSync(path.join(depsDir, 'package.json'), '{}');
 
+// O bundle serverless inclui @senhasfestas/shared (consumido pelo gateway de
+// pedidos), por isso o dist tem de existir antes do esbuild.
+execSync('npm run build:shared', { stdio: 'inherit', cwd: root });
+
 execSync('npx nest build', { stdio: 'inherit', cwd: backendRoot });
 
 await build({

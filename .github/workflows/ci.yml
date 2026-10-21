@@ -46,11 +46,13 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - name: Instalar dependências (npm ci)
-        working-directory: backend
+      - name: Instalar dependências (npm ci na raiz — workspaces)
         run: npm ci
+
+      - name: Build do pacote partilhado
+        run: npm run build:shared
 
       - name: Lint
         working-directory: backend
@@ -90,11 +92,13 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - name: Instalar dependências (npm ci)
-        working-directory: frontend
+      - name: Instalar dependências (npm ci na raiz — workspaces)
         run: npm ci
+
+      - name: Build do pacote partilhado
+        run: npm run build:shared
 
       - name: Lint
         working-directory: frontend
@@ -161,18 +165,17 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: |
-            backend/package-lock.json
-            frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - name: Instalar dependências (backend + frontend)
-        run: |
-          npm ci --prefix backend
-          npm ci --prefix frontend
+      - name: Instalar dependências (npm ci na raiz — workspaces)
+        run: npm ci
 
       - name: Instalar Chromium
         working-directory: frontend
         run: npx playwright install --with-deps chromium
+
+      - name: Build do pacote partilhado
+        run: npm run build:shared
 
       - name: Build do backend
         working-directory: backend
@@ -218,11 +221,10 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Correr migrações de base de dados
         if: env.DEPLOY_HOST != ''
-        working-directory: backend
         env:
           NODE_ENV: production
           DB_HOST: ${{ secrets.DB_HOST }}
@@ -233,7 +235,8 @@ jobs:
           DB_SSL: "true"
         run: |
           npm ci
-          npm run migration:run
+          npm run build:shared
+          cd backend && npm run migration:run
 
       - name: Deploy via SSH
         if: env.DEPLOY_HOST != ''
