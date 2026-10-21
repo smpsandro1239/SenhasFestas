@@ -10,12 +10,20 @@ import { EventUserEntity } from '../entities';
 import { RedisService } from '../common/redis/redis.service';
 import { MembershipService } from '../common/membership.service';
 import { MANAGEMENT_ROLES } from '../common/roles';
+import {
+  CANAIS_REALTIME,
+  EVENTOS_SOCKET,
+  MENSAGENS_ENTRADA,
+  roomEvento,
+  roomPlanta,
+  type TipoAlteracaoPlanta,
+} from '@senhasfestas/shared';
 
-export type TipoAlteracaoPlanta = 'criada' | 'guardada' | 'renomeada' | 'apagada';
+export type { TipoAlteracaoPlanta } from '@senhasfestas/shared';
 
 const ORDER_STATUS_CACHE_TTL = 60 * 60 * 24;
-const CHANNEL = 'order:updates';
-const PLANTA_CHANNEL = 'planta:updates';
+const CHANNEL = CANAIS_REALTIME.pedidos;
+const PLANTA_CHANNEL = CANAIS_REALTIME.planta;
 
 const JOIN_WINDOW_MS = 60_000;
 const JOIN_LIMIT = 10;
@@ -90,7 +98,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
             return;
           }
           if (this.server) {
-            this.server.to(`event:${payload.eventId}:planta`).emit('plantaUpdated', {
+            this.server.to(roomPlanta(payload.eventId)).emit(EVENTOS_SOCKET.plantaUpdated, {
               plantaId: payload.plantaId,
               version: payload.version,
               tipo: payload.tipo,
@@ -102,9 +110,9 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
         if (!payload?.orderId) {
           return;
         }
-        const room = payload.eventId ? `event:${payload.eventId}` : 'public';
+        const room = payload.eventId ? roomEvento(payload.eventId) : 'public';
         if (this.server) {
-          this.server.to(room).emit('orderUpdated', { orderId: payload.orderId, status: payload.status });
+          this.server.to(room).emit(EVENTOS_SOCKET.orderUpdated, { orderId: payload.orderId, status: payload.status });
         }
       } catch {
         this.logger.warn('Mensagem malformada no canal de updates');
@@ -242,7 +250,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     }
   }
 
-  @SubscribeMessage('joinEvent')
+  @SubscribeMessage(MENSAGENS_ENTRADA.evento)
   async handleJoinEvent(@ConnectedSocket() client: Socket, @MessageBody() eventId: string) {
     const user = client.data?.user;
     if (!user) {
@@ -266,7 +274,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
         return;
       }
     }
-    client.join(`event:${eventId}`);
+    client.join(roomEvento(eventId));
   }
 
   /**
@@ -275,7 +283,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
    * para superadmin/organizer. Sem esta separação, um role operacional (caixa,
    * cozinha) receberia metadados de planta que não pode obter por HTTP.
    */
-  @SubscribeMessage('joinEventPlanta')
+  @SubscribeMessage(MENSAGENS_ENTRADA.planta)
   async handleJoinEventPlanta(@ConnectedSocket() client: Socket, @MessageBody() eventId: string) {
     const user = client.data?.user;
     if (!user) {
@@ -301,7 +309,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       client.emit('error', { message: 'Demasiados pedidos, aguarde um pouco' });
       return;
     }
-    client.join(`event:${eventId}:planta`);
+    client.join(roomPlanta(eventId));
   }
 
   /**
@@ -314,7 +322,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
   }
 
   emitOrderUpdate(orderId: string, status: string, eventId?: string) {
-    const room = eventId ? `event:${eventId}` : 'public';
+    const room = eventId ? roomEvento(eventId) : 'public';
     const payload = JSON.stringify({ orderId, status, eventId, at: new Date().toISOString() });
 
     // Com subscriber ativo, a re-emissão local para os sockets desta instância é feita
@@ -323,7 +331,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     if (this.distribuirViaRedis) {
       void this.redisService.publish(CHANNEL, payload);
     } else if (this.server) {
-      this.server.to(room).emit('orderUpdated', { orderId, status });
+      this.server.to(room).emit(EVENTOS_SOCKET.orderUpdated, { orderId, status });
     }
     this.redisService.set(`order:status:${orderId}`, status, ORDER_STATUS_CACHE_TTL);
   }
@@ -339,7 +347,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     if (this.distribuirViaRedis) {
       void this.redisService.publish(PLANTA_CHANNEL, payload);
     } else if (this.server) {
-      this.server.to(`event:${eventId}:planta`).emit('plantaUpdated', { plantaId, version, tipo });
+      this.server.to(roomPlanta(eventId)).emit(EVENTOS_SOCKET.plantaUpdated, { plantaId, version, tipo });
     }
   }
 }
