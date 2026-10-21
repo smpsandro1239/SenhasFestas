@@ -6,6 +6,10 @@
 
 Legenda de estado: `[ ]` pendente · `[~]` em curso · `[x]` concluído · `[!]` bloqueado
 
+Identificadores: `T<n>` = tarefa desta lista · `R<n>` = item do roadmap do
+`PLAN.md` · `D<n>` = dívida técnica do `PLAN.md`. (O `D13` e o `R13` não são o
+mesmo item — daí o prefixo.)
+
 | Estado | Item | Área | Prioridade | Depende de | Notas / prova |
 |---|---|---|---|---|---|
 | `[x]` | #11 multi-planta | planta | alta | — | commits `19b0349`…`4b2ee92`; E2E Playwright 9/9; vitest FE 278/278 |
@@ -24,9 +28,18 @@ Legenda de estado: `[ ]` pendente · `[~]` em curso · `[x]` concluído · `[!]`
 | `[x]` | #14 indicador de realtime no canal de planta | realtime | média | — | commit `feat(frontend)`; `usePlantaSocket` devolve `status`; badge no admin; motor partilhado com `useOrderSocket`; vitest FE 297/297 |
 | `[x]` | Cron limpeza de tokens em serverless | ops | alta | — | `/api/cron/cleanup-tokens` (GET/POST, `CRON_SECRET`) + `vercel.json` `0 3 * * *`; vitest BE 489/489; boot `:3011` 403 |
 | `[!]` | B teste de integração Redis do `OrderGateway` | realtime | média | Redis acessível | sem docker/redis-server nesta máquina — não verificável; job `browser-e2e` do CI já tem `redis:8-alpine` |
-| `[!]` | T5 push de `main` | release | alta | autorização explícita | 24 commits locais à frente de `origin/main`; nunca encadear com commit |
+| `[!]` | T5 push de `main` | release | alta | autorização explícita | 30 commits locais à frente de `origin/main`; nunca encadear com commit |
 | `[!]` | #5 validação visual com `cdt` | — | média | restart do opencode | tools `cdt_*` não carregadas na sessão |
-| `[x]` | #13 bump `chrome-devtools-mcp` (pinado `@1.11.0`) | — | baixa | — | verificado 2026-10-20: `latest` também é `1.11.0` — pin já actual; nada a fazer |
+| `[x]` | R13 bump `chrome-devtools-mcp` (pinado `@1.11.0`) | — | baixa | — | verificado 2026-10-20: `latest` também é `1.11.0` — pin já actual; nada a fazer |
+| `[x]` | D13 pacote `@senhasfestas/shared` (dívida técnica do `TipoAlteracaoPlanta` duplicado) | infra | alta | — | commits `259ed29`…`4565805`; contrato de realtime com uma só definição; TypeScript unificado (uma cópia, 5.7.3) |
+| `[x]` | T11 corrigir os dois Dockerfiles para o layout do monorepo | infra | alta | D13 | runtime do backend copia `packages/shared/dist`; runner do frontend com `frontend/server.js` — **build Docker a verificar** (sem Docker no ambiente) |
+| `[x]` | T12 remover o lockfile stale de `backend/` + alinhar dependências | infra | alta | D13 | `backend/package-lock.json` removido do índice; `@senhasfestas/shared` a `"*"`; `npm ci --dry-run` verde |
+| `[x]` | T13 verificar os 3 callers de `useOrderSocket` (cozinha/pedidos/pos) | testes | alta | R14 | a API pública não mudou (`useOrderSocket(refetch, eventId)`); `onOrderUpdated` não existe em lado nenhum; o `+10` testes era do #14 (`use-planta-socket.test.tsx`) |
+| `[x]` | T15 docs de #13 (PLAN/PROGRESS/TODO) + limpeza de portas e temporários | docs | média | D13 | runner standalone validado em `:3002` e terminado; `/tmp` limpo |
+| `[x]` | T16 validação automática dos documentos (chaves únicas) | docs | média | — | `npm run verify:docs` + job `docs` no CI; falha com a linha duplicada exacta |
+| `[x]` | T17 reescrever a série do #13 para manifestos e lock em sintonia | infra | média | D13 | commits `259ed29`…`4565805`; `npm ci --dry-run` a 0 em cada commit; série antiga em `backup/pre-t17` |
+| `[!]` | T18 configuração do projecto Vercel (root directory, build command) | ops | média | acesso ao dashboard | não verificável do repositório; o build serverless já compila o pacote partilhado |
+| `[!]` | T19 `nest g` depois do `overrides` do TypeScript | infra | baixa | — | o peer `typescript >= 6.0.0` do `@nestjs/schematics` fica violado em declarado |
 
 ## Bloqueadores
 
@@ -39,3 +52,12 @@ Legenda de estado: `[ ]` pendente · `[~]` em curso · `[x]` concluído · `[!]`
   `criarAplicacao`/`AppModule`, logo o gateway **é instanciado**; falha o runtime, não
   o registo).
 - Redis obrigatório no `.env` mas não a correr → gateway cai em emissão local (por desenho).
+- `outputFileTracingRoot` mudou o layout do standalone: o entrypoint é
+  `frontend/server.js` e o `public`/`.next/static` vivem em `frontend/`. Qualquer cópia
+  em CI, Docker ou Vercel tem de respeitar isto.
+- `joinEventPlanta` aparece nos bundles de `cozinha`/`pedidos`/`pos` porque
+  `MENSAGENS_ENTRADA` é um objecto partilhado (~15 bytes por bundle). Aceitável; se
+  incomodar, importar só as chaves individuais.
+- **Build Docker ainda por verificar** (não há Docker no ambiente): o layout do runner
+  e do runtime foi replicado e arrancado localmente, mas o `docker build` em si não
+  correu.

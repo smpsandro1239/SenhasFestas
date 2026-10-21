@@ -13,6 +13,115 @@
 
 ---
 
+## 2026-10-21 — Pacote partilhado `@senhasfestas/shared` (dívida #13)
+
+**Objectivo**: `TipoAlteracaoPlanta` e as strings de protocolo estavam duplicados
+entre o gateway do backend e os hooks do frontend — uma divergência (`'joinEventPlanta'`
+vs `'joinPlanta'`) só aparecia em runtime. Extrair para um pacote partilhado e
+adaptar CI, deploy e Docker ao monorepo npm workspaces.
+
+**Feito**
+- `packages/shared`: workspace com `TipoAlteracaoPlanta`, `CANAIS_REALTIME`,
+  `EVENTOS_SOCKET`, `MENSAGENS_ENTRADA`, `roomEvento` e `roomPlanta`. Compila para
+  CJS + `.d.ts` (o backend é CommonJS, o frontend faz bundle).
+- Backend (`order.gateway.ts`) e frontend (`planta.ts`, `use-order-socket.ts`,
+  `use-planta-socket.ts`) passam a consumir o pacote. A API pública de
+  `useOrderSocket(refetch, eventId)` **não mudou** — o rename `onMessage` foi só
+  interno ao `criarSocketAutenticado` (verificado nos 3 callers).
+- Raiz do repositório passou a ser o único sítio com lockfile e manifesto de
+  workspaces. `backend/package-lock.json` (stale, pré-workspaces) removido do índice.
+- CI, `deploy.sh` e `docker-compose.yml` instalam/buildam pela raiz; `next.config.js`
+  ganhou `outputFileTracingRoot` (raiz do repo).
+- `scripts/build-shared.js` (postinstall) compila o pacote quando há compilador.
+
+**Decisões**
+- **CJS + `.d.ts` em vez de ESM**: uma só forma de distribuição serve o backend
+  (CommonJS, não transpila nada fora de `src/`) e o frontend (`moduleResolution:
+  bundler`). O `package.json` do shared declara `main`/`types` em `dist`.
+- **TypeScript unificado na raiz (5.7.3)**: havia 4 cópias em 3 versões (6.0.3, 5.9.3,
+  5.7.3, 5.7.3). O `@nestjs/schematics` exige `typescript >= 6.0.0` como peer, o que
+  ocupava a raiz com a 6.0.3 — resolvido com um `overrides` que o alinha na 5.7.3. O
+  `postinstall` compila o pacote só se houver compilador (em `--omit=dev` não há, e o
+  runtime recebe o `dist` do builder).
+- **Docker**: o runtime do backend faz `npm ci --omit=dev`, logo não pode compilar o
+  pacote — o `packages/shared/dist` é copiado do builder. O
+  `node_modules/@senhasfestas/shared` é um symlink para `packages/shared`: copiar o
+  symlink como directório deixava o `require` sem ficheiro de entrada.
+- **`outputFileTracingRoot` na raiz do repo**: o standalone passa a espelhar o
+  monorepo — o entrypoint é `frontend/server.js`, e `public`/`.next/static` ficam em
+  `frontend/`.
+
+**Commits**
+- `259ed29` feat(shared): pacote @senhasfestas/shared com contrato de realtime
+- `43edff6` refactor(backend): consumir @senhasfestas/shared no gateway
+- `cbbef47` refactor(frontend): consumir @senhasfestas/shared nos hooks de socket
+- `432a9b1` chore(build): alinhar CI, deploy e Vercel com as workspaces na raiz
+- `4565805` build(docker): Dockerfiles com o layout do monorepo
+- `319ba16` ci: validar chaves únicas nos documentos
+- `HEAD` docs: registar a dívida D13 e actualizar o TODO
+
+**Gates**
+- Backend: `tsc` limpo · vitest **489/489** · build OK · lint 4 warnings pré-existentes
+- Frontend: `tsc` limpo · vitest **297/297** (15 ficheiros) · build OK · lint limpo
+- `npm ci --dry-run` na raiz: exit 0 (e em **cada** commit da série — a série foi
+  reescrita para que manifestos e lockfile batam certo em todos)
+- Layout do runner replicado localmente (`node frontend/server.js`): `/auth/login` **200**,
+  `public` **200**, `/_next/static` **200** — processo terminado e temporários removidos
+- Layout do runtime do backend replicado: symlink + `packages/shared/dist` resolvem
+  (`roomPlanta('evt-1')` → `event:evt-1:planta`)
+
+**Pendente**
+- **`docker build` a verificar** — não há Docker neste ambiente. O layout foi
+  replicado e arrancado localmente, mas o build da imagem não correu.
+- Push de `main` (T5) continua a exigir autorização explícita.
+- Configuração do projecto Vercel (root directory, build command) vive no dashboard —
+  não verificável a partir do repositório. O build serverless já não depende do
+  `postinstall`: `backend/build.vercel.mjs` corre `npm run build:shared` antes do
+  `nest build` (verificado: o bundle esbuild inclui `order:updates`, `planta:updates`,
+  `joinEvent`, `joinEventPlanta`, `plantaUpdated`, `orderUpdated`).
+- `nest g` não foi exercitado depois do `overrides` do TypeScript (o peer
+  `typescript >= 6.0.0` do `@nestjs/schematics` fica violado em declarado).
+
+---
+
+## 2026-10-21 — Revisão final: docs validados, histórico reescrito (bisectável)
+
+**Objectivo**: fechar os pontos da revisão que ficaram por resolver — a
+validação automática dos documentos, a coerência manifestos/lockfile em cada
+commit, e o build Vercel do pacote partilhado.
+
+**Feito**
+- `scripts/verificar-docs.js` + `npm run verify:docs`: chaves únicas na tabela de
+  dívida do `PLAN.md`, itens únicos na tabela do `TODO.md` e headings `## ` únicos no
+  `PROGRESS.md`. Sai com 1 e a listar o problema (provado: injectar uma linha
+  duplicada no `TODO.md` faz o script falhar com a linha exacta). Job novo
+  `docs` no `ci.yml`; o `deploy` passou a depender dele.
+- **Histórico reescrito** (6 → 7 commits, todos locais): o lockfile da raiz
+  antecipava a dependência que só aparecia nos manifests de commits posteriores.
+  Agora o commit do pacote partilhado traz já `backend/package.json` e
+  `frontend/package.json` com `@senhasfestas/shared: "*"`, e os commits seguintes
+  são só de código — em cada commit o manifesto casa com o lock. A série antiga
+  ficou em `backup/pre-t17` (nunca foi para o remoto).
+- `backend/build.vercel.mjs` passou a correr `npm run build:shared` antes do
+  `nest build`: o bundle serverless embute o gateway, que importa o pacote
+  partilhado, e não se pode depender do `postinstall` para o `dist` existir.
+- `PLAN.md` e `TODO.md` distinguem `D<n>` (dívida técnica) de `R<n>` (item do
+  roadmap) — o `D13` e o `R13` não são o mesmo item. A contagem de commits
+  pendentes no `TODO.md` foi corrigida.
+
+**Verificado**
+- As duas alleged duplicações da revisão **não se reproduzem**: o `PLAN.md` tem
+  uma só linha `| 13 |` (a resolvida) e o `TODO.md` uma só linha `T5`. O que
+  estava errado era a contagem de commits (28 em vez de 29).
+- `npm ci --dry-run` sai 0 em cada commit da série.
+- O bundle esbuild do backend inclui as constantes do pacote partilhado.
+
+**Pendente**
+- `docker build` (sem Docker), execução real do `ci.yml` (depende de push),
+  configuração do projecto Vercel (dashboard), `nest g` com o `overrides`.
+
+---
+
 ## 2026-10-21 — Cron externo de limpeza de tokens (`/api/cron/cleanup-tokens`)
 
 **Objectivo**: o `@Cron cleanupExpiredTokens` (3AM) não dispara em serverless — havia

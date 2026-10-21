@@ -15,6 +15,7 @@ mesa e relatórios financeiros.
 
 - **Backend**: NestJS + TypeORM + PostgreSQL
 - **Frontend**: Next.js 15 (App Router) + Tailwind + React 18
+- **Partilhado**: `@senhasfestas/shared` (`packages/shared`) — contrato de realtime (tipos, canais, eventos, rooms)
 - **Auth**: JWT (access + refresh em cookie httpOnly same-origin)
 - **Realtime**: Socket.IO (canal de pedidos, KDS)
 - **Deploy**: Vercel (frontend) + backend Node
@@ -230,6 +231,10 @@ mesa e relatórios financeiros.
 
 ## Dívida técnica registada
 
+Os números desta tabela são as chaves da dívida técnica (no `TODO.md` aparecem
+como `D<n>`). Não confundir com os itens numerados do roadmap (no `TODO.md` como
+`R<n>`) — o `D13` e o `R13` são coisas diferentes.
+
 | # | Descrição | Onde | Impacto |
 |---|---|---|---|
 | 1 | ~~Auditoria do interceptor só captura `after`~~ **Resolvido 2026-10-19** | `audit.interceptor.ts` | Suporte a `before` (+ `eventId`/`entityId`/`extras`) no interceptor; **todas as rotas de escrita** (catalog update/delete/stock, cash-closure abrir/fechar, balance load/deduct/reverse/transfer/extend/unarchive/notified, order status/cancel, kitchen status, public-screen entregue, event update/status/settings/members/remove, user update/remove, planta PUT) arquivam o estado anterior num mecanismo único (os registos directos do `AuditService` no catalog/cash-closure foram removidos — duplicavam). Criação e `POST /import` não têm `before` por não existir estado anterior |
@@ -244,7 +249,7 @@ mesa e relatórios financeiros.
 | 10 | ~~CSP (`script-src 'self' 'unsafe-inline'`) bloqueia `eval` do webpack em dev~~ **Resolvido 2026-10-19** | `next.config.js` | `'unsafe-eval'` adicionado só quando `!isProd`; hidratação verificada em dev, produção mantém CSP estrito |
 | 11 | ~~Rótulos acessíveis duplicam o prefixo (`"Mesa Mesa A"`, `"Zona Zona 1"`)~~ **Resolvido 2026-10-19** | `lib/planta.ts` (`rotuloAcessivel`) | `aria-label` só prefixa quando o nome não começa já pelo prefixo (palavra inteira), verificável no browser |
 | 12 | ~~Versão-base da planta é **do evento anterior** enquanto o GET do evento novo não resolve~~ **Resolvido 2026-10-19** | `admin/page.tsx` (`plantaVersoesRef`/`plantaGravarAdiadoRef`) | Passou a haver versão **por evento** (`{shortCode: version}`); sem versão conhecida a gravação é **adiada** (`plantaGravarAdiadoRef`) e reenviada quando o GET resolve — deixa de haver 409 espúrio ao trocar de evento e editar. Se o GET falhar (offline), a edição adiada fica registada como `pendente` (`registarPendentePlanta`, com `version` opcional). Verificado no browser: troca de evento com GET retido + arrasto → PUT com a versão certa → 200, sem painel de conflito |
-| 13 | `TipoAlteracaoPlanta` **definido duas vezes** (`backend/src/websocket/order.gateway.ts` e `frontend/src/lib/planta.ts`) | ambos | Sem pacote partilhado não há deriva detectável em compile: se um lado ganhar um tipo novo, o outro não falha. Extrair para um `packages/shared` (ou validação runtime) quando houver mais consumidores |
+| 13 | ~~`TipoAlteracaoPlanta` **definido duas vezes** (`backend/src/websocket/order.gateway.ts` e `frontend/src/lib/planta.ts`)~~ **Resolvido 2026-10-21** | `packages/shared` | O contrato de realtime passou a um pacote partilhado, `@senhasfestas/shared` (npm workspace): `TipoAlteracaoPlanta`, `CANAIS_REALTIME`, `EVENTOS_SOCKET`, `MENSAGENS_ENTRADA`, `roomEvento` e `roomPlanta` têm uma só definição, consumida pelo gateway do backend e pelos hooks `use-order-socket`/`use-planta-socket`. Uma divergência de string (`'joinEventPlanta'` vs `'joinPlanta'`) passa a falhar em `tsc` e não em runtime |
 | 14 | ~~`use-planta-socket` sem indicador de estado~~ **Resolvido 2026-10-21** | `frontend/src/lib/use-planta-socket.ts` | Passou a devolver `{ status: OrderSocketStatus }` e o `admin` mostra um badge de realtime ("Realtime ligado" / "a reconectar" / "sem realtime"). Para não duplicar a lógica, `criarSocketAutenticado` foi generalizado (`roomEvent`/`mensagem`/`onMessage`) e é agora o mesmo motor dos dois hooks. +2 testes de status (297 no total) |
 | 15 | E2E socket de 2026-10-20 **subiu a `version` da planta real** | evento `festa-teste-2026`, planta `e0979241-…` | `version` 1→30 (nome reposto para "Principal"). Monotónica, sem impacto prático (não há cliente com cache < 30), mas registado para não surpreender um 409 futuro. E2E futuro deve usar evento `e2e-*` e apagá-lo no fim |
 
@@ -252,6 +257,47 @@ mesa e relatórios financeiros.
 
 ## Notas operacionais
 
+- **Monorepo npm workspaces (2026-10-21)**: a raiz é o único sítio com lockfile e
+  manifesto de workspaces (`packages/*`, `backend`, `frontend`). Consequências:
+  - Instalar **na raiz** (`npm ci`), nunca por pasta — um `npm ci` em `backend/`
+    deixava de trazer o pacote partilhado. O `backend/package-lock.json` stale
+    (pré-workspaces) foi removido do índice.
+  - O pacote partilhado compila com `npm run build:shared` (TypeScript na raiz,
+    5.7.3) e tem de existir **antes** de qualquer build ou teste. O `postinstall`
+    (`scripts/build-shared.js`) compila-o automaticamente quando há compilador
+    disponível; em instalações `--omit=dev` não compila (o runtime recebe o
+    `dist` do builder).
+  - O TypeScript é unificado na raiz (5.7.3). O `@nestjs/schematics` exige
+    `typescript >= 6.0.0` como peer — resolvido com um `overrides` na raiz, que
+    o alinha na mesma versão do resto do código.
+- **`outputFileTracingRoot` e o layout do standalone**: com o pacote partilhado
+  fora de `frontend/`, o `next.config.js` define
+  `outputFileTracingRoot: path.join(__dirname, '..')`. Efeito: o standalone
+  espelha a raiz do repositório e o entrypoint passa a estar em
+  `frontend/server.js` (e não `server.js`). O `public` e o `.next/static` têm de
+  ir para `frontend/public` e `frontend/.next/static`. **Qualquer cópia em CI,
+  Docker ou Vercel tem de respeitar este layout.**
+- **Docker**: o build context é a raiz (`docker-compose.yml` usa `context: .`).
+  No runtime do backend o `npm ci` corre com `--omit=dev` (sem compilador), por
+  isso o `packages/shared/dist` é copiado do builder para
+  `packages/shared/dist` — o `node_modules/@senhasfestas/shared` é um symlink
+  para `packages/shared` e não pode ser copiado como directório.
+- **Vercel (2026-10-21)**: o projecto `senhas-festas` tem de ter a **raiz do
+  repositório** como *root directory* — é o que faz o `npm ci` da raiz trazer as
+  workspaces e o `outputFileTracingRoot` (`path.join(__dirname, '..')`) abranger
+  o `packages/shared`. A configuração do projecto (root directory, build command,
+  output directory) vive no dashboard da Vercel e **não é verificável a partir do
+  repositório**: fica a verificar. O build serverless (`build.vercel.mjs` →
+  `backend/build.vercel.mjs`) agora corre `npm run build:shared` antes do
+  `nest build`, para o `dist` do pacote partilhado existir quando o esbuild
+  embute o gateway; verificado localmente (o bundle contém `order:updates`,
+  `planta:updates`, `joinEvent`, `joinEventPlanta`, `plantaUpdated`,
+  `orderUpdated`).
+- **`overrides` do TypeScript e o `nest g`** (2026-10-21): o `overrides` da raiz
+  (`@nestjs/schematics` → `typescript ~5.7.3`) resolve o peer `>= 6.0.0` do
+  Nest CLI, mas **viola esse peer em declarado**. O `nest g` não foi exercitado
+  depois do `overrides` — fica a verificar. Workaround se falhar: correr
+  `nest g` com o TypeScript 6 isolado, ou usar o CLI do Nest 11 sem schematic.
 - **Cron `cleanupExpiredTokens`** (`auth.service.ts:252`, `EVERY_DAY_AT_3AM`) — **Resolvido 2026-10-21**:
   passou a existir `/api/cron/cleanup-tokens` (GET/POST, gated por `CRON_SECRET`),
   ligado no `vercel.json` (`0 3 * * *`), para correr em serverless onde o `@Cron`
