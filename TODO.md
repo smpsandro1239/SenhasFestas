@@ -21,7 +21,7 @@ Legenda de estado: `[ ]` pendente · `[~]` em curso · `[x]` concluído · `[!]`
 | `[x]` | T9 corrigir nota serverless do `PLAN.md` | docs | média | — | commit `0451ded`; causa real = runtime serverless sem WS |
 | `[!]` | T5 push de `main` | release | alta | autorização explícita | 15 commits locais à frente de `origin/main`; nunca encadear com commit |
 | `[!]` | #5 validação visual com `cdt` | — | média | restart do opencode | tools `cdt_*` não carregadas na sessão |
-| `[ ]` | #13 bump `chrome-devtools-mcp` (pinado `@1.11.0`) | — | baixa | — | `PLAN.md` |
+| `[x]` | #13 bump `chrome-devtools-mcp` (pinado `@1.11.0`) | — | baixa | — | verificado 2026-10-20: `latest` também é `1.11.0` — pin já actual; nada a fazer |
 
 ## Bloqueadores
 

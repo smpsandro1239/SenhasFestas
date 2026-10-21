@@ -210,7 +210,10 @@ mesa e relatórios financeiros.
 13. **Bump periódico do `chrome-devtools-mcp`** — está pinado em `1.11.0` (o
     `@latest` dava superfície de ferramentas não-determinística: 30 numa execução,
     32 noutra). O pin exige bump manual para receber correcções de bugs e
-    ferramentas novas; sem isto a versão fica presa.
+    ferramentas novas; sem isto a versão fica presa. **Verificado 2026-10-20**:
+    `npm view chrome-devtools-mcp version` → `1.11.0` e `dist-tags.latest` →
+    `1.11.0`, ou seja o pin **já é a versão mais recente** — não há bump a fazer
+    enquanto não sair uma nova.
 
 ---
 
