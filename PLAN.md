@@ -230,6 +230,9 @@ mesa e relatórios financeiros.
 | 10 | ~~CSP (`script-src 'self' 'unsafe-inline'`) bloqueia `eval` do webpack em dev~~ **Resolvido 2026-10-19** | `next.config.js` | `'unsafe-eval'` adicionado só quando `!isProd`; hidratação verificada em dev, produção mantém CSP estrito |
 | 11 | ~~Rótulos acessíveis duplicam o prefixo (`"Mesa Mesa A"`, `"Zona Zona 1"`)~~ **Resolvido 2026-10-19** | `lib/planta.ts` (`rotuloAcessivel`) | `aria-label` só prefixa quando o nome não começa já pelo prefixo (palavra inteira), verificável no browser |
 | 12 | ~~Versão-base da planta é **do evento anterior** enquanto o GET do evento novo não resolve~~ **Resolvido 2026-10-19** | `admin/page.tsx` (`plantaVersoesRef`/`plantaGravarAdiadoRef`) | Passou a haver versão **por evento** (`{shortCode: version}`); sem versão conhecida a gravação é **adiada** (`plantaGravarAdiadoRef`) e reenviada quando o GET resolve — deixa de haver 409 espúrio ao trocar de evento e editar. Se o GET falhar (offline), a edição adiada fica registada como `pendente` (`registarPendentePlanta`, com `version` opcional). Verificado no browser: troca de evento com GET retido + arrasto → PUT com a versão certa → 200, sem painel de conflito |
+| 13 | `TipoAlteracaoPlanta` **definido duas vezes** (`backend/src/websocket/order.gateway.ts` e `frontend/src/lib/planta.ts`) | ambos | Sem pacote partilhado não há deriva detectável em compile: se um lado ganhar um tipo novo, o outro não falha. Extrair para um `packages/shared` (ou validação runtime) quando houver mais consumidores |
+| 14 | `use-planta-socket` **sem indicador de estado** | `frontend/src/lib/use-planta-socket.ts` | Assimetria com `use-order-socket` (que expõe `status` para o badge). O utilizador só descobre o realtime em baixo pelo 409. Menor — o 409 é a rede de segurança |
+| 15 | E2E socket de 2026-10-20 **subiu a `version` da planta real** | evento `festa-teste-2026`, planta `e0979241-…` | `version` 1→30 (nome reposto para "Principal"). Monotónica, sem impacto prático (não há cliente com cache < 30), mas registado para não surpreender um 409 futuro. E2E futuro deve usar evento `e2e-*` e apagá-lo no fim |
 
 ---
 
@@ -245,10 +248,11 @@ mesa e relatórios financeiros.
   (emissão local directa em `order.gateway.ts`). Degrada apenas em multi-instância
   (sem fan-out entre réplicas) e nos limites partilhados de join/sockets, que passam
   a mapas locais (`order.gateway.ts:34-36`).
-- **WebSocket indisponível em serverless**: o entrypoint `backend/src/serverless.main.ts`
-  não regista o `OrderGateway`, logo em deploy serverless (Vercel) **não há realtime**
-  — nem `orderUpdated` nem `plantaUpdated`. O deploy com realtime tem de usar o
-  `main.ts` (processo Node persistente).
+- **WebSocket indisponível em serverless**: o `serverless.main.ts` reutiliza
+  `criarAplicacao`/`AppModule`, logo o `OrderGateway` **é instanciado**, mas o runtime
+  serverless (Vercel) não suporta ligações WS persistentes nem faz fan-out entre
+  invocações — na prática não há `orderUpdated` nem `plantaUpdated`. O deploy com
+  realtime tem de usar o `main.ts` (processo Node persistente).
 - **Crons de arranque**: o arranque do backend não muta dados. O único `@Cron` corre
   às 3AM, logo arranques fora dessa hora são seguros.
 

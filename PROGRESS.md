@@ -13,6 +13,34 @@
 
 ---
 
+## 2026-10-20 — Revisão v3 do batch T1–T4b/T3: correcção de doc e dívidas
+
+**Objectivo**: fechar os pontos levantados na revisão do batch antes de qualquer push.
+
+**Feito**
+- **T9** (`PLAN.md`, nota serverless): a nota afirmava que o `serverless.main.ts`
+  "não regista o `OrderGateway`" — **falso**. O ficheiro reutiliza `criarAplicacao`
+  (linha 3) e o `AppModule` importa `WebSocketModule` (`app.module.ts:59`), logo o
+  gateway **é instanciado**. A causa real é o runtime serverless não suportar WS
+  persistentes nem fan-out entre invocações. Nota corrigida com a causa correcta.
+- Dívidas 13/14/15 registadas na tabela `PLAN.md`: tipo duplicado backend/frontend,
+  `use-planta-socket` sem indicador de estado, e `version` 1→30 da planta real de
+  `festa-teste-2026` por E2E socket.
+
+**Decisões**
+- A correção de doc prova-se lendo os ficheiros (não só `ls`): `serverless.main.ts:3`
+  chama `criarAplicacao`; `app.module.ts:59` importa `WebSocketModule`. É a lição da
+  revisão — não escrever causa sem ler a linha.
+
+**Commits**: (este) `docs(plan): corrigir causa do WS em serverless e registar dívidas`.
+
+**Gates**: nenhum código tocado (só docs).
+
+**Pendente**: T6 (diagnóstico do login em dev — pode ser P0), T7 (E2E UI de dois
+contextos), T8 (spec do `use-planta-socket`), T10 (push, requer autorização).
+
+---
+
 ## 2026-10-20 — Frontend #12: planta em realtime (T3)
 
 **Objectivo**: consumir no `/admin` o `plantaUpdated` emitido pelo backend, sem
