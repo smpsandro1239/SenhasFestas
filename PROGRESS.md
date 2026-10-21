@@ -13,6 +13,52 @@
 
 ---
 
+## 2026-10-20 — T6 (login dev), T7 (E2E UI dois contextos) e T8 (spec do hook)
+
+**Objectivo**: fechar os gaps da revisão v3 — provar que o login em dev funciona,
+provar a adopção/aviso no DOM e cobrir o hook de socket.
+
+**Feito**
+- **T6 — não é bug**. Script Playwright: login real → `POST /api/auth/login 200`,
+  cookies `sf_token`/`sf_refresh` presentes no contexto (httpOnly, SameSite=Lax,
+  secure=false) e `localStorage.user` gravado. Com `waitForURL` (em vez de
+  `waitForTimeout` fixo) a navegação para `/admin` acontece e **persiste após
+  reload**. Veredicto: (a) era **timing do teste**, não falha de auth. Nota: o
+  `set-cookie` não aparece em `res.headers()` do Playwright (o CDP omite-o), mas
+  os cookies provam que o rewrite Next **propaga** o `Set-Cookie`.
+  **Armadilha encontrada**: um dev server com hot-reload estragado
+  (`__webpack_modules__[moduleId] is not a function`) serve o HTML mas não hidrata
+  o React — clicar em "Entrar" faz submissão nativa do form para `/auth/login?` e
+  nunca chama a API. **Limpar `.next` e reiniciar** resolve. Não é bug do produto.
+- **T7 — E2E UI de dois contextos (verde)**. Dois browsers independentes, login real,
+  `/admin` → tab Planta → mesmo evento `e2e-<ts>` (criado e apagado no fim, **nunca**
+  `festa-teste-2026`). Resultado: `A_criou_mesa=true`; `B_adotou=true` em **2878 ms**
+  (mesa nova apareceu no DOM de B **sem reload**, via socket); com edição local em B,
+  A grava → `B_avisou=true` (banner "mudou noutro dispositivo") e
+  `B_manteve_edicao=true` (a mesa local de B não se perdeu). Limpeza: DELETE 200 →
+  GET 404; eventos `e2e-planta-*` das tentativas falhadas também removidos.
+  `festa-teste-2026` confirmado intacto (`Principal v30`, sem novas alterações).
+- **T8 — `use-planta-socket.test.tsx`** (novo, 8 testes, jsdom): liga com token
+  actual e entra no `connect`; re-entra no `reconnect`; reemite `plantaUpdated`
+  válido; ignora payload malformado (sem `plantaId`) e `null`; usa sempre o callback
+  mais recente sem recriar socket; desliga no unmount; não abre socket sem `eventId`
+  nem sem `NEXT_PUBLIC_WS_URL`.
+
+**Decisões**
+- O E2E dirige a UI real (adicionar mesa pela toolbar) e observa a adopção pelo DOM
+  (`.planta-mesa`), em vez de arrastar no canvas — mais estável e prova o wiring
+  socket→hook→`tratarPlantaRemota`→`adoptarPlantaRemota`.
+- E2E sempre com evento próprio descartável; limpeza verificada (GET 404 no fim).
+
+**Commits**: `41077d8 test(frontend): spec do usePlantaSocket`.
+(T6/T7 são verificações; sem commit de produção.)
+
+**Gates**: frontend — `tsc` 0 erros · vitest **295/295** (+8) · `build` OK · lint limpo.
+
+**Pendente**: T10 (push de `main`, requer autorização), #5 (cdt), #13 (bump mcp).
+
+---
+
 ## 2026-10-20 — Revisão v3 do batch T1–T4b/T3: correcção de doc e dívidas
 
 **Objectivo**: fechar os pontos levantados na revisão do batch antes de qualquer push.
