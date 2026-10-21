@@ -13,6 +13,42 @@
 
 ---
 
+## 2026-10-21 — Dívida #14: indicador de realtime na planta
+
+**Objectivo**: paridade com o `useOrderSocket` — expor o `status` da ligação de
+planta para um badge, em vez de o utilizador só descobrir o realtime em baixo pelo
+409.
+
+**Feito**
+- `use-planta-socket.ts` devolve `{ status: OrderSocketStatus }`.
+- `criarSocketAutenticado` (em `use-order-socket.ts`) generalizado com
+  `roomEvent`/`mensagem`/`onMessage` — deixa de ser específico de pedidos e passa a
+  ser o motor dos dois hooks (uma só implementação de reconexão/re-auth). `onMessage`
+  recebe o payload; a validação (`plantaId` string) fica no `usePlantaSocket`.
+- `admin/page.tsx` (tab da planta): badge de realtime junto à contagem de mesas —
+  verde "Realtime ligado" / âmbar "a reconectar…" / vermelho "Sem realtime"; oculto
+  quando `disabled` (sem evento ou sem `NEXT_PUBLIC_WS_URL`).
+- Testes: `use-planta-socket.test.tsx` +2 (`disabled`→`connected`; `disconnect`→
+  `reconnecting`); `use-order-socket.test.ts` adaptado ao novo `onMessage`.
+
+**Decisões**
+- **Reutilizar o motor em vez de duplicar**: a lógica de reconexão infinita,
+  `connect_error`→refresh e badge era idêntica; generalizar evita duas cópias a
+  divergir (o bug clássico de indicadores de socket).
+
+**Gates (frontend)**: `tsc` limpo · vitest **297/297** (+2) · build OK · lint limpo.
+Backend não tocado.
+
+**Commit**: `feat(frontend): indicador de realtime no canal de planta (#14)`.
+
+**Escolha de task**: B (integração Redis do gateway) foi **saltada** — sem docker/
+redis-server nesta máquina, não é verificável ("não inventar"). Fica para quando
+houver Redis acessível.
+
+**Pendente**: T10 (push de `main`, autorização).
+
+---
+
 ## 2026-10-20 — CI: job browser-e2e (realtime da planta)
 
 **Objectivo**: tornar a suite browser repetível em CI e bloquear regressões de
