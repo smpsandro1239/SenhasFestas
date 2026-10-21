@@ -28,7 +28,7 @@ mesmo item — daí o prefixo.)
 | `[x]` | #14 indicador de realtime no canal de planta | realtime | média | — | commit `feat(frontend)`; `usePlantaSocket` devolve `status`; badge no admin; motor partilhado com `useOrderSocket`; vitest FE 297/297 |
 | `[x]` | Cron limpeza de tokens em serverless | ops | alta | — | `/api/cron/cleanup-tokens` (GET/POST, `CRON_SECRET`) + `vercel.json` `0 3 * * *`; vitest BE 489/489; boot `:3011` 403 |
 | `[!]` | B teste de integração Redis do `OrderGateway` | realtime | média | Redis acessível | sem docker/redis-server nesta máquina — não verificável; job `browser-e2e` do CI já tem `redis:8-alpine` |
-| `[!]` | T5 push de `main` | release | alta | autorização explícita | 30 commits locais à frente de `origin/main`; nunca encadear com commit |
+| `[x]` | T5 push de `main` | release | alta | autorização explícita | **push feito** (autorização explícita em 2026-10-21): 33 commits locais, série do `#13` completa — `259ed29`…`1d5d3d1` |
 | `[!]` | #5 validação visual com `cdt` | — | média | restart do opencode | tools `cdt_*` não carregadas na sessão |
 | `[x]` | R13 bump `chrome-devtools-mcp` (pinado `@1.11.0`) | — | baixa | — | verificado 2026-10-20: `latest` também é `1.11.0` — pin já actual; nada a fazer |
 | `[x]` | D13 pacote `@senhasfestas/shared` (dívida técnica do `TipoAlteracaoPlanta` duplicado) | infra | alta | — | commits `259ed29`…`4565805`; contrato de realtime com uma só definição; TypeScript unificado (uma cópia, 5.7.3) |
@@ -50,7 +50,9 @@ não foi commitado).
 
 ## Bloqueadores
 
-- **T5** — push só com autorização explícita do utilizador (regra do `AGENTS.md`).
+- **T5** — o push só happens com autorização explícita do utilizador (regra do
+  `AGENTS.md`). O lote do `#13` foi autorizado e pushed; os próximos continuam a
+  depender de autorização.
 - **#5** — o `chrome-devtools-mcp` só expõe as tools após reinício do opencode.
 
 ## Recados de dívida (registados no `PLAN.md`)
