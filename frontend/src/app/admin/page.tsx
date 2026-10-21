@@ -1737,7 +1737,7 @@ function AdminPage() {
     }
   };
 
-  usePlantaSocket(plantaEventoId || null, tratarPlantaRemota);
+  const { status: plantaSocketStatus } = usePlantaSocket(plantaEventoId || null, tratarPlantaRemota);
 
   // Aviso de alteração remota: ao recarregar, guarda a edição local como pendente
   // (recuperável pelo aviso de pendentes) antes de adoptar a versão do servidor.
@@ -4574,6 +4574,26 @@ function AdminPage() {
                       <span className="text-xs text-zinc-400">
                         {planta.length} mesa(s) ·{' '}
                         {planta.reduce((s, m) => s + normalizarLugares(m.lugares), 0)} lugares
+                      </span>
+                    )}
+                    {plantaSocketStatus !== 'disabled' && (
+                      <span
+                        aria-live="polite"
+                        title="Estado da ligação em tempo real. O 409 na gravação continua a ser a rede de segurança."
+                        className={
+                          'px-2.5 py-1 rounded-full font-semibold text-xs border ' +
+                          (plantaSocketStatus === 'connected'
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                            : plantaSocketStatus === 'reconnecting'
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                              : 'bg-red-500/10 text-red-400 border-red-500/30')
+                        }
+                      >
+                        {plantaSocketStatus === 'connected'
+                          ? 'Realtime ligado'
+                          : plantaSocketStatus === 'reconnecting'
+                            ? 'Realtime a reconectar…'
+                            : 'Sem realtime'}
                       </span>
                     )}
                     {plantaSync === 'saving' && (

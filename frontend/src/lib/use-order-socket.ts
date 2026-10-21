@@ -10,9 +10,21 @@ export function criarSocketAutenticado(options: {
   url: string;
   eventId: string;
   onStatus: (status: OrderSocketStatus) => void;
-  onOrderUpdated: () => void;
+  /** Canal a entrar após ligar/reconectar. Por omissão `joinEvent` (pedidos). */
+  roomEvent?: string;
+  /** Mensagem a que este canal reage. Por omissão `orderUpdated`. */
+  mensagem?: string;
+  /** Recebe o payload da mensagem; a validação fica a cargo de quem chama. */
+  onMessage: (payload: unknown) => void;
 }): Socket {
-  const { url, eventId, onStatus, onOrderUpdated } = options;
+  const {
+    url,
+    eventId,
+    onStatus,
+    onMessage,
+    roomEvent = 'joinEvent',
+    mensagem = 'orderUpdated',
+  } = options;
 
   const socket: Socket = io(url, {
     auth: { token: getAccessToken() ?? '' },
@@ -27,14 +39,14 @@ export function criarSocketAutenticado(options: {
     timeout: 5000,
   });
 
-  const entrarNoEvento = () => socket.emit('joinEvent', eventId);
+  const entrarNoEvento = () => socket.emit(roomEvent, eventId);
 
   socket.on('connect', () => {
     onStatus('connected');
     entrarNoEvento();
   });
   socket.on('reconnect', entrarNoEvento);
-  socket.on('orderUpdated', () => onOrderUpdated());
+  socket.on(mensagem, (payload: unknown) => onMessage(payload));
   socket.on('disconnect', () => onStatus('reconnecting'));
 
   // error (pós-conexão) é distinto de connect_error (falha de handshake):
@@ -77,7 +89,7 @@ export function useOrderSocket(
       url: rawUrl.replace(/\/+$/, ''),
       eventId,
       onStatus: setStatus,
-      onOrderUpdated: () => refetchRef.current(),
+      onMessage: () => refetchRef.current(),
     });
 
     return () => {

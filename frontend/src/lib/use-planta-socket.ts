@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { io, type Socket } from 'socket.io-client';
-import { getAccessToken } from './api';
+import { useEffect, useRef, useState } from 'react';
+import { criarSocketAutenticado, type OrderSocketStatus } from './use-order-socket';
 import type { EventoPlantaRemota } from './planta';
 
 /**
@@ -10,13 +9,17 @@ import type { EventoPlantaRemota } from './planta';
  * quem tem `MANAGEMENT_ROLES` (`joinEventPlanta`); sem permissão o servidor emite
  * `error` e o cliente simplesmente não recebe updates (o 409 HTTP continua a ser
  * a rede de segurança).
+ *
+ * Devolve o `status` de ligação (igual ao de `useOrderSocket`) para o badge — sem
+ * ele o utilizador só descobria o realtime em baixo pelo 409.
  */
 export function usePlantaSocket(
   eventId: string | null | undefined,
   onPlantaUpdated: (evento: EventoPlantaRemota) => void,
-): void {
+): { status: OrderSocketStatus } {
   const callbackRef = useRef(onPlantaUpdated);
   callbackRef.current = onPlantaUpdated;
+  const [status, setStatus] = useState<OrderSocketStatus>('disabled');
 
   useEffect(() => {
     const rawUrl = process.env.NEXT_PUBLIC_WS_URL;
@@ -24,27 +27,23 @@ export function usePlantaSocket(
       return;
     }
 
-    const socket: Socket = io(rawUrl.replace(/\/+$/, ''), {
-      auth: { token: getAccessToken() ?? '' },
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
-      timeout: 5000,
-    });
-
-    const entrar = () => socket.emit('joinEventPlanta', eventId);
-
-    socket.on('connect', entrar);
-    socket.on('reconnect', entrar);
-    socket.on('plantaUpdated', (payload: EventoPlantaRemota) => {
-      if (!payload || typeof payload.plantaId !== 'string') return;
-      callbackRef.current(payload);
+    const socket = criarSocketAutenticado({
+      url: rawUrl.replace(/\/+$/, ''),
+      eventId,
+      roomEvent: 'joinEventPlanta',
+      mensagem: 'plantaUpdated',
+      onStatus: setStatus,
+      onMessage: (payload) => {
+        const evento = payload as EventoPlantaRemota | null;
+        if (!evento || typeof evento.plantaId !== 'string') return;
+        callbackRef.current(evento);
+      },
     });
 
     return () => {
       socket.disconnect();
     };
   }, [eventId]);
+
+  return { status };
 }

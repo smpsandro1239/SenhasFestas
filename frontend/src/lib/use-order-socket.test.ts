@@ -51,7 +51,7 @@ describe('criarSocketAutenticado (A10: WS re-autentica e expõe erros)', () => {
     (io as any).mockReturnValue(socket);
     (getAccessToken as any).mockReturnValue('token-fresco');
 
-    criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus: vi.fn(), onOrderUpdated: vi.fn() });
+    criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus: vi.fn(), onMessage: vi.fn() });
 
     expect(io).toHaveBeenCalledWith(
       'ws://x',
@@ -68,7 +68,7 @@ describe('criarSocketAutenticado (A10: WS re-autentica e expõe erros)', () => {
       .mockReturnValueOnce('token-novo');
     (ensureFreshToken as any).mockResolvedValue(true);
 
-    criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus: vi.fn(), onOrderUpdated: vi.fn() });
+    criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus: vi.fn(), onMessage: vi.fn() });
     await disparar(socket, 'connect_error');
 
     expect(ensureFreshToken).toHaveBeenCalledTimes(1);
@@ -83,7 +83,7 @@ describe('criarSocketAutenticado (A10: WS re-autentica e expõe erros)', () => {
     (ensureFreshToken as any).mockResolvedValue(false);
     const onStatus = vi.fn();
 
-    criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus, onOrderUpdated: vi.fn() });
+    criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus, onMessage: vi.fn() });
     await disparar(socket, 'connect_error');
 
     expect(onStatus).toHaveBeenCalledWith('offline');
@@ -95,7 +95,7 @@ describe('criarSocketAutenticado (A10: WS re-autentica e expõe erros)', () => {
     (getAccessToken as any).mockReturnValue('token');
     const onStatus = vi.fn();
 
-    criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus, onOrderUpdated: vi.fn() });
+    criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus, onMessage: vi.fn() });
     disparar(socket, 'connect');
 
     expect(onStatus).toHaveBeenCalledWith('connected');
@@ -108,7 +108,7 @@ describe('criarSocketAutenticado (A10: WS re-autentica e expõe erros)', () => {
     (getAccessToken as any).mockReturnValue('token');
     const onStatus = vi.fn();
 
-    criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus, onOrderUpdated: vi.fn() });
+    criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus, onMessage: vi.fn() });
     await disparar(socket, 'error');
 
     expect(onStatus).toHaveBeenCalledWith('reconnecting');
@@ -119,7 +119,7 @@ describe('criarSocketAutenticado (A10: WS re-autentica e expõe erros)', () => {
     (io as any).mockReturnValue(socket);
     (getAccessToken as any).mockReturnValue('token');
 
-    criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus: vi.fn(), onOrderUpdated: vi.fn() });
+    criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus: vi.fn(), onMessage: vi.fn() });
 
     expect(io).toHaveBeenCalledWith(
       'ws://x',

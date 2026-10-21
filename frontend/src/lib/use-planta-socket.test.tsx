@@ -1,16 +1,21 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, act } from '@testing-library/react';
 import { io } from 'socket.io-client';
 import { usePlantaSocket } from './use-planta-socket';
 import { getAccessToken } from './api';
 
 vi.mock('socket.io-client', () => ({ io: vi.fn() }));
-vi.mock('./api', () => ({ getAccessToken: vi.fn() }));
+vi.mock('./api', () => ({
+  getAccessToken: vi.fn(),
+  ensureFreshToken: vi.fn().mockResolvedValue(false),
+}));
 
 interface FakeSocket {
+  auth: Record<string, unknown>;
   on: ReturnType<typeof vi.fn>;
   emit: ReturnType<typeof vi.fn>;
+  connect: ReturnType<typeof vi.fn>;
   disconnect: ReturnType<typeof vi.fn>;
   handlers: Record<string, Array<(...args: any[]) => void>>;
 }
@@ -18,12 +23,14 @@ interface FakeSocket {
 function novoFakeSocket(): FakeSocket {
   const handlers: Record<string, Array<(...args: any[]) => void>> = {};
   const fake: FakeSocket = {
+    auth: {},
     on: vi.fn((ev: string, cb: (...args: any[]) => void) => {
       handlers[ev] ??= [];
       handlers[ev].push(cb);
       return fake;
     }),
     emit: vi.fn(),
+    connect: vi.fn(),
     disconnect: vi.fn(),
     handlers,
   };
@@ -39,11 +46,14 @@ function disparar(socket: FakeSocket, evento: string, ...args: any[]) {
 function SocketHost({
   eventId,
   onPlantaUpdated,
+  onStatus,
 }: {
   eventId: string | null;
   onPlantaUpdated: (e: any) => void;
+  onStatus?: (s: string) => void;
 }) {
-  usePlantaSocket(eventId, onPlantaUpdated);
+  const { status } = usePlantaSocket(eventId, onPlantaUpdated);
+  onStatus?.(status);
   return null;
 }
 
@@ -143,5 +153,36 @@ describe('usePlantaSocket (contrato do canal de planta)', () => {
     delete process.env.NEXT_PUBLIC_WS_URL;
     render(<SocketHost eventId="evt1" onPlantaUpdated={vi.fn()} />);
     expect(io).not.toHaveBeenCalled();
+  });
+
+  it('status começa em disabled e passa a connected no connect (badge de ligação)', () => {
+    const socket = novoFakeSocket();
+    (io as any).mockReturnValue(socket);
+    const estados: string[] = [];
+
+    render(
+      <SocketHost eventId="evt1" onPlantaUpdated={vi.fn()} onStatus={(s) => estados.push(s)} />,
+    );
+    expect(estados.at(-1)).toBe('disabled');
+
+    act(() => {
+      disparar(socket, 'connect');
+    });
+    expect(estados.at(-1)).toBe('connected');
+  });
+
+  it('status passa a reconnecting no disconnect (realtime em baixo visível)', () => {
+    const socket = novoFakeSocket();
+    (io as any).mockReturnValue(socket);
+    const estados: string[] = [];
+
+    render(
+      <SocketHost eventId="evt1" onPlantaUpdated={vi.fn()} onStatus={(s) => estados.push(s)} />,
+    );
+    act(() => {
+      disparar(socket, 'connect');
+      disparar(socket, 'disconnect');
+    });
+    expect(estados.at(-1)).toBe('reconnecting');
   });
 });
