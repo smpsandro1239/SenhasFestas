@@ -137,9 +137,14 @@ mesa e relatórios financeiros.
    - **Realtime da planta agora tem suite Playwright reutilizável**
      (`frontend/e2e/planta-realtime.spec.ts`, 2026-10-20): dois contextos provam
      adopção remota (sem reload) e aviso com edição local preservada; cria/apaga
-     evento `e2e-*`. **Falta ligar ao CI** — exige orquestrar backend+frontend+
-     Postgres+Redis+Chromium num job, decisão de processo ainda em aberto (ver
-     `TODO.md`).
+     evento `e2e-*`.
+   - **Ligada ao CI** (`2026-10-20`): job `browser-e2e` em `.github/workflows/ci.yml`
+     — Postgres+Redis como serviços, migrações, build backend+frontend, arranque
+     de ambos, `wait-on`, Chromium do Playwright (`E2E_CHANNEL=chromium`) e
+     `planta-realtime.spec.ts`+`security-headers.spec.ts`. Semeia o admin por
+     `BOOTSTRAP_ADMIN_EMAIL/PASSWORD`. `deploy` passou a `needs: [backend,
+     frontend, browser-e2e]` (uma regressão de realtime bloqueia o deploy).
+     Validado localmente com a config exacta do CI (2 passed).
 
 6. **Validação de sobreposição de zonas**
    - Avisar quando duas zonas se sobrepõem significativamente.
@@ -269,8 +274,8 @@ mesa e relatórios financeiros.
   para `session.spec.ts`). Local: backend em `:3000`, `npm run dev --workspace
   frontend` em `:3001`, depois
   `E2E_BASE_URL=http://localhost:3001 E2E_CHANNEL=chrome E2E_ADMIN_EMAIL=…
-  E2E_ADMIN_PASSWORD=… npx playwright test` a partir de `frontend/`. **Não está no
-  CI** (ver item #5).
+  E2E_ADMIN_PASSWORD=… npx playwright test` a partir de `frontend/`. **No CI** corre
+  no job `browser-e2e` (Chromium do Playwright, `E2E_CHANNEL=chromium`).
 
 ---
 

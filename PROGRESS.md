@@ -13,6 +13,39 @@
 
 ---
 
+## 2026-10-20 — CI: job browser-e2e (realtime da planta)
+
+**Objectivo**: tornar a suite browser repetível em CI e bloquear regressões de
+realtime antes do deploy.
+
+**Feito**
+- Novo job **`browser-e2e`** em `.github/workflows/ci.yml`: serviços Postgres+Redis,
+  `npm ci` (backend+frontend), `playwright install --with-deps chromium`, build de
+  ambos, `migration:run` (o schema não é auto-criado fora de produção), arranque de
+  backend (`:3000`) e frontend (`:3001`), `wait-on` em `/api/health` e
+  `/auth/login`, e `playwright test planta-realtime.spec.ts security-headers.spec.ts`.
+  O admin é semeado por `BOOTSTRAP_ADMIN_EMAIL/PASSWORD` (o
+  `BootstrapAdminService` cria-o no arranque).
+- `deploy` passou a `needs: [backend, frontend, browser-e2e]`.
+
+**Decisões**
+- **`E2E_CHANNEL=chromium`** (browser do Playwright, não `chrome`/`msedge` do
+  sistema): o runner do GitHub não tem esses; o Playwright instala o seu.
+- **`session.spec.ts` fica fora do job**: exige `E2E_CLIENT_*` (uma conta de
+  cliente), que o bootstrap não cria. O job cobre planta-realtime + security-headers.
+- **Migrações explícitas antes do boot**: `migrationsRun` só corre em
+  `NODE_ENV=production`; em `test` o schema tem de ser criado à parte.
+
+**Verificação local**: a config exacta do CI (`E2E_CHANNEL=chromium`, os dois
+specs) corre localmente com **2 passed** (planta-realtime ~46 s + security-headers),
+com backend `:3000` e dev `:3001`. `e2e-planta-*` confirmado ausente no fim.
+
+**Commits**: `ci: job browser-e2e (realtime da planta) com Chromium e serviços`.
+
+**Pendente**: T10 (push de `main`, autorização).
+
+---
+
 ## 2026-10-20 — Suite Playwright do realtime da planta (T7 repetível)
 
 **Objectivo**: transformar o E2E ad-hoc de T7 numa spec reutilizável e correr a
