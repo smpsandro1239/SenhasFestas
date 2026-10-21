@@ -26,6 +26,7 @@
     "docker:infra": "docker compose up -d postgres redis",
     "docker:infra:down": "docker compose stop postgres redis",
     "lint": "cd backend && npm run lint && cd ../frontend && npm run lint",
+    "verify:docs": "node scripts/verificar-docs.js",
     "test": "cd backend && npm test",
     "test:e2e": "cd backend && npm run test:e2e",
     "test:e2e:browser": "cd frontend && npm run test:e2e:browser"

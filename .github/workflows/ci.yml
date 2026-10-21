@@ -206,10 +206,24 @@ jobs:
           echo '===== backend ====='; tail -n 200 /tmp/backend.log || true
           echo '===== frontend ====='; tail -n 200 /tmp/frontend.log || true
 
+  docs:
+    name: Documentação (chaves únicas)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Validar PLAN.md / TODO.md / PROGRESS.md
+        run: npm run verify:docs
+
   deploy:
     name: Deploy produção
     if: github.ref == 'refs/heads/main'
-    needs: [backend, frontend, browser-e2e]
+    needs: [backend, frontend, browser-e2e, docs]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
