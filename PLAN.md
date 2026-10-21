@@ -293,11 +293,19 @@ como `D<n>`). Não confundir com os itens numerados do roadmap (no `TODO.md` com
   embute o gateway; verificado localmente (o bundle contém `order:updates`,
   `planta:updates`, `joinEvent`, `joinEventPlanta`, `plantaUpdated`,
   `orderUpdated`).
-- **`overrides` do TypeScript e o `nest g`** (2026-10-21): o `overrides` da raiz
-  (`@nestjs/schematics` → `typescript ~5.7.3`) resolve o peer `>= 6.0.0` do
-  Nest CLI, mas **viola esse peer em declarado**. O `nest g` não foi exercitado
-  depois do `overrides` — fica a verificar. Workaround se falhar: correr
-  `nest g` com o TypeScript 6 isolado, ou usar o CLI do Nest 11 sem schematic.
+- **`overrides` do TypeScript e o `nest g`** (2026-10-21) — **decidido: manter**.
+  O `overrides` da raiz (`@nestjs/schematics` → `typescript ~5.7.3`) fixa o
+  compilador do schematic na mesma versão do resto do código. Verificado:
+  `npx nest g resource tmpProbe --dry-run` sai **0** (anuncia os 9 ficheiros
+  esperados e não escreve nada em disco).
+  O peer `typescript >= 6.0.0` do `@nestjs/schematics@12` fica **violado em
+  declarado** — mas a violação não é do `overrides`: sem ele, a re-resolução do
+  lockfile produz **exactamente a mesma árvore** (TypeScript 5.7.3 na raiz,
+  schematic dedupeado para 5.7.3, zero entradas diferentes no lock) e o npm
+  também não trava (exit 0, sem `ERESOLVE`). O `overrides` torna a resolução
+  explícita e independente das heurísticas de peer do npm. Aceitar TypeScript 6
+  na raiz mudaria o compilador de todo o projecto — não é o que o `overrides`
+  faz, nem o que a sua remoção faria.
 - **Cron `cleanupExpiredTokens`** (`auth.service.ts:252`, `EVERY_DAY_AT_3AM`) — **Resolvido 2026-10-21**:
   passou a existir `/api/cron/cleanup-tokens` (GET/POST, gated por `CRON_SECRET`),
   ligado no `vercel.json` (`0 3 * * *`), para correr em serverless onde o `@Cron`

@@ -19,8 +19,8 @@ mesmo item — daí o prefixo.)
 | `[x]` | T4b auditoria de segredos (`.env` tracked, `.gitignore`, CI) | segurança | alta | — | só `.env.example` tracked; `.env` gitignored; `ci.yml` cobre lint/test/build/e2e/migrações |
 | `[x]` | T4 limpar heading duplicado `PROGRESS.md` + `TODO.md` + limitação serverless no `PLAN.md` | docs | média | — | `uniq -d` vazio; `-5` linhas; nota WS serverless em `PLAN.md` |
 | `[x]` | T3 frontend #12: `use-planta-socket`, helper `decidirAdocaoRemota`, aviso/eco/refetch-lista | realtime | alta | T1 | commit `9e10b37`; vitest FE 295/295; E2E UI dois contextos verde (adopção 2.9s + aviso sem perder edição) |
-| `[x]` | T6 diagnóstico login dev (cookie `sf_token`) | bugfix | alta | — | NÃO é bug: era timing do teste + dev server sem hidratar (`__webpack_modules__`); limpar `.next` resolve |
-| `[x]` | T7 E2E UI dois contextos | testes | alta | T6 | evento `e2e-*` criado/apagado; `festa-teste-2026` intacto |
+| `[x]` | T6 diagnóstico login dev (cookie `sf_token`) | bugfix | alta | — | NÃO é bug: era timing do teste + dev server sem hidratar (`__webpack_modules__`); limpar `.next` resolve. **Prova DOM**: `PROGRESS.md` 2026-10-20 — login real `POST /api/auth/login` 200, cookies `sf_token`/`sf_refresh` presentes (httpOnly, SameSite=Lax), `localStorage.user` gravado, `/admin` persiste após reload. O contrato de sessão está coberto por `frontend/e2e/session.spec.ts` (6 testes DOM). *Residual*: o script de diagnóstico foi ad-hoc e não foi commitado |
+| `[x]` | T7 E2E UI dois contextos | testes | alta | T6 | **Prova DOM**: `PROGRESS.md` 2026-10-20 — mesa de A aparece no DOM de B sem reload (2878 ms) e banner "mudou noutro dispositivo" com a edição local de B intacta. **Spec commitada**: `frontend/e2e/planta-realtime.spec.ts` (login pela UI, `.planta-mesa` visível, aviso visível) — corre no job `browser-e2e` do CI. Evento `e2e-*` criado/apagado; `festa-teste-2026` intacto |
 | `[x]` | T8 spec `use-planta-socket` | testes | média | — | commit `41077d8`; 8 testes jsdom |
 | `[x]` | T9 corrigir nota serverless do `PLAN.md` | docs | média | — | commit `0451ded`; causa real = runtime serverless sem WS |
 | `[x]` | Suite browser Playwright do realtime da planta (dois contextos) | testes | alta | T7 | `frontend/e2e/planta-realtime.spec.ts`; 1 passed 46.5s local; evento `e2e-*` criado/apagado |
@@ -39,7 +39,14 @@ mesmo item — daí o prefixo.)
 | `[x]` | T16 validação automática dos documentos (chaves únicas) | docs | média | — | `npm run verify:docs` + job `docs` no CI; falha com a linha duplicada exacta |
 | `[x]` | T17 reescrever a série do #13 para manifestos e lock em sintonia | infra | média | D13 | commits `259ed29`…`4565805`; `npm ci --dry-run` a 0 em cada commit; série antiga em `backup/pre-t17` |
 | `[!]` | T18 configuração do projecto Vercel (root directory, build command) | ops | média | acesso ao dashboard | não verificável do repositório; o build serverless já compila o pacote partilhado |
-| `[!]` | T19 `nest g` depois do `overrides` do TypeScript | infra | baixa | — | o peer `typescript >= 6.0.0` do `@nestjs/schematics` fica violado em declarado |
+| `[x]` | T19 `nest g` depois do `overrides` do TypeScript | infra | baixa | — | **mantido**: `nest g resource tmpProbe --dry-run` exit 0; sem o `overrides` a árvore resolvida é idêntica — a violação do peer `>= 6.0.0` é do `@nestjs/schematics@12`, não do `overrides` |
+
+Nota (revisão de 2026-10-21): `T6`/`T7` **mantêm-se concluídos** — a revisão
+afirmava "marcados como `[x]` sem prova no DOM", mas a prova DOM existe e estava
+registada no `PROGRESS.md` (2026-10-20) e, no caso de `T7`, numa spec commitada que
+o CI corre. O que faltava era a *âncora* da prova na nota do item — foi aí que se
+corrigiu. `T6` fica com um residual anotado (o script de diagnóstico foi ad-hoc e
+não foi commitado).
 
 ## Bloqueadores
 
