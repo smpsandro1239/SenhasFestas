@@ -76,7 +76,7 @@ jobs:
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: ci-secret-nao-usado-em-producao
           FRONTEND_URL: http://localhost:3001
-          RATE_LIMIT_MAX: 5
+          RATE_LIMIT_MAX: 100
         run: npm run test:e2e
 
   frontend:
