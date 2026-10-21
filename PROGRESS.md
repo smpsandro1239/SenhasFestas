@@ -118,7 +118,54 @@ commit, e o build Vercel do pacote partilhado.
 
 **Pendente**
 - `docker build` (sem Docker), execução real do `ci.yml` (depende de push),
-  configuração do projecto Vercel (dashboard), `nest g` com o `overrides`.
+  configuração do projecto Vercel (dashboard).
+
+---
+
+## 2026-10-21 — Revisão final (2.ª ronda): provas, decisão do `overrides`, typecheck do frontend
+
+**Objectivo**: fechar os pontos que a revisão de código deixou em aberto —
+`T6`/`T7` sem prova, o `overrides` do TypeScript nunca decidido, a ausência de
+`typecheck` no frontend e a bisectabilidade da série do `#13`.
+
+**Feito**
+- **`T6`/`T7` — a alegação "sem prova no DOM" não se reproduz.** A prova existe:
+  `PROGRESS.md` 2026-10-20 regista o login real (200, cookies `sf_token`/`sf_refresh`
+  httpOnly, `localStorage.user`, `/admin` persistente após reload) e o E2E de dois
+  contextos (mesa de A visível no DOM de B sem reload, em 2878 ms, banner "mudou
+  noutro dispositivo" com a edição local intacta). O `T7` tem até spec commitada
+  (`frontend/e2e/planta-realtime.spec.ts`) a correr no job `browser-e2e` do CI. O
+  que faltava era a *âncora* da prova na nota do item — corrigida no `TODO.md`,
+  com a nota explícita de que a revisão partiu de um falso positivo.
+- **`overrides` do TypeScript — decidido: manter.** `npx nest g resource tmpProbe
+  --dry-run` sai **0** (anuncia os 9 ficheiros, não escreve nada). E a violação do
+  peer `typescript >= 6.0.0` do `@nestjs/schematics@12` **não é do `overrides`**:
+  re-resolvendo o lockfile *sem* o `overrides` obtém-se uma árvore **idêntica**
+  (TypeScript 5.7.3 na raiz, schematic dedupeado, zero entradas diferentes no
+  lock) e o npm também não trava. O `overrides` explicita a resolução e torna-a
+  independente das heurísticas de peer do npm. Aceitar TypeScript 6 na raiz
+  mudaria o compilador de todo o projecto — não é o que a remoção faria.
+- **`typecheck` no frontend**: o script `typecheck` (`tsc --noEmit -p tsconfig.json`)
+  existia no backend e não no frontend — o gate era manual. Adicionado ao
+  `frontend/package.json` e como step explícito no job `frontend` do CI.
+- **Bisectabilidade da série `#13` provada até ao build**: `npm ci` +
+  `npm run build:shared` + `nest build` + `next build` + vitest (backend **489/489**,
+  frontend **297/297**) em worktrees isolados de `259ed29`, `43edff6` e `cbbef47` —
+  os três commits onde o código muda. Os commits seguintes (`432a9b1`, `4565805`,
+  `319ba16`, `29b328e`) **não tocam nenhum input de build** (`backend/src`,
+  `frontend/src`, `next.config.js`, `packages/`, lockfile): o único delta de
+  manifesto é `+1` linha de script na raiz, e o `backend/build.vercel.mjs` não
+  entra no `nest build`. O resultado é herdado de `cbbef47`, por inputs
+  idênticos.
+
+**Verificado**
+- `npm run verify:docs` verde; YAML do `ci.yml` válido (5 jobs);
+  `npm run typecheck` exit 0 no frontend e no backend.
+- Worktrees e temporários removidos; `git status --short` vazio.
+
+**Pendente**
+- `docker build` (sem Docker), execução real do `ci.yml` (depende de push),
+  configuração do projecto Vercel (dashboard), push de `main` (T5).
 
 ---
 
