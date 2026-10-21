@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { criarSocketAutenticado, type OrderSocketStatus } from './use-order-socket';
 import type { EventoPlantaRemota } from './planta';
+import { EVENTOS_SOCKET, MENSAGENS_ENTRADA } from '@senhasfestas/shared';
 
 /**
  * Liga ao canal de planta do evento. O backend só deixa entrar
@@ -30,8 +31,8 @@ export function usePlantaSocket(
     const socket = criarSocketAutenticado({
       url: rawUrl.replace(/\/+$/, ''),
       eventId,
-      roomEvent: 'joinEventPlanta',
-      mensagem: 'plantaUpdated',
+      roomEvent: MENSAGENS_ENTRADA.planta,
+      mensagem: EVENTOS_SOCKET.plantaUpdated,
       onStatus: setStatus,
       onMessage: (payload) => {
         const evento = payload as EventoPlantaRemota | null;

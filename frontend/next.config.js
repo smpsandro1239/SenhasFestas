@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+const path = require('path');
 const isProd = process.env.NODE_ENV === 'production';
 
 const apiOrigin = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000')
@@ -41,6 +42,9 @@ const remotePatterns = assetHost
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  // Monorepo: o pacote partilhado vive fora de `frontend/`. Sem isto, o trace do
+  // `standalone` ignora `packages/shared` e o servidor em contentor não o encontra.
+  outputFileTracingRoot: path.join(__dirname, '..'),
 
   async rewrites() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';

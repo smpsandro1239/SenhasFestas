@@ -1,3 +1,6 @@
+import { type TipoAlteracaoPlanta } from '@senhasfestas/shared';
+export type { TipoAlteracaoPlanta } from '@senhasfestas/shared';
+
 export type FormaMesa = 'redonda' | 'quadrada';
 
 export interface Mesa {
@@ -262,8 +265,6 @@ export function resolverPlanoCargaPlanta(entrada: EntradaCargaPlanta): PlanoCarg
       };
   }
 }
-
-export type TipoAlteracaoPlanta = 'criada' | 'guardada' | 'renomeada' | 'apagada';
 
 export interface EventoPlantaRemota {
   plantaId: string;

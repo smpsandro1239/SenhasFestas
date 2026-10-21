@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { getAccessToken, ensureFreshToken } from './api';
+import { EVENTOS_SOCKET, MENSAGENS_ENTRADA } from '@senhasfestas/shared';
 
 export type OrderSocketStatus = 'disabled' | 'connected' | 'reconnecting' | 'offline';
 
@@ -22,8 +23,8 @@ export function criarSocketAutenticado(options: {
     eventId,
     onStatus,
     onMessage,
-    roomEvent = 'joinEvent',
-    mensagem = 'orderUpdated',
+    roomEvent = MENSAGENS_ENTRADA.evento,
+    mensagem = EVENTOS_SOCKET.orderUpdated,
   } = options;
 
   const socket: Socket = io(url, {
