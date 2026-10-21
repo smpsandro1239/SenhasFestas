@@ -19,7 +19,9 @@ Legenda de estado: `[ ]` pendente · `[~]` em curso · `[x]` concluído · `[!]`
 | `[x]` | T7 E2E UI dois contextos | testes | alta | T6 | evento `e2e-*` criado/apagado; `festa-teste-2026` intacto |
 | `[x]` | T8 spec `use-planta-socket` | testes | média | — | commit `41077d8`; 8 testes jsdom |
 | `[x]` | T9 corrigir nota serverless do `PLAN.md` | docs | média | — | commit `0451ded`; causa real = runtime serverless sem WS |
-| `[!]` | T5 push de `main` | release | alta | autorização explícita | 15 commits locais à frente de `origin/main`; nunca encadear com commit |
+| `[x]` | Suite browser Playwright do realtime da planta (dois contextos) | testes | alta | T7 | `frontend/e2e/planta-realtime.spec.ts`; 1 passed 46.5s local; evento `e2e-*` criado/apagado |
+| `[ ]` | Ligar a suite browser Playwright ao CI | ci | média | — | exige backend+frontend+Postgres+Redis+Chromium; decisão de processo em aberto |
+| `[!]` | T5 push de `main` | release | alta | autorização explícita | 18 commits locais à frente de `origin/main`; nunca encadear com commit |
 | `[!]` | #5 validação visual com `cdt` | — | média | restart do opencode | tools `cdt_*` não carregadas na sessão |
 | `[x]` | #13 bump `chrome-devtools-mcp` (pinado `@1.11.0`) | — | baixa | — | verificado 2026-10-20: `latest` também é `1.11.0` — pin já actual; nada a fazer |
 

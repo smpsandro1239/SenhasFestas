@@ -134,6 +134,12 @@ mesa e relatórios financeiros.
    - **Nota**: validação feita por Playwright (não `cdt`) em 2026-10-19 — login,
      criar mesas/zona, drag para dentro de zona, auto-organizar e export PNG
      confirmados (ver `PROGRESS.md`). O `cdt` continua a faltar validar em si.
+   - **Realtime da planta agora tem suite Playwright reutilizável**
+     (`frontend/e2e/planta-realtime.spec.ts`, 2026-10-20): dois contextos provam
+     adopção remota (sem reload) e aviso com edição local preservada; cria/apaga
+     evento `e2e-*`. **Falta ligar ao CI** — exige orquestrar backend+frontend+
+     Postgres+Redis+Chromium num job, decisão de processo ainda em aberto (ver
+     `TODO.md`).
 
 6. **Validação de sobreposição de zonas**
    - Avisar quando duas zonas se sobrepõem significativamente.
@@ -258,6 +264,13 @@ mesa e relatórios financeiros.
   realtime tem de usar o `main.ts` (processo Node persistente).
 - **Crons de arranque**: o arranque do backend não muta dados. O único `@Cron` corre
   às 3AM, logo arranques fora dessa hora são seguros.
+- **Suite browser Playwright** (`frontend/e2e/*.spec.ts`): não corre por omissão —
+  exige `E2E_BASE_URL` (e `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`, `E2E_CLIENT_*`
+  para `session.spec.ts`). Local: backend em `:3000`, `npm run dev --workspace
+  frontend` em `:3001`, depois
+  `E2E_BASE_URL=http://localhost:3001 E2E_CHANNEL=chrome E2E_ADMIN_EMAIL=…
+  E2E_ADMIN_PASSWORD=… npx playwright test` a partir de `frontend/`. **Não está no
+  CI** (ver item #5).
 
 ---
 

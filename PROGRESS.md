@@ -13,6 +13,36 @@
 
 ---
 
+## 2026-10-20 — Suite Playwright do realtime da planta (T7 repetível)
+
+**Objectivo**: transformar o E2E ad-hoc de T7 numa spec reutilizável e correr a
+suite localmente com prova verde.
+
+**Feito**
+- `frontend/e2e/planta-realtime.spec.ts` (novo): dois contextos de browser num
+  evento `e2e-*` descartável (criado por API, apagado no `finally`). Prova:
+  A adiciona uma mesa → B vê-a aparecer **sem reload** (via socket); com edição
+  local em B, A grava outra → B mostra o aviso "mudou noutro dispositivo" e a mesa
+  local **não** se perde. Segue a convenção da suite (credenciais do env, sem
+  segredos em código, `E2E_BASE_URL` obrigatório).
+- Corrida local: **1 passed (46.5s)** com backend `:3000` e dev `:3001`
+  (`E2E_CHANNEL=chrome`). Evento `e2e-planta-*` confirmado ausente no fim (0).
+
+**Decisões**
+- **Não ligar ao CI neste batch**: exige orquestrar backend+frontend+Postgres+
+  Redis+Chromium num job e uma política de flakiness — decisão de processo, não de
+  código. Fica registada como pendente no `PLAN.md` (#5) e no `TODO.md`.
+- Sem credenciais em código: reutiliza `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD` como
+  `session.spec.ts`; a criação do evento usa a API com Bearer (não a UI).
+
+**Commits**: `test(frontend): suite Playwright do realtime da planta (dois contextos)`.
+
+**Gates**: `tsc` 0 erros (spec incluída no `tsconfig`); Playwright 1/1 verde local.
+
+**Pendente**: ligar a suite browser ao CI (decisão), T10 (push, autorização).
+
+---
+
 ## 2026-10-20 — T6 (login dev), T7 (E2E UI dois contextos) e T8 (spec do hook)
 
 **Objectivo**: fechar os gaps da revisão v3 — provar que o login em dev funciona,
