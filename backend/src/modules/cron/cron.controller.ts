@@ -1,13 +1,18 @@
 import { Controller, Get, Post, Headers, ForbiddenException, Logger } from '@nestjs/common';
 import { EventService } from '../event/event.service';
 import { BalanceService } from '../balance/balance.service';
+import { AuthService } from '../auth/auth.service';
 
 const CRON_SECRET_ENV = 'CRON_SECRET';
 
 /**
- * Endpoint usado pelo cron da Vercel (vercel.json → /api/cron/close-events).
+ * Endpoint usado pelo cron da Vercel (vercel.json → /api/cron/*).
  * O Vercel invoca com GET e envia CRON_SECRET como 'Authorization: Bearer <secret>';
  * aceita POST manual (lazy check) com o header x-cron-secret.
+ *
+ * Existe porque o `@Cron` do `@nestjs/schedule` **não dispara** em serverless
+ * (Vercel): não há processo persistente. As mesmas rotinas correm aqui por
+ * invocação externa. O `/health/ready` e o modo processo (main.ts) mantêm o `@Cron`.
  */
 @Controller('cron')
 export class CronController {
@@ -16,6 +21,7 @@ export class CronController {
   constructor(
     private readonly eventService: EventService,
     private readonly balanceService: BalanceService,
+    private readonly authService: AuthService,
   ) {}
 
   @Get('close-events')
@@ -56,6 +62,25 @@ export class CronController {
     @Headers('x-cron-secret') secret?: string,
   ): Promise<{ arquivados: number; removidos: number }> {
     return this.archiveBalances(authorization, secret);
+  }
+
+  @Get('cleanup-tokens')
+  async cleanupTokens(
+    @Headers('authorization') authorization?: string,
+    @Headers('x-cron-secret') secret?: string,
+  ): Promise<{ removidos: number }> {
+    this.assertAutorizado(authorization, secret);
+    const removidos = await this.authService.cleanupExpiredTokens();
+    this.logger.log(`Cron cleanup-tokens executado: ${removidos} token(s) removido(s)`);
+    return { removidos };
+  }
+
+  @Post('cleanup-tokens')
+  async cleanupTokensPost(
+    @Headers('authorization') authorization?: string,
+    @Headers('x-cron-secret') secret?: string,
+  ): Promise<{ removidos: number }> {
+    return this.cleanupTokens(authorization, secret);
   }
 
   private assertAutorizado(authorization?: string, secret?: string): void {
