@@ -78,7 +78,11 @@ jobs:
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: ci-secret-nao-usado-em-producao
           FRONTEND_URL: http://localhost:3001
-          RATE_LIMIT_MAX: 5
+          # O limite é por IP e a janela é partilhada por todos os pedidos do
+          # runner: com 5, o próprio teste de 429 consumia o orçamento e os
+          # testes de sessão seguintes recebiam 429. O 429 é testado de
+          # propósito em `test/rate-limit.e2e-spec.ts` (RATE_LIMIT_MAX=3).
+          RATE_LIMIT_MAX: 1000
         run: npm run test:e2e
 
   frontend:
