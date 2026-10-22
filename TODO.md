@@ -21,18 +21,18 @@ mesmo item — daí o prefixo.)
 | `[x]` | T3 frontend #12: `use-planta-socket`, helper `decidirAdocaoRemota`, aviso/eco/refetch-lista | realtime | alta | T1 | commit `9e10b37`; vitest FE 295/295; E2E UI dois contextos verde (adopção 2.9s + aviso sem perder edição) |
 | `[x]` | T6 diagnóstico login dev (cookie `sf_token`) | bugfix | alta | — | NÃO é bug: era timing do teste + dev server sem hidratar (`__webpack_modules__`); limpar `.next` resolve. **Prova DOM**: `PROGRESS.md` 2026-10-20 — login real `POST /api/auth/login` 200, cookies `sf_token`/`sf_refresh` presentes (httpOnly, SameSite=Lax), `localStorage.user` gravado, `/admin` persiste após reload. O contrato de sessão está coberto por `frontend/e2e/session.spec.ts` (6 testes DOM). *Residual*: o script de diagnóstico foi ad-hoc e não foi commitado |
 | `[x]` | T7 E2E UI dois contextos | testes | alta | T6 | **Prova DOM**: `PROGRESS.md` 2026-10-20 — mesa de A aparece no DOM de B sem reload (2878 ms) e banner "mudou noutro dispositivo" com a edição local de B intacta. **Spec commitada**: `frontend/e2e/planta-realtime.spec.ts` (login pela UI, `.planta-mesa` visível, aviso visível) — corre no job `browser-e2e` do CI. Evento `e2e-*` criado/apagado; `festa-teste-2026` intacto |
-| `[x]` | T8 spec `use-planta-socket` | testes | média | — | commit `41077d8`; 8 testes jsdom |
+| `[x]` | T8 spec `use-planta-socket` | testes | média | — | commit `41077d8`; 8 testes jsdom do hook `use-planta-socket` — **concluído** (a pendência de *build Docker* é da `T11`, não desta) |
 | `[x]` | T9 corrigir nota serverless do `PLAN.md` | docs | média | — | commit `0451ded`; causa real = runtime serverless sem WS |
 | `[x]` | Suite browser Playwright do realtime da planta (dois contextos) | testes | alta | T7 | `frontend/e2e/planta-realtime.spec.ts`; 1 passed 46.5s local; evento `e2e-*` criado/apagado |
 | `[x]` | Ligar a suite browser Playwright ao CI | ci | média | — | job `browser-e2e` (Postgres+Redis+Chromium); validado local `2 passed`; deploy passa a depender dele |
 | `[x]` | #14 indicador de realtime no canal de planta | realtime | média | — | commit `feat(frontend)`; `usePlantaSocket` devolve `status`; badge no admin; motor partilhado com `useOrderSocket`; vitest FE 297/297 |
 | `[x]` | Cron limpeza de tokens em serverless | ops | alta | — | `/api/cron/cleanup-tokens` (GET/POST, `CRON_SECRET`) + `vercel.json` `0 3 * * *`; vitest BE 489/489; boot `:3011` 403 |
 | `[!]` | B teste de integração Redis do `OrderGateway` | realtime | média | Redis acessível | sem docker/redis-server nesta máquina — não verificável; job `browser-e2e` do CI já tem `redis:8-alpine` |
-| `[x]` | T5 push de `main` | release | alta | autorização explícita | **push feito** (autorização explícita em 2026-10-21): 33 commits locais, série do `#13` completa — `259ed29`…`1d5d3d1` |
+| `[x]` | T5 push de `main` | release | alta | autorização explícita | **push feito** (autorização explícita em 2026-10-21): **34 commits** (`4dc6b56..fedc1fb`, contagem exacta por `git rev-list --count`, confirmada por `git log --oneline`), série do `#13` completa — `259ed29`…`fedc1fb` |
 | `[!]` | #5 validação visual com `cdt` | — | média | restart do opencode | tools `cdt_*` não carregadas na sessão |
 | `[x]` | R13 bump `chrome-devtools-mcp` (pinado `@1.11.0`) | — | baixa | — | verificado 2026-10-20: `latest` também é `1.11.0` — pin já actual; nada a fazer |
 | `[x]` | D13 pacote `@senhasfestas/shared` (dívida técnica do `TipoAlteracaoPlanta` duplicado) | infra | alta | — | commits `259ed29`…`4565805`; contrato de realtime com uma só definição; TypeScript unificado (uma cópia, 5.7.3) |
-| `[x]` | T11 corrigir os dois Dockerfiles para o layout do monorepo | infra | alta | D13 | runtime do backend copia `packages/shared/dist`; runner do frontend com `frontend/server.js` — **build Docker a verificar** (sem Docker no ambiente) |
+| `[x]` | T11 corrigir os dois Dockerfiles para o layout do monorepo | infra | alta | D13 | **prova local OK**: o runtime do backend copia `packages/shared/dist`; o runner do frontend usa `frontend/server.js`; layout replicado e arrancado localmente. **Build Docker a verificar** (sem Docker no ambiente) |
 | `[x]` | T12 remover o lockfile stale de `backend/` + alinhar dependências | infra | alta | D13 | `backend/package-lock.json` removido do índice; `@senhasfestas/shared` a `"*"`; `npm ci --dry-run` verde |
 | `[x]` | T13 verificar os 3 callers de `useOrderSocket` (cozinha/pedidos/pos) | testes | alta | R14 | a API pública não mudou (`useOrderSocket(refetch, eventId)`); `onOrderUpdated` não existe em lado nenhum; o `+10` testes era do #14 (`use-planta-socket.test.tsx`) |
 | `[x]` | T15 docs de #13 (PLAN/PROGRESS/TODO) + limpeza de portas e temporários | docs | média | D13 | runner standalone validado em `:3002` e terminado; `/tmp` limpo |
@@ -58,6 +58,10 @@ falharam e o `Deploy` ficou `skipped` — **a produção não foi tocada por est
 As causas estão em `T31` (regressão do `#13`: o `ts-node`), `T32` (429 nos e2e) e
 `T33` (`access_code` duplicado no teste). Nada foi corrigido "no calor": cada
 correcção é tarefa própria.
+
+Nota (correcção de 2026-10-21): o resumo da revisão dizia "T18/T8" — era **T18/T11**.
+O item bloqueado por falta de *build Docker* é a `T11` (Dockerfiles); o `T8` (spec do
+`use-planta-socket`) está concluído desde `41077d8` e não tem pendência nenhuma.
 
 Nota (revisão de 2026-10-21): `T6`/`T7` **mantêm-se concluídos** — a revisão
 afirmava "marcados como `[x]` sem prova no DOM", mas a prova DOM existe e estava
