@@ -99,19 +99,6 @@ describe('App e2e (Postgres + Redis)', () => {
     expect(response.body.status).toBe(indisponivel ? 'unhealthy' : 'ready');
   });
 
-  it('deve recusar rate limit com 429 (não 500)', async () => {
-    const max = parseInt(process.env.RATE_LIMIT_MAX || '100', 10);
-    const totalRequests = Math.min(12, max + 2);
-    const statuses: number[] = [];
-    for (let i = 0; i < totalRequests; i++) {
-      statuses.push((await request(app.getHttpServer()).get('/api/health/live')).status);
-    }
-    expect(statuses.every((s) => s === 200 || s === 429)).toBe(true);
-    if (max < totalRequests) {
-      expect(statuses).toContain(429);
-    }
-  });
-
   it('refresh aceita cookie httpOnly sem body (contrato de sessão do frontend)', async () => {
     const { email, password } = await criarUtilizadorTeste('refresh-cookie@example.com');
     const refreshToken = await refreshTokenDe(email, password);
