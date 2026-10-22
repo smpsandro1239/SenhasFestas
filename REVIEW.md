@@ -130,6 +130,13 @@ Tipos: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `style`.
 7. **O utilizador tem feedback suficiente?**
 8. **A dívida técnica nova está registada no `PLAN.md`?**
 
+**Regras de verificação (antes de reportar):**
+- Reproduzir a alegação com `grep`/`cat` no ficheiro real — não reportar de memória
+  nem de outputs lidos antes.
+- Se não reproduz, escrever "não reproduz" e **retirar a alegação** do relatório.
+- O output do `edit` mostra o *old* e o *new* lado a lado: não são duas linhas
+  no ficheiro.
+
 ---
 
 ## Exemplo de revisão (referência)
