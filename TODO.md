@@ -40,6 +40,17 @@ mesmo item — daí o prefixo.)
 | `[x]` | T17 reescrever a série do #13 para manifestos e lock em sintonia | infra | média | D13 | commits `259ed29`…`4565805`; `npm ci --dry-run` a 0 em cada commit; série antiga em `backup/pre-t17` |
 | `[!]` | T18 configuração do projecto Vercel (root directory, build command) | ops | média | acesso ao dashboard | não verificável do repositório; o build serverless já compila o pacote partilhado |
 | `[x]` | T19 `nest g` depois do `overrides` do TypeScript | infra | baixa | — | **mantido**: `nest g resource tmpProbe --dry-run` exit 0; sem o `overrides` a árvore resolvida é idêntica — a violação do peer `>= 6.0.0` é do `@nestjs/schematics@12`, não do `overrides` |
+| `[x]` | T26 verificar a primeira execução real do CI (GitHub Actions) | ci | alta | — | run `39658459926` (sha `fedc1fb`, 88 s): `Frontend` ✅ (lint + typecheck + build), `Documentação` ✅, `Backend` ❌ nos e2e, `Browser E2E` ❌ nas migrações, `Deploy` ⏭ `skipped` — a produção **não** foi tocada por este push |
+| `[ ]` | T31 `migration:run` no CI: `Cannot find module 'ts-node'` | ci | alta | D16 | **regressão do `#13`**: com as workspaces o `typeorm` passou para a raiz (`node_modules/typeorm/cli-ts-node-commonjs.js`) e o `ts-node` ficou aninhado em `backend/node_modules/` → o `require('ts-node')` do CLI do TypeORM não resolve. Reproduzido localmente (`cd backend && npm run migration:run`). Afeta `browser-e2e` (migrações) e `deploy` (migrações) |
+| `[ ]` | T32 e2e do backend com 429 (`RATE_LIMIT_MAX: 5`) | testes | alta | — | 3 testes de sessão de `backend/test/app.e2e-spec.ts` recebem `expected 200, got 429 "Too Many Requests"`. O limite `5` vem do `ci.yml` desde `5fbe7df` — **pré-existente**, não é do `#13`. O job `browser-e2e` tem `RATE_LIMIT_MAX: 1000` e não é afectado |
+| `[ ]` | T33 `access_code` fixo no helper de teste e2e | testes | média | — | `criarUtilizadorTeste` insere sempre `access_code = '123456'` → a 2.ª chamada viola `IDX_users_access_code` (`Key (access_code)=(123456) already exists`). O `access_code` tem de ser único por teste |
+
+Nota (CI real de 2026-10-21, run `39658459926`): o primeiro push da série do `#13`
+correu o CI a sério. `Frontend` e `Documentação` passaram; `Backend` e `Browser E2E`
+falharam e o `Deploy` ficou `skipped` — **a produção não foi tocada por este push**.
+As causas estão em `T31` (regressão do `#13`: o `ts-node`), `T32` (429 nos e2e) e
+`T33` (`access_code` duplicado no teste). Nada foi corrigido "no calor": cada
+correcção é tarefa própria.
 
 Nota (revisão de 2026-10-21): `T6`/`T7` **mantêm-se concluídos** — a revisão
 afirmava "marcados como `[x]` sem prova no DOM", mas a prova DOM existe e estava
