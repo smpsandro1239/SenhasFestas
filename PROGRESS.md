@@ -13,6 +13,87 @@
 
 ---
 
+## 2026-10-22 — Corrigir o que o CI real revelou (T31/T32/T33)
+
+**Objectivo**: corrigir as três causas que o primeiro CI real deixou veridas
+(`T31` ts-node, `T32` 429 nos e2e, `T33` `access_code` duplicado) e fazer **um
+único** push com o lote todo (6 commits de docs + 5 de correcção), autorizado
+pelo utilizador.
+
+**Feito**
+- **T31 — `ts-node`** (commits `f62d71b`, `e790d65`): o `ts-node` passou a
+  `devDependencies` da raiz (`~10.9.2`) → hoisted para `node_modules/ts-node` e
+  o `require('ts-node')` do CLI do TypeORM resolve
+  (`require.resolve('ts-node', {paths:['node_modules/typeorm']})` →
+  `node_modules/ts-node/dist/index.js`). O diff do lock são 2 entradas novas
+  (mais o hoisting de `arg`).
+  **No caminho apurou-se um segundo bug, pré-existente ao `#13`**: o glob
+  `migrations: ['*.ts']` (desde `679f83d`) apanhava também o `index.spec.ts` da
+  pasta das migrations e o import de `vitest` rebentava em CommonJS
+  (`Vitest cannot be imported in a CommonJS module using require()`). Estava
+  mascarado porque o CLI morria antes, no `require('ts-node')`. O glob passou a
+  `[0-9]*.ts` (só `<timestamp>-<Nome>.ts`); em runtime as migrations vêm do
+  registry estático, não do glob.
+  `migration:run` local → **exit 0** ("No migrations are pending"), ou seja o CLI
+  carrega, o glob está certo e a BD responde.
+- **T32 — 429 nos e2e** (commits `aae5cae`, `bdce67a`): a causa era o teste de
+  429 dentro de `app.e2e-spec.ts` consumir o orçamento por IP (5) que os testes
+  de sessão partilhavam. `RATE_LIMIT_MAX` do job `backend` → 1000 (igual ao
+  `browser-e2e`); o 429 passou para um spec próprio
+  (`backend/test/rate-limit.e2e-spec.ts`, limite 3, Redis desligado de
+  propósito para a contagem ser por instância e determinista) — **passa localmente
+  (2/2)**. O `fileParallelism: false` na config e2e: os ficheiros e2e partilham a
+  BD e um deles faz `DROP SCHEMA public CASCADE`.
+- **T33 — `access_code`** (commit `7d82b38`): `criarUtilizadorTeste` passou a um
+  contador por ficheiro (`100001`, `100002`, ...). O `'123456'` que ficou no
+  repositório só vive em mocks/fixtures unitárias e na lista de senhas fracas do
+  bootstrap — nenhum chega à BD.
+- **Duas descobertas novas** (registadas como `T36`/`T37` + `D17`/`D18`):
+  1. o rate limit **falha aberto** quando o Redis está configurado mas
+     inacessível (`incrementWithTtl` devolve `null` → contador 0 → o pedido
+     passa sem contar e sem limite). O comentário no código promete fail-closed;
+  2. o pré-voo do e2e **não garante que a BD é local**: com o `.env` apontado
+     para o Neon, correr `npm run test:e2e` local apagaria o schema remoto.
+
+**Decisões tomadas**
+- **O `ts-node` vai na raiz**, não se mexe no script `migration:run` nem se
+  remove o `ts-node` do `backend/package.json`: o CLI vive na raiz e o
+  `require` não desce a `backend/node_modules/`.
+- **O 429 passa a ter spec próprio**, com o Redis desligado: o contador do Redis
+  é partilhado por IP entre ficheiros e o TTL de 60s sobrevive ao ficheiro de
+  teste — com Redis o resultado dependeria da ordem de execução. O caminho com
+  Redis continua coberto pelo unitário de `audit.middleware.spec.ts`.
+- **O e2e completo não correu localmente**: não há Postgres local (nem Docker) e
+  o `.env` aponta para o Neon — o spec faz `DROP SCHEMA public CASCADE`, logo
+  correr contra a BD remota apagaria o schema. A prova do `access_code` foi
+  feita ao nível da constraint, numa **tabela TEMP** (rollback): código fixo
+  duplicado → `23505 duplicate key value violates unique constraint`; dois
+  códigos do contador → OK. Nada foi escrito no schema real.
+
+**Commits**
+- `f62d71b` fix(backend): ts-node na raiz para o CLI do TypeORM resolver
+- `e790d65` fix(backend): o glob das migrations nao pode apanhar o index.spec.ts
+- `aae5cae` ci: elevar o RATE_LIMIT_MAX do job backend e isolar os testes de sessao do rate limit
+- `bdce67a` test(backend): cobrir o 429 num spec proprio
+- `7d82b38` test(backend): access_code unico em criarUtilizadorTeste
+
+**Gates**
+- Backend: `tsc` 0, `vitest` 489/489, `build` 0, `lint` 0 (4 warnings
+  pré-existentes), `npm ci --dry-run` (raiz) 0, YAML do `ci.yml` válido
+  (`js-yaml`), spec novo do rate limit 2/2 em execução real
+- Frontend: sem alterações neste lote — gates não repetidos
+
+**Pendente**
+- `T34` — token da CLI Vercel inválido (`invalidToken`): re-login.
+- `T35` — apagar a tag `archive/pre-t17` a partir de 2026-10-29.
+- `T36` — o rate limit falha aberto quando o Redis está inacessível.
+- `T37` — o pré-voo do e2e não garante BD local (risco de apagar o schema remoto).
+- Build Docker ainda por verificar (sem Docker no ambiente).
+- O resultado do run do CI deste push fica por verificar no GitHub (este commit
+  é o próprio push do lote).
+
+---
+
 ## 2026-10-22 — Verificação do primeiro CI real e do deploy Vercel
 
 **Objectivo**: correr a sério o CI e o deploy de `fedc1fb` (primeiro push da série
