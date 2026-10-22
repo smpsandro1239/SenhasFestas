@@ -45,6 +45,7 @@ mesmo item — daí o prefixo.)
 | `[ ]` | T32 e2e do backend com 429 (`RATE_LIMIT_MAX: 5`) | testes | alta | — | 3 testes de sessão de `backend/test/app.e2e-spec.ts` recebem `expected 200, got 429 "Too Many Requests"`. O limite `5` vem do `ci.yml` desde `5fbe7df` — **pré-existente**, não é do `#13`. O job `browser-e2e` tem `RATE_LIMIT_MAX: 1000` e não é afectado |
 | `[ ]` | T33 `access_code` fixo no helper de teste e2e | testes | média | — | `criarUtilizadorTeste` insere sempre `access_code = '123456'` → a 2.ª chamada viola `IDX_users_access_code` (`Key (access_code)=(123456) already exists`). O `access_code` tem de ser único por teste |
 | `[ ]` | T34 token da CLI Vercel inválido | ops | baixa | — | o token em `%APPDATA%/com.vercel.cli/Data/auth.json` devolve `invalidToken` (403) → a API do Vercel não é consultável (nem para ler a config do dashboard, nem para gerir deployments/aliases). Re-login (`vercel login`) é preciso para usar a CLI |
+| `[ ]` | T35 apagar a tag `archive/pre-t17` | ops | baixa | — | por decisão do utilizador: a tag (que guarda a série antiga do `#13`, `ca133e8`) apaga-se 7 dias depois de criada — **a partir de 2026-10-29** |
 
 Nota (Vercel de 2026-10-21): o push `fedc1fb` disparou os dois deployments da
 integração Vercel (frontend e API) e ambos acabaram `success` — a produção está

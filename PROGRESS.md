@@ -13,6 +13,68 @@
 
 ---
 
+## 2026-10-22 — Verificação do primeiro CI real e do deploy Vercel
+
+**Objectivo**: correr a sério o CI e o deploy de `fedc1fb` (primeiro push da série
+do `#13`), verificar o que passou e o que falhou, e fechar o housekeeping do lote
+(`.npmrc` legado, contagem de commits no `TODO.md`, regra de revisão).
+
+**Feito**
+- **CI real** — run `39658459926` (sha `fedc1fb`, 88 s): `Frontend` ✅ (lint +
+  typecheck + build), `Documentação` ✅, `Backend` ❌ (e2e), `Browser E2E` ❌
+  (migrações), `Deploy` ⏭ `skipped` — a produção **não** foi tocada por este push.
+- **Causa do `browser-e2e`**: `Cannot find module 'ts-node'` nas migrações. Com as
+  workspaces o `typeorm` passou para a raiz (`node_modules/typeorm/cli-ts-node-commonjs.js`)
+  e o `ts-node` ficou aninhado em `backend/node_modules/` — o `require('ts-node')`
+  do CLI do TypeORM não resolve. **Regressão do `#13`** (antes o CI instalava
+  `npm ci` dentro de `backend/`, com `typeorm` e `ts-node` lado a lado).
+  Reproduzido localmente. Fica como `D16` (dívida) + `T31` (tarefa).
+- **Causa do `backend`**: 3 testes de sessão de `backend/test/app.e2e-spec.ts` com
+  `expected 200, got 429 "Too Many Requests"` (`RATE_LIMIT_MAX: 5`, valor herdado
+  de `5fbe7df` — **pré-existente**) e uma colisão `IDX_users_access_code`
+  (`criarUtilizadorTeste` insere sempre `'123456'`). Tarefas `T32` e `T33`.
+- **Vercel** — os dois deployments de `fedc1fb` (`senhas-festas` e
+  `senhasfestas-api`) acabaram `success`. `https://senhas-festas-ten.vercel.app/auth/login`
+  → 200, `/admin` → 307 → `/auth/login?from=%2Fadmin`,
+  `https://senhasfestas-api.vercel.app/api/health` → 200 `{"status":"ok",...}`,
+  crons → 403 sem o segredo, CSP/HSTS/`X-Frame-Options` presentes. O `T18` fecha
+  com esta prova.
+- **`backend/.npmrc` removido** (`legacy-peer-deps=true`): o ficheiro já era
+  **inerte** — o npm avisava `ignoring workspace config` e resolve sempre o
+  workspace da raiz, mesmo a partir de `backend/`. Era uma promessa falsa.
+- **`TODO.md`** — contagem do push corrigida (**34**, não 33 — `git rev-list --count
+  4dc6b56..fedc1fb`), `T8` sem ambiguidade, `T11` com "prova local OK; build Docker
+  a verificar", e nota a dizer que o resumo anterior dizia "T18/T8" — era **T18/T11**.
+- **`REVIEW.md`** — regra de verificação: reproduzir com `grep`/`cat` antes de
+  afirmar; se não reproduz, dizer "não reproduz"; o output do `edit` é old+new.
+- `backup/pre-t17` (`ca133e8`) passou a tag `archive/pre-t17`; o branch foi apagado.
+
+**Decisões tomadas**
+- **Não corrigir o CI "no calor"**: o `ts-node` implica mexer no manifesto da raiz
+  e no lockfile — é tarefa própria (`T31`), não uma linha dentro da verificação.
+- **O `backend/.npmrc` não era o que parecia**: a hipótese "o `npm ci` dentro de
+  `backend/` criaria um lock divergente" **não se reproduz** — o npm sobe ao
+  workspace da raiz. O ficheiro removia-se na mesma, por ser inerte e enganador.
+
+**Commits**
+- `d658216` docs: registar o primeiro CI real e abrir as tarefas do que falhou
+- `7ba4dec` docs: fechar o T18 com a verificacao do deploy Vercel de fedc1fb
+- `1124941` chore(backend): remover o .npmrc legado (legacy-peer-deps era inerte)
+- `8874875` docs: corrigir a contagem de commits e as linhas T8/T11 no TODO
+- `a01646e` docs(review): regra de reproduzir antes de afirmar
+
+**Gates**
+- Backend: `tsc` 0, `vitest` 489/489, `build` 0, `lint` 0 (4 warnings pré-existentes)
+- Frontend: `tsc` 0, `typecheck` 0, `vitest` 297/297, `build` 0, `lint` limpo
+
+**Pendente**
+- `T31` (ts-node — bloqueia o `deploy`), `T32` (429), `T33` (`access_code`).
+- `T34` — o token da CLI Vercel está inválido (`invalidToken`): re-login.
+- `T35` — apagar a tag `archive/pre-t17` a partir de 2026-10-29.
+- Build Docker ainda por verificar (sem Docker no ambiente).
+
+---
+
 ## 2026-10-21 — Pacote partilhado `@senhasfestas/shared` (dívida #13)
 
 **Objectivo**: `TipoAlteracaoPlanta` e as strings de protocolo estavam duplicados
