@@ -9,6 +9,20 @@ import { AuthService } from '../src/modules/auth/auth.service';
 
 const PROBE_TIMEOUT_MS = 5000;
 
+/**
+ * `IDX_users_access_code` é único e o helper insere vários utilizadores no
+ * mesmo ficheiro — um código fixo rebentava no segundo insert. Contador por
+ * ficheiro (6 dígitos, dentro do formato que a app gera): os utilizadores de
+ * teste são criados só aqui, pela camada de repositório, sem passar pela API
+ * que gera códigos.
+ */
+let contadorAccessCode = 100000;
+
+function proximoAccessCode(): string {
+  contadorAccessCode += 1;
+  return String(contadorAccessCode);
+}
+
 async function verificarBaseDadosDisponivel(): Promise<void> {
   const url = process.env.DATABASE_URL;
   const client = new Client({
@@ -67,7 +81,7 @@ describe('App e2e (Postgres + Redis)', () => {
         password: await bcrypt.hash(password, 10),
         name: 'Teste E2E',
         role: 'client',
-        accessCode: '123456',
+        accessCode: proximoAccessCode(),
         isActive: true,
       }),
     );
