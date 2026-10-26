@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { UserIcon, LockIcon } from '@/components/ui/icons';
 import { homeForRole } from '@/lib/roles';
+import { isValidRedirectUrl } from '@/lib/redirect';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -28,8 +29,8 @@ export default function LoginPage() {
     try {
       const user = await login(email, password);
       const from = new URLSearchParams(window.location.search).get('from');
-      if (from && /^\/[^\/]/.test(from)) {
-        router.push(from);
+      if (isValidRedirectUrl(from)) {
+        router.push(from!);
       } else {
         router.push(homeForRole(user?.role));
       }
