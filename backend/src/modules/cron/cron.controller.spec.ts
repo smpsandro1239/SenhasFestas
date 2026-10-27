@@ -56,6 +56,14 @@ describe('CronController — gating do CRON_SECRET (partilhado)', () => {
     await expect(controller.cleanupTokens(undefined, 'errado')).rejects.toThrow(ForbiddenException);
   });
 
+  it('recusa segredo de tamanho diferente em tempo constante sem expor side-channels', async () => {
+    const { controller } = criarController();
+
+    // Segredos mais curtos, mais longos ou com prefixos correspondentes devem ser recusados
+    await expect(controller.cleanupTokens('Bearer segredo')).rejects.toThrow(ForbiddenException);
+    await expect(controller.cleanupTokens(`Bearer ${SECRET}-extra`)).rejects.toThrow(ForbiddenException);
+  });
+
   it('aceita Authorization: Bearer <secret> (formato do Vercel)', async () => {
     const { controller, authService } = criarController();
 

@@ -102,7 +102,7 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
   private async registarFalhaRedis(chave: string): Promise<void> {
     try {
       const key = `${RL_LOGIN_PREFIX}${chave}`;
-      const count = (await this.redisService.incrementWithTtl(key, Math.ceil(this.windowMs / 1000))) ?? 0;
+      await this.redisService.incrementWithTtl(key, Math.ceil(this.windowMs / 1000));
     } catch (error) {
       Logger.warn(`Falha ao registar tentativa de login no Redis: ${(error as Error).message}`);
     }
