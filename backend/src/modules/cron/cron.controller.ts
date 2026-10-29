@@ -1,3 +1,4 @@
+import { timingSafeEqual, createHash } from 'node:crypto';
 import { Controller, Get, Post, Headers, ForbiddenException, Logger } from '@nestjs/common';
 import { EventService } from '../event/event.service';
 import { BalanceService } from '../balance/balance.service';
@@ -95,12 +96,13 @@ export class CronController {
     }
   }
 
+  /**
+   * Compara duas strings em tempo constante usando crypto.timingSafeEqual
+   * e SHA-256 para evitar atalhos por tamanho e ataques de timing.
+   */
   private safeEqual(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
-    let diff = 0;
-    for (let i = 0; i < a.length; i += 1) {
-      diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    }
-    return diff === 0;
+    const hashA = createHash('sha256').update(a).digest();
+    const hashB = createHash('sha256').update(b).digest();
+    return timingSafeEqual(hashA, hashB);
   }
 }
