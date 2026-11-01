@@ -16,6 +16,17 @@ describe('sanitizarCelulaCsv — injeção de fórmula (A5)', () => {
     expect(sanitizarCelulaCsv('\rcmd')).toBe("'\rcmd");
   });
 
+  it('prefixa com apóstrofo pipes e percentuais conforme OWASP', () => {
+    expect(sanitizarCelulaCsv('|cmd')).toBe("'|cmd");
+    expect(sanitizarCelulaCsv('%SUM(1)')).toBe("'%SUM(1)");
+  });
+
+  it('prefixa com apóstrofo mesmo com espaços iniciais antes do caracter de fórmula', () => {
+    expect(sanitizarCelulaCsv(' =1+1')).toBe("' =1+1");
+    expect(sanitizarCelulaCsv('   +cmd')).toBe("'   +cmd");
+    expect(sanitizarCelulaCsv('\t=2+2')).toBe("'\t=2+2");
+  });
+
   it('não mexe em valores normais, vazios, números ou objetos', () => {
     expect(sanitizarCelulaCsv('Produto normal')).toBe('Produto normal');
     expect(sanitizarCelulaCsv('')).toBe('');
