@@ -42,16 +42,21 @@ export class RateLimitMiddleware implements NestMiddleware {
     if (this.redisService.isEnabled) {
       const key = `${RL_IP_PREFIX}${ip}`;
       try {
-        const count = (await this.redisService.incrementWithTtl(key, Math.ceil(this.windowMs / 1000))) ?? 0;
-        if (count > this.maxRequests) {
-          res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-            statusCode: HttpStatus.TOO_MANY_REQUESTS,
-            message: 'Muitas requisições. Tente novamente mais tarde.',
-          });
+        const count = await this.redisService.incrementWithTtl(key, Math.ceil(this.windowMs / 1000));
+        // Se Redis responder com sucesso, aplica o limite distribuído
+        if (count !== null) {
+          if (count > this.maxRequests) {
+            res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+              statusCode: HttpStatus.TOO_MANY_REQUESTS,
+              message: 'Muitas requisições. Tente novamente mais tarde.',
+            });
+            return;
+          }
+          next();
           return;
         }
-        next();
-        return;
+        // fail-closed: Redis indisponível retornou null — cai na contagem local
+        Logger.warn(`Redis indisponível no rate limit (retornou null, a usar contagem local)`);
       } catch (error) {
         // fail-closed: Redis indisponível não abre o limite — cai na contagem local
         Logger.warn(`Falha no rate limit via Redis (contagem local): ${(error as Error).message}`);
@@ -102,7 +107,7 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
   private async registarFalhaRedis(chave: string): Promise<void> {
     try {
       const key = `${RL_LOGIN_PREFIX}${chave}`;
-      const count = (await this.redisService.incrementWithTtl(key, Math.ceil(this.windowMs / 1000))) ?? 0;
+      await this.redisService.incrementWithTtl(key, Math.ceil(this.windowMs / 1000));
     } catch (error) {
       Logger.warn(`Falha ao registar tentativa de login no Redis: ${(error as Error).message}`);
     }
