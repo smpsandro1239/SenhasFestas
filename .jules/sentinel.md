@@ -1,0 +1,4 @@
+## 2026-11-02 - Rate limit fail-open quando Redis devolve null
+**Vulnerability:** O `RateLimitMiddleware` tratava falhas do Redis silenciosas (`incrementWithTtl` devolvendo `null`) com o operador nullish coalescing `?? 0`, fazendo com que a contagem de requisições resultasse em 0 e chamasse `next()`, permitindo requisições ilimitadas sem rate limiting distribuído nem local.
+**Learning:** Métodos de serviço resilientes que capturam erros internamente e devolvem `null` em vez de lançar exceções contornam blocos `catch`. Quando o middleware confiava em `try/catch` para activar a contingência fail-closed, o valor de retorno `null` causava um bypass silencioso de segurança.
+**Prevention:** Verificar explicitamente se o valor retornado é não nulo (`count !== null`) antes de confiar no resultado do serviço remoto; se for `null`, cair explicitamente na contagem em memória local.

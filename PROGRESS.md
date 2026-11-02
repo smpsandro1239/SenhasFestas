@@ -13,6 +13,27 @@
 
 ---
 
+## 2026-11-02 — Rate limit fail-open quando Redis devolve null (T36 / D17)
+
+**Objectivo**: corrigir a falha aberta (fail-open) no `RateLimitMiddleware` quando o Redis está inacessível e devolve `null` (tarefa `T36` / dívida `D17`), garantindo a contenção em memória local.
+
+**Feito**
+- `RateLimitMiddleware` (`backend/src/middleware/audit.middleware.ts`): verifica se `count !== null`. Se o Redis devolver `null`, cai na contagem local em memória (`this.local`), mantendo a promessa de fail-closed.
+- Limpeza de aviso linter em `registarFalhaRedis`: remoção da variável não utilizada `count`.
+- `audit.middleware.spec.ts`: novo teste unitário que simula `incrementWithTtl` devolvendo `null`, comprovando que as requisições recorrem à contagem local e retornam status HTTP 429 quando o limite por IP é excedido.
+
+**Decisões tomadas**
+- Respeitar a resiliência do `RedisService`: o serviço apanha erros e devolve `null`, por isso a segurança deve testar explicitamente se o retorno é `null` em vez de confiar apenas em blocos `try/catch`.
+
+**Commits**
+- `fix(backend): fail-closed no rate limit quando Redis devolve null`
+
+**Gates**
+- Backend: `tsc` 0, `vitest` 490/490, `build` 0, `lint` sem avisos novos.
+- Docs: `npm run verify:docs` 0.
+
+---
+
 ## 2026-10-22 — Corrigir o que o CI real revelou (T31/T32/T33)
 
 **Objectivo**: corrigir as três causas que o primeiro CI real deixou veridas

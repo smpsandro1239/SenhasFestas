@@ -53,6 +53,30 @@ describe('RateLimitMiddleware — A3: usa incrementWithTtl (atómico)', () => {
     expect(next).not.toHaveBeenCalled();
     delete process.env.RATE_LIMIT_MAX;
   });
+
+  it('cai na contagem local quando incrementWithTtl devolve null (fail-closed)', async () => {
+    process.env.RATE_LIMIT_MAX = '2';
+    middleware = new RateLimitMiddleware(redisService as any);
+    redisService.incrementWithTtl.mockResolvedValue(null);
+
+    const next = vi.fn();
+    const req = fakeReq('9.9.9.9');
+
+    // Primeiros 2 pedidos passam na contagem local
+    await middleware.use(req, fakeRes(), next);
+    expect(next).toHaveBeenCalledTimes(1);
+
+    await middleware.use(req, fakeRes(), next);
+    expect(next).toHaveBeenCalledTimes(2);
+
+    // 3º pedido bloqueia com 429 na contagem local
+    const res3 = fakeRes();
+    await middleware.use(req, res3, next);
+    expect(res3.status).toHaveBeenCalledWith(429);
+    expect(next).toHaveBeenCalledTimes(2);
+
+    delete process.env.RATE_LIMIT_MAX;
+  });
 });
 
 describe('LoginRateLimitMiddleware — A3: usa incrementWithTtl no registo de falha', () => {
