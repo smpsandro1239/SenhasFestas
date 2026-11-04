@@ -13,6 +13,30 @@
 
 ---
 
+## 2026-11-04 — Correcção de vulnerabilidade de rate limit fail-open no Redis (T36)
+
+**Objectivo**: corrigir a falha de rate limit em que o middleware falhava aberto (`next()`) quando o Redis devolvia `null`.
+
+**Feito**
+- `RateLimitMiddleware` (`backend/src/middleware/audit.middleware.ts`): quando `incrementWithTtl` devolve `null` (Redis com erro / indisponível), o middleware regista aviso em log e cai na contagem em memória (`fail-closed`), garantindo que o limite de pedidos por IP é rigorosamente aplicado mesmo em falha de Redis.
+- Limpeza de aviso oxlint de variável não utilizada (`count`) em `registarFalhaRedis`.
+- `backend/src/middleware/audit.middleware.spec.ts`: novo teste unitário que simula a devolução de `null` por parte do Redis e comprova que os pedidos acima do limite local recebem HTTP 429.
+
+**Decisões tomadas**
+- Seguir o princípio de fail-closed: na indisponibilidade do Redis, a aplicação nunca deve deixar passar tráfego descontrolado sem limite, recorrendo à contagem local em memória.
+
+**Gates**
+- Backend: `vitest` 490/490 (+1), `lint` 0 erros (3 warnings pré-existentes), `build` OK.
+- Frontend: `vitest` 297/297, `lint` limpo, `build` OK.
+- Docs: `npm run verify:docs` OK.
+
+**Pendente**
+- `T34` — token da CLI Vercel inválido (`invalidToken`).
+- `T35` — apagar a tag `archive/pre-t17`.
+- `T37` — o pré-voo do e2e não garante BD local.
+
+---
+
 ## 2026-10-22 — Corrigir o que o CI real revelou (T31/T32/T33)
 
 **Objectivo**: corrigir as três causas que o primeiro CI real deixou veridas

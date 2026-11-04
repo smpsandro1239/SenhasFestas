@@ -1,0 +1,6 @@
+# Sentinel's Journal
+
+## 2026-11-04 - Rate Limiting Fail-Open on Handled Redis Failures
+**Vulnerability:** In `RateLimitMiddleware`, when `redisService.isEnabled` was true, the code attempted Redis `incrementWithTtl(key, ttl)`. If Redis was unreachable, `RedisService.incrementWithTtl` caught the underlying client error internally and returned `null`. Because `RateLimitMiddleware` used `(await incrementWithTtl(...)) ?? 0`, the count was treated as 0 instead of throwing an error into the `catch` block. As a result, the request bypassed both the Redis check and the local in-memory fallback, calling `next()` directly and allowing unlimited traffic when Redis failed (fail-open DoS risk).
+**Learning:** Returning safe default fallback values (`null`) from utility or service wrappers can inadvertently bypass downstream error handlers (`try/catch`) that expect rejected promises. If a service method absorbs errors and returns `null`, the consumer cannot rely solely on `catch (error)` to trigger fallback paths.
+**Prevention:** Always verify whether service layer methods swallow exceptions and return `null`. Check explicitly for `null` or failure return values and ensure fail-closed or proper fallback behavior (e.g., falling through to in-memory rate limiting when Redis returns `null`).
