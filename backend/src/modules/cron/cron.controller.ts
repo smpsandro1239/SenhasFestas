@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Headers, ForbiddenException, Logger } from '@nestjs/common';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { EventService } from '../event/event.service';
 import { BalanceService } from '../balance/balance.service';
 import { AuthService } from '../auth/auth.service';
@@ -95,12 +96,14 @@ export class CronController {
     }
   }
 
+  /**
+   * Comparação em tempo constante para evitar ataques de temporização (timing attacks).
+   * O hash SHA-256 garante buffers de tamanho idêntico (32 bytes), evitando fuga
+   * do comprimento do segredo através do tempo de resposta.
+   */
   private safeEqual(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
-    let diff = 0;
-    for (let i = 0; i < a.length; i += 1) {
-      diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    }
-    return diff === 0;
+    const hashA = createHash('sha256').update(a).digest();
+    const hashB = createHash('sha256').update(b).digest();
+    return timingSafeEqual(hashA, hashB);
   }
 }
