@@ -1,7 +1,7 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
-import { IsString, IsEmail, MinLength, IsOptional, IsIn, IsBoolean } from 'class-validator';
+import { IsString, IsEmail, MinLength, MaxLength, IsOptional, IsIn, IsBoolean } from 'class-validator';
 import { Request, Response } from 'express';
 
 export const TOKEN_COOKIE = 'sf_token';
@@ -45,8 +45,10 @@ export class LoginDto {
   @IsEmail()
   email: string;
 
+  // Limite de 72 caracteres: bcrypt trunca acima de 72 bytes e evita DoS por CPU
   @IsString()
   @MinLength(6)
+  @MaxLength(72)
   password: string;
 }
 
@@ -54,8 +56,10 @@ export class RegisterDto {
   @IsEmail()
   email: string;
 
+  // Limite de 72 caracteres: bcrypt trunca acima de 72 bytes e evita DoS por CPU
   @IsString()
   @MinLength(6)
+  @MaxLength(72)
   password: string;
 
   @IsString()
