@@ -1,11 +1,15 @@
+import 'reflect-metadata';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { vi } from 'vitest';
-import { AuthController } from '../src/modules/auth/auth.controller';
+import { validate } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
+import { AuthController, LoginDto, RegisterDto } from '../src/modules/auth/auth.controller';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { UserEntity, RefreshTokenEntity } from '../src/entities';
 import { EventService } from '../src/modules/event/event.service';
 import { JwtService } from '@nestjs/jwt';
+import { CreateUserDto } from '../src/modules/user/dto';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -143,6 +147,68 @@ describe('AuthController', () => {
       expect(service.refresh).toHaveBeenCalledWith('refresh-1');
       expect(res.cookie).toHaveBeenCalledWith('sf_token', 'new-token', expect.objectContaining({ httpOnly: true }));
       expect(res.cookie).toHaveBeenCalledWith('sf_refresh', 'refresh-2', expect.objectContaining({ httpOnly: true }));
+    });
+  });
+
+  describe('Password DTO validation (bcrypt 72-byte max limit & DoS prevention)', () => {
+    it('rejeita LoginDto com password > 72 caracteres', async () => {
+      const dto = plainToInstance(LoginDto, {
+        email: 'test@example.com',
+        password: 'a'.repeat(73),
+      });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'password')).toBe(true);
+    });
+
+    it('aceita LoginDto com password de 72 caracteres', async () => {
+      const dto = plainToInstance(LoginDto, {
+        email: 'test@example.com',
+        password: 'a'.repeat(72),
+      });
+      const errors = await validate(dto);
+      expect(errors.filter((e) => e.property === 'password')).toEqual([]);
+    });
+
+    it('rejeita RegisterDto com password > 72 caracteres', async () => {
+      const dto = plainToInstance(RegisterDto, {
+        email: 'test@example.com',
+        name: 'Teste',
+        password: 'a'.repeat(73),
+      });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'password')).toBe(true);
+    });
+
+    it('aceita RegisterDto com password de 72 caracteres', async () => {
+      const dto = plainToInstance(RegisterDto, {
+        email: 'test@example.com',
+        name: 'Teste',
+        password: 'a'.repeat(72),
+      });
+      const errors = await validate(dto);
+      expect(errors.filter((e) => e.property === 'password')).toEqual([]);
+    });
+
+    it('rejeita CreateUserDto com password > 72 caracteres', async () => {
+      const dto = plainToInstance(CreateUserDto, {
+        email: 'test@example.com',
+        name: 'Teste',
+        role: 'cashier',
+        password: 'a'.repeat(73),
+      });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'password')).toBe(true);
+    });
+
+    it('aceita CreateUserDto com password de 72 caracteres', async () => {
+      const dto = plainToInstance(CreateUserDto, {
+        email: 'test@example.com',
+        name: 'Teste',
+        role: 'cashier',
+        password: 'a'.repeat(72),
+      });
+      const errors = await validate(dto);
+      expect(errors.filter((e) => e.property === 'password')).toEqual([]);
     });
   });
 });
