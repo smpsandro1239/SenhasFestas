@@ -86,11 +86,23 @@ pelo utilizador.
 **Pendente**
 - `T34` — token da CLI Vercel inválido (`invalidToken`): re-login.
 - `T35` — apagar a tag `archive/pre-t17` a partir de 2026-10-29.
-- `T36` — o rate limit falha aberto quando o Redis está inacessível.
 - `T37` — o pré-voo do e2e não garante BD local (risco de apagar o schema remoto).
 - Build Docker ainda por verificar (sem Docker no ambiente).
 - O resultado do run do CI deste push fica por verificar no GitHub (este commit
   é o próprio push do lote).
+
+---
+
+## 2026-10-22 — Sentinel: Correcção do Rate Limit fail-closed (T36 / D17)
+
+**Objectivo**: corrigir a vulnerabilidade onde o `RateLimitMiddleware` falhava aberto quando o Redis estava inacessível (`incrementWithTtl` devolvia `null`), permitindo contornar o rate limiting.
+
+**Feito**
+- `RateLimitMiddleware` (`backend/src/middleware/audit.middleware.ts`): verifica se `count !== null`. Se `null` ou exceção, não chama `next()`, recorrendo à contagem local em memória (`fail-closed`).
+- Limpeza de aviso oxlint de variável não utilizada em `LoginRateLimitMiddleware`.
+- Testes unitários adicionados em `backend/src/middleware/audit.middleware.spec.ts` cobrindo o fallback para contagem local e bloqueio (429) quando o Redis devolve `null` ou lança erro.
+- Registo da aprendizagem crítica de segurança em `.jules/sentinel.md`.
+- Sincronização da documentação (`PLAN.md`, `TODO.md`, `PROGRESS.md`).
 
 ---
 
