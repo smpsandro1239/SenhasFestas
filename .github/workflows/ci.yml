@@ -180,7 +180,7 @@ jobs:
 
       - name: Instalar Chromium
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium || npx playwright install chromium
 
       - name: Build do pacote partilhado
         run: npm run build:shared
