@@ -13,6 +13,31 @@
 
 ---
 
+## 2026-11-11 — Correcção de segurança T36: rate limit fail-open quando Redis devolve null
+
+**Objectivo**: corrigir a falha de segurança T36 onde o `RateLimitMiddleware` falhava aberto se o Redis estivesse inacessível ou devolvesse `null`.
+
+**Feito**
+- `backend/src/middleware/audit.middleware.ts`: `RateLimitMiddleware` valida explicitamente `count !== null` antes de chamar `next()`. Se o Redis devolver `null`, regista um aviso em log e cai na contagem local em memória (*fail-closed* / degradação segura).
+- Removida declaração não utilizada `count` no `registarFalhaRedis`.
+- `backend/src/middleware/audit.middleware.spec.ts`: novo teste unitário cobrindo o cenário em que `incrementWithTtl` devolve `null` e verifica que o bloqueio 429 é acionado após exceder o limite local.
+
+**Decisões tomadas**
+- Como o `RedisService` apanha exceções e devolve `null`, o middleware não pode usar `?? 0` para assumir sucesso; `null` é tratado como sinal de indisponibilidade de Redis, caindo na memória local.
+
+**Commits**
+- `fix(security): prevenir bypass de rate limit quando redis devolve null (T36)`
+
+**Gates**
+- Backend: vitest 490/490 (+1), lint 0 erros (aviso unused removido), tsc limpo.
+- Frontend: vitest 297/297, lint limpo.
+- `npm run verify:docs`: consistente.
+
+**Pendente**
+- `T34`, `T35`, `T37`.
+
+---
+
 ## 2026-10-22 — Corrigir o que o CI real revelou (T31/T32/T33)
 
 **Objectivo**: corrigir as três causas que o primeiro CI real deixou veridas
