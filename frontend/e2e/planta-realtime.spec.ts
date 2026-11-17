@@ -123,13 +123,39 @@ test('planta realtime: B adopta a mesa nova de A e, com edição local, é avisa
     expect(mesasB0).toBe(mesasA0);
     expect(await B.page.locator('.planta-mesa').count()).toBe(mesasB0 + 1);
 
-    // B edita localmente; antes de sincronizar, A grava outra mesa.
+    // Simula uma falha temporária de rede apenas na gravação de B. Assim a
+    // edição fica comprovadamente local/pendente, sem depender da ordem dos
+    // temporizadores de debounce dos dois browsers.
+    await B.page.route('**/api/events/*/plantas/*', async (route) => {
+      if (route.request().method() === 'PUT') {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ message: 'Falha de rede simulada no teste E2E' }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
     const nomeLocal = `E2E-B-${ts}`;
     await B.page.locator('input[placeholder="ex: Mesa 1"]').fill(nomeLocal);
     await B.page.getByRole('button', { name: 'Adicionar mesa' }).click();
+    await expect(B.page.getByText(/Sem ligação — planta só neste dispositivo/i)).toBeVisible({
+      timeout: 10_000,
+    });
 
+    // A consegue gravar no servidor. B recebe o evento Socket.IO enquanto
+    // conserva a sua edição local não sincronizada.
+    const gravaA = A.page.waitForResponse((response) =>
+      response.url().includes('/api/events/') &&
+      response.url().includes('/plantas/') &&
+      response.request().method() === 'PUT' &&
+      response.status() === 200,
+    );
     await A.page.locator('input[placeholder="ex: Mesa 1"]').fill(`E2E-A2-${ts}`);
     await A.page.getByRole('button', { name: 'Adicionar mesa' }).click();
+    await gravaA;
 
     await expect(B.page.getByText(/mudou noutro dispositivo/i).first()).toBeVisible({
       timeout: 15_000,
