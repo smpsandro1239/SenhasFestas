@@ -1,3 +1,31 @@
+## 2026-11-17 — T43: auditoria bilateral de transferências entre eventos
+
+**Problema identificado**
+- Uma transferência de saldo entre eventos era registada apenas com o `eventId` de destino. O tesoureiro do evento de origem não conseguia encontrar esse movimento no âmbito de auditoria do seu evento, apesar de o saldo de origem ter sido debitado.
+
+**Alterações directas na main**
+- `SnapshotAuditoria` aceita agora alvos de auditoria explícitos, cada um com `eventId` e `entityId`.
+- O interceptor grava um registo por alvo, deduplicando pares iguais de evento/entidade e mantendo os mesmos detalhes/snapshot.
+- Transferências normais e replays idempotentes emitem registos para o saldo de origem no evento de origem e para o saldo de destino no evento de destino.
+- O caminho de sucesso e o caminho de erro usam a mesma lista de alvos, para preservar a visibilidade bilateral se a operação falhar depois de o snapshot ser preparado.
+- Testes do interceptor verificam dois registos, os dois pares evento/saldo e a deduplicação; teste de BalanceService valida os alvos transmitidos pelo serviço.
+- Removida uma declaração redundante detectada durante a revisão estática do código.
+
+**Commits**
+- `c8f55a6` — suporte a alvos múltiplos na auditoria.
+- `0d9cf63` — associar transferências aos saldos de origem/destino.
+- `c30586e` — teste de visibilidade bilateral e deduplicação.
+- `5b9d509` — teste do snapshot do serviço.
+- `80cb105` — limpeza do caminho de erro.
+
+**Validação**
+- A CI do commit anterior `d94c9a5` passou: backend lint/unit/build/PostgreSQL E2E, frontend lint/build, browser E2E, documentação e CodeQL.
+- A nova alteração bilateral foi feita depois dessa execução e ainda aguarda a sua própria CI.
+- A auditoria de dependências continua a falhar pelo advisory sem versão corrigida de `picomatch`; Gitleaks e PWA regressions passaram.
+- Não foi executado deploy nem migração nesta alteração.
+
+---
+
 ## 2026-11-17 — CI integrada e melhoria da auditoria administrativa
 
 **Validação da main**
