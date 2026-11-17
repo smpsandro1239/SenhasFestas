@@ -356,7 +356,6 @@ export class OrderService {
     const savedOrder = await this.dataSource.transaction(async (manager) => {
       const currentOrder = await manager.findOne(OrderEntity, {
         where: { id: order.id },
-        relations: { event: true },
         lock: { mode: 'pessimistic_write' },
       });
       if (!currentOrder) {
@@ -371,8 +370,8 @@ export class OrderService {
       if (user?.role === 'client') {
         const balance = currentOrder.balanceId
           ? await manager.findOne(BalanceEntity, {
-              where: { id: currentOrder.balanceId },
-              relations: { user: true },
+              where: { id: currentOrder.balanceId, user: { id: user.id } },
+              lock: { mode: 'pessimistic_write' },
             })
           : null;
         if (!balance || balance.user?.id !== user.id) {
@@ -380,7 +379,8 @@ export class OrderService {
         }
       } else if (user?.role !== 'superadmin') {
         const membership = await manager.findOne(EventUserEntity, {
-          where: { event: { id: currentOrder.event?.id ?? order.event?.id }, user: { id: user?.id } },
+          where: { event: { id: order.event?.id }, user: { id: user?.id } },
+          lock: { mode: 'pessimistic_read' },
         });
         if (!membership) {
           throw new ForbiddenException('Não pertence a este evento');
@@ -445,7 +445,6 @@ export class OrderService {
     const savedOrder = await this.dataSource.transaction(async (manager) => {
       const currentOrder = await manager.findOne(OrderEntity, {
         where: { id },
-        relations: { event: true },
         lock: { mode: 'pessimistic_write' },
       });
       if (!currentOrder || currentOrder.status !== order.status) {
@@ -453,7 +452,8 @@ export class OrderService {
       }
       if (user && user.role !== 'superadmin') {
         const membership = await manager.findOne(EventUserEntity, {
-          where: { event: { id: currentOrder.event?.id ?? order.event?.id }, user: { id: user.id } },
+          where: { event: { id: order.event?.id }, user: { id: user.id } },
+          lock: { mode: 'pessimistic_read' },
         });
         if (!membership) {
           throw new ForbiddenException('Não pertence a este evento');
