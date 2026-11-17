@@ -761,10 +761,12 @@ describe('BalanceService — transferência entre eventos (melhoria #8)', () => 
     const origem = { id: 'b-origem', currentBalance: 100 };
     const destino = { id: 'b-destino', currentBalance: 20 };
     const manager = {
-      findOne: vi
-        .fn()
-        .mockResolvedValueOnce(origem)
-        .mockResolvedValueOnce(destino),
+      findOne: vi.fn().mockImplementation((_entity: any, opts: any) => {
+        const eventId = opts?.where?.event?.id;
+        if (eventId === 'magusto') return Promise.resolve(origem);
+        if (eventId === 'atual') return Promise.resolve(destino);
+        return Promise.resolve(null);
+      }),
       save: vi.fn().mockImplementation(async (_e: any, d: any) => {
         if (d?.currentBalance !== undefined) {
           eventos.push({ currentBalance: Number(d.currentBalance) });
@@ -799,6 +801,11 @@ describe('BalanceService — transferência entre eventos (melhoria #8)', () => 
       }),
     );
     expect(eventService.vincularCliente).toHaveBeenCalledWith('u1', 'atual');
+    expect(
+      manager.findOne.mock.calls
+        .filter(([entity]: any[]) => entity?.name === 'BalanceEntity')
+        .map(([, options]: any[]) => options.where.event.id),
+    ).toEqual(['atual', 'magusto']);
   });
 
   it('origem sem saldo suficiente → Forbidden', async () => {
@@ -806,7 +813,11 @@ describe('BalanceService — transferência entre eventos (melhoria #8)', () => 
     (svc as any).eventRepository.findOne.mockResolvedValue({ id: 'magusto', name: 'Magusto' });
     (svc as any).dataSource.transaction.mockImplementation(async (fn: any) =>
       fn({
-        findOne: vi.fn().mockResolvedValueOnce({ id: 'b-origem', currentBalance: 10 }),
+        findOne: vi.fn().mockImplementation((_entity: any, opts: any) =>
+        opts?.where?.event?.id === 'magusto'
+          ? Promise.resolve({ id: 'b-origem', currentBalance: 10 })
+          : Promise.resolve(null),
+      ),
         save: vi.fn().mockImplementation(async (_e: any, d: any) => Promise.resolve(d)),
         create: vi.fn().mockImplementation((_e: any, d: any) => d),
       }),
@@ -829,11 +840,15 @@ describe('BalanceService — transferência entre eventos (melhoria #8)', () => 
     (svc as any).userRepository.findOne = vi.fn().mockResolvedValue({ id: 'u1', name: 'Ana' });
     const criaDestino = vi.fn();
     const manager = {
-      findOne: vi
-        .fn()
-        .mockResolvedValueOnce({ id: 'b-origem', currentBalance: 50 })
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ id: 'u1', name: 'Ana' }),
+      findOne: vi.fn().mockImplementation((entity: any, opts: any) => {
+        if (entity?.name === 'BalanceEntity' && opts?.where?.event?.id === 'magusto') {
+          return Promise.resolve({ id: 'b-origem', currentBalance: 50 });
+        }
+        if (entity?.name === 'UserEntity') {
+          return Promise.resolve({ id: 'u1', name: 'Ana' });
+        }
+        return Promise.resolve(null);
+      }),
       save: vi.fn().mockImplementation(async (_e: any, d: any) => {
         if (d?.currentBalance === 0) criaDestino(d);
         return Promise.resolve(d);
