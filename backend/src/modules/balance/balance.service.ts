@@ -1,4 +1,5 @@
 ﻿import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource, MoreThan, IsNull, LessThan } from 'typeorm';
 import { BalanceEntity, UserEntity, BalanceMovementEntity, EventEntity, EventUserEntity, MovementType } from '../../entities';
@@ -39,6 +40,51 @@ export class BalanceService {
     private readonly eventService: EventService,
   ) {}
 
+  private validarChaveIdempotencia(value: string | undefined, actor?: any): string | undefined {
+    if (value === undefined) return undefined;
+    const key = value.trim();
+    if (!actor?.id) {
+      throw new BadRequestException('Idempotency-Key requer um utilizador autenticado');
+    }
+    if (key.length < 8 || key.length > 128 || !/^[\\x21-\\x7E]+$/.test(key)) {
+      throw new BadRequestException('Idempotency-Key inválida (8 a 128 caracteres ASCII visíveis)');
+    }
+    return key;
+  }
+
+  private hashOperacaoFinanceira(
+    operation: 'load' | 'deduct',
+    actorId: string,
+    userId: string,
+    eventId: string,
+    details: Record<string, unknown>,
+  ): string {
+    return createHash('sha256')
+      .update(JSON.stringify({ operation, actorId, userId, eventId, ...details }))
+      .digest('hex');
+  }
+
+  private async lockOperationKey(
+    manager: import('typeorm').EntityManager,
+    actorId: string,
+    operation: 'load' | 'deduct',
+    idempotencyKey: string,
+  ): Promise<void> {
+    await manager.query(
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      [`${actorId}:${operation}`, idempotencyKey],
+    );
+  }
+
+  private assertHashOperacao(
+    movement: BalanceMovementEntity,
+    requestHash: string,
+  ): void {
+    if (!movement.requestHash || movement.requestHash !== requestHash) {
+      throw new ConflictException('Idempotency-Key já utilizada com outro conteúdo');
+    }
+  }
+
   async assertMemberEvent(userId: string, eventId: string): Promise<void> {
     const membership = await this.eventUserRepository.findOne({
       where: { user: { id: userId }, event: { id: eventId } },
@@ -62,12 +108,24 @@ export class BalanceService {
     dto: LoadBalanceDto,
     actor?: any,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
+    rawIdempotencyKey?: string,
   ): Promise<Partial<BalanceEntity>> {
     if (!dto.eventId) {
       throw new ForbiddenException('Carregamento de saldo exige eventId (evita saldo sem scope de evento)');
     }
-    await this.eventService.assertEventOperavelById(dto.eventId);
-    const updated = await this.runLoadTransaction(userId, dto, actor, arquivar);
+    const idempotencyKey = this.validarChaveIdempotencia(rawIdempotencyKey, actor);
+    const requestHash = idempotencyKey
+      ? this.hashOperacaoFinanceira('load', actor.id, userId, dto.eventId, {
+          amount: centavos(dto.amount),
+          paymentMethod: dto.paymentMethod ?? 'Carregamento',
+        })
+      : undefined;
+    if (!idempotencyKey) {
+      await this.eventService.assertEventOperavelById(dto.eventId);
+    }
+    const updated = await this.runLoadTransaction(
+      userId, dto, actor, arquivar, idempotencyKey, requestHash,
+    );
     await this.eventService.vincularCliente(userId, dto.eventId);
     return {
       id: updated.id,
@@ -200,6 +258,8 @@ export class BalanceService {
     dto: LoadBalanceDto,
     actor?: any,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
+    idempotencyKey?: string,
+    requestHash?: string,
     tries = 3,
   ): Promise<BalanceEntity> {
     try {
@@ -207,6 +267,20 @@ export class BalanceService {
         let event: EventEntity | undefined;
         if (dto.eventId) {
           event = await manager.findOne(EventEntity, { where: { id: dto.eventId } }) ?? undefined;
+        }
+
+        if (idempotencyKey) {
+          await this.lockOperationKey(manager, actor.id, 'load', idempotencyKey);
+          const anterior = await manager.findOne(BalanceMovementEntity, {
+            where: { createdById: actor.id, idempotencyKey },
+            relations: { balance: true },
+          });
+          if (anterior) {
+            this.assertHashOperacao(anterior, requestHash!);
+            if (!anterior.balance) throw new NotFoundException('Saldo do carregamento não encontrado');
+            return anterior.balance;
+          }
+          await this.eventService.assertEventOperavelById(dto.eventId);
         }
 
         let balance = await manager.findOne(BalanceEntity, {
@@ -257,15 +331,20 @@ export class BalanceService {
           amount: centavos(dto.amount),
           description: dto.paymentMethod || 'Carregamento',
           createdById: actor?.id,
+          idempotencyKey,
+          requestHash,
         });
         await manager.save(BalanceMovementEntity, movement);
 
         return saved;
       });
     } catch (error) {
-      const code = (error as { code?: string } | null)?.code;
+      const wrapped = error as { code?: string; driverError?: { code?: string } } | null;
+      const code = wrapped?.driverError?.code ?? wrapped?.code;
       if (tries > 1 && code === '23505') {
-        return this.runLoadTransaction(userId, dto, actor, arquivar, tries - 1);
+        return this.runLoadTransaction(
+          userId, dto, actor, arquivar, idempotencyKey, requestHash, tries - 1,
+        );
       }
       throw error;
     }
@@ -276,12 +355,39 @@ export class BalanceService {
     dto: DeductBalanceDto,
     actor?: any,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
+    rawIdempotencyKey?: string,
   ): Promise<{ id: string; currentBalance: number; movement: BalanceMovementEntity }> {
     if (!dto.eventId) {
       throw new ForbiddenException('Desconto de saldo exige eventId (evita saldo sem scope de evento)');
     }
-    await this.eventService.assertEventOperavelById(dto.eventId);
+    const idempotencyKey = this.validarChaveIdempotencia(rawIdempotencyKey, actor);
+    const requestHash = idempotencyKey
+      ? this.hashOperacaoFinanceira('deduct', actor.id, userId, dto.eventId, {
+          amount: centavos(dto.amount),
+          description: dto.description ?? 'Desconto de saldo (caixa)',
+        })
+      : undefined;
+    if (!idempotencyKey) {
+      await this.eventService.assertEventOperavelById(dto.eventId);
+    }
     const resultado = await this.dataSource.transaction(async (manager) => {
+      if (idempotencyKey) {
+        await this.lockOperationKey(manager, actor.id, 'deduct', idempotencyKey);
+        const anterior = await manager.findOne(BalanceMovementEntity, {
+          where: { createdById: actor.id, idempotencyKey },
+          relations: { balance: true },
+        });
+        if (anterior) {
+          this.assertHashOperacao(anterior, requestHash!);
+          if (!anterior.balance) throw new NotFoundException('Saldo do desconto não encontrado');
+          return {
+            id: anterior.balance.id,
+            currentBalance: Number(anterior.balance.currentBalance),
+            movement: anterior,
+          };
+        }
+        await this.eventService.assertEventOperavelById(dto.eventId);
+      }
       const balance = await manager.findOne(BalanceEntity, {
         where: dto.eventId
           ? ({ user: { id: userId }, event: { id: dto.eventId } } as any)
@@ -318,6 +424,8 @@ export class BalanceService {
         amount: montante,
         description: dto.description || 'Desconto de saldo (caixa)',
         createdById: actor?.id,
+        idempotencyKey,
+        requestHash,
       });
       const savedMovement = await manager.save(BalanceMovementEntity, movement);
 
