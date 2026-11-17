@@ -890,7 +890,12 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
     const origem = { id: 'b-origem', currentBalance: 100 };
     const destino = { id: 'b-destino', currentBalance: 20 };
     const manager = {
-      findOne: vi.fn().mockResolvedValueOnce(origem).mockResolvedValueOnce(destino),
+      findOne: vi.fn().mockImplementation((_entity: any, options: any) => {
+        const eventId = options?.where?.event?.id;
+        if (eventId === 'magusto') return Promise.resolve(origem);
+        if (eventId === 'atual') return Promise.resolve(destino);
+        return Promise.resolve(null);
+      }),
       save: vi.fn().mockImplementation((_e: any, d: any) => Promise.resolve(d)),
       create: vi.fn().mockImplementation((_e: any, d: any) => d),
     };
