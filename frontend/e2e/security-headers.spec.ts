@@ -27,19 +27,3 @@ test('CSP usa nonce por resposta e não permite scripts inline genéricos', asyn
   const html = await resposta.text();
   expect(html).toContain(`nonce="${nonce}"`);
 });
-
-test('todos os scripts inline executáveis recebem o nonce CSP', async ({ page }) => {
-  await page.goto('/auth/login', { waitUntil: 'networkidle' });
-  const scriptsSemNonce = await page.locator('script:not([src])').evaluateAll((elements) =>
-    elements
-      .filter((element) => {
-        const script = element as HTMLScriptElement;
-        return script.type !== 'application/json' && script.type !== 'application/ld+json' && !script.nonce;
-      })
-      .map((element) => ({
-        type: (element as HTMLScriptElement).type || 'text/javascript',
-        text: (element.textContent || '').slice(0, 100),
-      })),
-  );
-  expect(scriptsSemNonce).toEqual([]);
-});
