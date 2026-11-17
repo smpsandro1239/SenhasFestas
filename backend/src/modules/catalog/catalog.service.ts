@@ -167,13 +167,16 @@ export class CatalogService {
     return ids.map((id) => byId.get(id)).filter((product): product is ProductEntity => !!product);
   }
 
-  async findOne(id: string, _user: UserEntity): Promise<ProductEntity> {
+  async findOne(id: string, user: UserEntity): Promise<ProductEntity> {
     const product = await this.productRepository.findOne({
       where: { id },
       relations: { event: true },
     });
     if (!product) {
       throw new NotFoundException('Product not found');
+    }
+    if (product.event?.id && user?.role !== 'superadmin') {
+      await this.membershipService.assertMember(user, product.event.id);
     }
     return product;
   }
