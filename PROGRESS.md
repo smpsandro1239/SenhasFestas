@@ -1,3 +1,37 @@
+## 2026-11-17 — CI integrada e melhoria da auditoria administrativa
+
+**Validação da main**
+- Commit `08fa452`: CI concluída com sucesso — frontend (lint/build), backend (lint/testes/build/E2E), Browser E2E e verificação documental.
+- CodeQL concluído com sucesso.
+- O job `Deploy produção` terminou com conclusão `success`, mas os passos `Correr migrações de base de dados` e `Deploy via SSH` foram `skipped`. Portanto, esta execução não comprova publicação em produção.
+- O workflow Security passou Gitleaks e os testes de regressão PWA; falhou apenas na imposição da auditoria de dependências.
+
+**T43 — Alterações directas na main**
+- O interceptor de auditoria passa a usar IDs UUID devolvidos pela operação quando uma criação não tem ID no URL: evento criado, pedido criado e utilizador criado.
+- Para pedidos e outros recursos, deriva o evento apenas de campos explícitos `eventId`, `event.id`, `order.event.id` ou `balance.event.id`; para criação de evento usa o próprio `data.id`.
+- O caminho de erro também respeita os overrides de entidade e evento definidos pelo serviço.
+- As acções de importação, duplicação e alteração de membros passam a ser identificadas como `IMPORT`, `DUPLICATE` e `MEMBER`, em vez de ficarem indistintas como CREATE/DELETE.
+- Testes unitários acrescentados para estes cenários.
+
+**T64 — Diagnóstico de dependências**
+- O artefacto da CI confirma 4 vulnerabilidades altas em produção, todas provenientes do mesmo advisory ReDoS em `picomatch <=4.0.7` (GHSA-fc5q-39xc-vjpf / CVE-2026-112366), através de `typeorm@1.1.3 → tinyglobby → fdir/picomatch`.
+- O GitHub Advisory declara explicitamente que ainda não existe versão corrigida. A sugestão automática do npm é trocar TypeORM 1.1.3 por 0.3.31, uma alteração major e incompatível com a versão declarada; não foi aplicada.
+- O alerta foi mantido visível no TODO. A mitigação segura depende de patch upstream ou de uma alternativa de dependência validada. A aplicação não aceita actualmente padrões glob fornecidos pelo utilizador nas rotas públicas conhecidas, mas isso não elimina a vulnerabilidade da árvore de produção.
+
+**Commits**
+- `179bf2b` — derivar IDs de auditoria nas criações.
+- `08c4aff` — testes de criação, importação, duplicação e membros.
+- `6e1b626` — correcção da fixture local de teste.
+- Este registo fica no commit seguinte.
+
+**Estado**
+- T42 permanece em curso: CI passou, mas falta observabilidade e validar Redis em deployment real.
+- T43 permanece em curso: cobertura melhorada, falta outbox/atomicidade e auditoria de todos os domínios.
+- T64 permanece em curso devido ao advisory sem patch disponível.
+- Nenhuma migração ou publicação foi executada nesta validação.
+
+---
+
 ## 2026-11-17 — T42: correcção após falha real de teste
 
 **Falha detectada pela CI**
