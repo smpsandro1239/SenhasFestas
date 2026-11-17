@@ -196,7 +196,6 @@ export class AuditInterceptor implements NestInterceptor {
       catchError((error) => {
         const ator = this.resolverAtor(req, acao, undefined);
         const statusCode = (error as { status?: number })?.status ?? 500;
-        const eventId = this.eventoEfetivo(req, eventIdBase);
         const entityIdEfetivo = this.entidadeEfetiva(req, entityId);
         const eventIdEfetivo = this.eventoEfetivo(req, eventIdBase);
         const registoBase = {
