@@ -6,10 +6,10 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Redis } from 'ioredis';
-import { EventUserEntity, UserEntity } from '../entities';
+import { UserEntity } from '../entities';
 import { RedisService } from '../common/redis/redis.service';
 import { MembershipService } from '../common/membership.service';
-import { MANAGEMENT_ROLES } from '../common/roles';
+import { MANAGEMENT_ROLES, STAFF_ROLES } from '../common/roles';
 import {
   CANAIS_REALTIME,
   EVENTOS_SOCKET,
@@ -58,8 +58,6 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
     private readonly membershipService: MembershipService,
-    @InjectRepository(EventUserEntity)
-    private readonly eventUserRepository: Repository<EventUserEntity>,
     @InjectRepository(UserEntity)
     private readonly userRepository: Repository<UserEntity>,
   ) {
@@ -311,15 +309,20 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       client.emit('error', { message });
       return { ok: false, message };
     }
-    if (user.role !== 'superadmin') {
-      const membership = await this.eventUserRepository.findOne({
-        where: { event: { id: eventId }, user: { id: user.id } },
-      });
-      if (!membership) {
-        const message = 'Não pertence a este evento';
-        client.emit('error', { message });
-        return { ok: false, message };
-      }
+    let role: string;
+    try {
+      role = await this.membershipService.roleEfetiva(user, eventId);
+    } catch {
+      const message = 'Não pertence a este evento';
+      client.emit('error', { message });
+      return { ok: false, message };
+    }
+    // A room contém todos os pedidos do evento. Clientes só podem consultar
+    // os seus próprios pedidos por HTTP e não podem subscrever o fluxo global.
+    if (!STAFF_ROLES.includes(role)) {
+      const message = 'Sem permissão para actualizações de pedidos deste evento';
+      client.emit('error', { message });
+      return { ok: false, message };
     }
     await client.join(roomEvento(eventId));
     return { ok: true };
