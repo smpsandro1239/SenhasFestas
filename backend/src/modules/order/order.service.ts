@@ -536,8 +536,10 @@ export class OrderService {
       currentOrder.status = 'cancelled';
       const updatedOrder = await manager.save(OrderEntity, currentOrder);
 
-      await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
+      // Ordem global de locks: pedido -> produtos (ID ascendente) -> saldo.
+      // Mantém a ordem compatível com a criação de encomendas (produtos -> saldo).
       await reporStockEmTransacao(manager, currentOrder.id);
+      await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
 
       return updatedOrder;
     });
@@ -611,8 +613,9 @@ export class OrderService {
         if (temSaldoParaReembolsar(currentOrder)) {
           assertPodeMexerEmSaldo(user);
         }
-        await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
+        // Ordem global de locks: pedido -> produtos (ID ascendente) -> saldo.
         await reporStockEmTransacao(manager, currentOrder.id);
+        await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
       }
 
       return updated;
