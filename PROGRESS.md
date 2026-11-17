@@ -1,3 +1,19 @@
+## 2026-11-17 — Governação de segurança do repositório (T39)
+
+**Feito na branch `codex/autonomous-hardening-2026-11`**
+- Criado `SECURITY.md` com divulgação responsável via GitHub Security Advisory privada, âmbito e informação segura a incluir.
+- Criado `.github/dependabot.yml` para npm (workspaces/lockfile raiz) e GitHub Actions, com actualização semanal.
+- Criado workflow `.github/workflows/codeql.yml` para análise JavaScript/TypeScript em push, PR, agenda semanal e execução manual.
+- Workflow CI principal passa a declarar `permissions: contents: read` por omissão.
+- Reescrito `CONTRIBUTING.md`: instalação única na raiz via `npm ci`, build shared, typecheck/testes por workspace, E2E apenas contra BD local descartável e aviso sobre dinheiro/idempotência.
+- Actualizado `AUDIT.md`, `PLAN.md` e `TODO.md`.
+
+**Validação**
+- Ainda não há execução CodeQL/Dependabot confirmada. O CI do commit de documentação e os workflows recém-adicionados têm de ser observados no HEAD final.
+- Os comandos documentados para E2E mantêm a barreira `E2E_ALLOW_SCHEMA_RESET=true`, host loopback e sufixo de BD descartável.
+
+---
+
 # SenhasFestas — Progresso
 
 > Log de sessões. Mais recente no topo.
