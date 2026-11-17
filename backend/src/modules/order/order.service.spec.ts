@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { OrderService } from './order.service';
 import { EventService } from '../event/event.service';
-import { BalanceMovementEntity, MovementType, ProductEntity } from '../../entities';
+import { BalanceMovementEntity, BalanceEntity, EventUserEntity, MovementType, OrderEntity, ProductEntity } from '../../entities';
 
 describe('OrderService — guard de janela operacional', () => {
   const eventService = {
@@ -128,12 +128,17 @@ describe('OrderService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
       findOne: vi.fn().mockResolvedValue({ id: 'm1' }),
     };
     const manager = {
-      findOne: vi.fn().mockResolvedValueOnce({
-        id: 'o1',
-        status: 'received',
-        balanceId: 'b1',
-        balanceUsed: 10,
-      }),
+      findOne: vi.fn().mockImplementation((entity: any) =>
+        entity === EventUserEntity
+          ? Promise.resolve({ id: 'm1' })
+          : Promise.resolve({
+              id: 'o1',
+              status: 'received',
+              balanceId: 'b1',
+              balanceUsed: 10,
+              event: { id: 'evt1' },
+            }),
+      ),
       save: vi.fn().mockImplementation((_entity: any, data: any) => Promise.resolve(data)),
       create: vi.fn().mockImplementation((_entity: any, data: any) => data),
     };
@@ -273,7 +278,8 @@ describe('OrderService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
       find: vi.fn().mockResolvedValue([]),
       findOne: vi
         .fn()
-        .mockResolvedValueOnce({ id: 'o1', status: 'received', balanceId: 'b1', balanceUsed: 10 })
+        .mockResolvedValueOnce({ id: 'o1', status: 'received', balanceId: 'b1', balanceUsed: 10, event: { id: 'evt1' } })
+        .mockResolvedValueOnce({ id: 'm1' })
         .mockResolvedValueOnce({ id: 'b1', currentBalance: 5 }),
       save: vi.fn().mockImplementation((_entity: any, data: any) => {
         if (data?.currentBalance !== undefined) balanceSave(data);
@@ -552,7 +558,11 @@ describe('OrderService — cancelamento repõe stock (B1c)', () => {
     const itens = [{ quantity: 2, product: produto }];
     return {
       find: vi.fn().mockResolvedValue(itens),
-      findOne: vi.fn().mockResolvedValue({ id: 'o1', status: 'received', event: { id: 'evt1' } }),
+      findOne: vi.fn().mockImplementation((entity: any) =>
+        entity === EventUserEntity
+          ? Promise.resolve({ id: 'm1' })
+          : Promise.resolve({ id: 'o1', status: 'received', event: { id: 'evt1' } }),
+      ),
       save: vi.fn().mockImplementation((_e: any, d: any) => Promise.resolve(d)),
       create: vi.fn().mockImplementation((_e: any, d: any) => d),
     };
@@ -567,6 +577,75 @@ describe('OrderService — cancelamento repõe stock (B1c)', () => {
 
     expect(p1.stock).toBe(5);
     expect(manager.save).toHaveBeenCalledWith(ProductEntity, expect.objectContaining({ stock: 5 }));
+  });
+
+  it('revalida a membership dentro da transação antes de cancelar', async () => {
+    const order = { id: 'o1', status: 'received', event: { id: 'evt1' } };
+    const manager = {
+      find: vi.fn().mockResolvedValue([]),
+      findOne: vi.fn().mockImplementation((entity: any) =>
+        entity === OrderEntity ? Promise.resolve(order) :
+        entity === EventUserEntity ? Promise.resolve(null) :
+        Promise.resolve(null),
+      ),
+      save: vi.fn().mockImplementation((_e: any, d: any) => Promise.resolve(d)),
+      create: vi.fn().mockImplementation((_e: any, d: any) => d),
+    };
+    const svc = makeSvc(manager);
+
+    await expect(svc.cancelOrder('o1', { id: 'u1', role: 'cashier' }))
+      .rejects.toThrow('Não pertence a este evento');
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
+  it('revalida a titularidade do saldo do cliente dentro da transação', async () => {
+    const order = {
+      id: 'o1',
+      status: 'received',
+      event: { id: 'evt1' },
+      balanceId: 'b1',
+      balanceUsed: 10,
+    };
+    const orderRepository = { findOne: vi.fn().mockResolvedValue(order) };
+    const balanceRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'b1', user: { id: 'u1' } }),
+    };
+    const manager = {
+      find: vi.fn().mockResolvedValue([]),
+      findOne: vi.fn().mockImplementation((entity: any) =>
+        entity === OrderEntity ? Promise.resolve(order) :
+        entity === BalanceEntity ? Promise.resolve({ id: 'b1', user: { id: 'u2' } }) :
+        Promise.resolve(null),
+      ),
+      save: vi.fn().mockImplementation((_e: any, d: any) => Promise.resolve(d)),
+      create: vi.fn().mockImplementation((_e: any, d: any) => d),
+    };
+    const dataSource = { transaction: vi.fn().mockImplementation(async (fn: any) => fn(manager)) };
+    const svc = new OrderService(
+      orderRepository as any, {} as any, balanceRepository as any, {} as any, {} as any,
+      {} as any, {} as any, dataSource as any,
+      {} as any, {} as any, {} as any, {} as any,
+    );
+
+    await expect(svc.cancelOrder('o1', { id: 'u1', role: 'client' }))
+      .rejects.toThrow('Não pode cancelar o pedido de outro utilizador');
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
+  it('não permite cancelar um pedido que já chegou a pronto', async () => {
+    const orderRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'o1', status: 'ready', event: { id: 'evt1' } }),
+    };
+    const dataSource = { transaction: vi.fn() };
+    const svc = new OrderService(
+      orderRepository as any, {} as any, {} as any, {} as any, {} as any,
+      {} as any, { findOne: vi.fn().mockResolvedValue({ id: 'm1' }) } as any,
+      dataSource as any, {} as any, {} as any, {} as any, {} as any,
+    );
+
+    await expect(svc.cancelOrder('o1', { id: 'u1', role: 'cashier' }))
+      .rejects.toThrow('Pedido não pode ser cancelado neste estado');
+    expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 
   it('não mexe em produtos sem controlo de stock', async () => {

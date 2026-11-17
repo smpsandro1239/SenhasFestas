@@ -331,11 +331,8 @@ export class OrderService {
     if (!order) {
       throw new NotFoundException('Pedido não encontrado');
     }
-    if (order.status === 'delivered') {
-      throw new ForbiddenException('Pedido entregue não pode ser cancelado');
-    }
-    if (order.status === 'cancelled') {
-      throw new ForbiddenException('Pedido já cancelado');
+    if (!['received', 'preparing'].includes(order.status)) {
+      throw new ForbiddenException('Pedido não pode ser cancelado neste estado');
     }
 
     const isStaff = user?.role !== 'client';
@@ -369,9 +366,32 @@ export class OrderService {
       if (!currentOrder) {
         throw new NotFoundException('Pedido não encontrado');
       }
-      if (currentOrder.status === 'delivered' || currentOrder.status === 'cancelled') {
-        throw new ForbiddenException('Pedido já não pode ser cancelado');
+      if (!['received', 'preparing'].includes(currentOrder.status)) {
+        throw new ForbiddenException('Pedido não pode ser cancelado neste estado');
       }
+
+      // Revalidar autorização depois de bloquear o pedido fecha a janela
+      // entre a verificação inicial e a escrita financeira/stock.
+      if (user?.role === 'client') {
+        const balance = currentOrder.balanceId
+          ? await manager.findOne(BalanceEntity, {
+              where: { id: currentOrder.balanceId, user: { id: user.id } },
+              lock: { mode: 'pessimistic_write' },
+            })
+          : null;
+        if (!balance || balance.user?.id !== user.id) {
+          throw new ForbiddenException('Não pode cancelar o pedido de outro utilizador');
+        }
+      } else if (user?.role !== 'superadmin') {
+        const membership = await manager.findOne(EventUserEntity, {
+          where: { event: { id: order.event?.id }, user: { id: user?.id } },
+          lock: { mode: 'pessimistic_read' },
+        });
+        if (!membership) {
+          throw new ForbiddenException('Não pertence a este evento');
+        }
+      }
+
       if (temSaldoParaReembolsar(currentOrder)) {
         assertPodeMexerEmSaldo(user);
       }
@@ -434,6 +454,15 @@ export class OrderService {
       });
       if (!currentOrder || currentOrder.status !== order.status) {
         throw new ForbiddenException('Pedido mudou de estado, tente novamente');
+      }
+      if (user && user.role !== 'superadmin') {
+        const membership = await manager.findOne(EventUserEntity, {
+          where: { event: { id: order.event?.id }, user: { id: user.id } },
+          lock: { mode: 'pessimistic_read' },
+        });
+        if (!membership) {
+          throw new ForbiddenException('Não pertence a este evento');
+        }
       }
       if (status === 'cancelled' && temSaldoParaReembolsar(currentOrder)) {
         assertPodeMexerEmSaldo(user);
