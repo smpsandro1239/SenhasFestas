@@ -1,6 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
-import { BalanceMovementEntity, EventEntity, MovementType } from '../../entities';
+import { BalanceMovementEntity, EventEntity, EventUserEntity, MovementType } from '../../entities';
 import { BalanceService } from './balance.service';
 
 function criarService(manager: any) {
@@ -43,6 +43,7 @@ describe('BalanceService — idempotência de operações financeiras', () => {
       query: vi.fn().mockResolvedValue(undefined),
       findOne: vi.fn().mockImplementation((entity: any) => {
         if (entity === EventEntity) return Promise.resolve({ id: 'evt1', status: 'active' });
+        if (entity === EventUserEntity) return Promise.resolve({ id: 'membership-1' });
         if (entity === BalanceMovementEntity) return Promise.resolve(movement);
         return Promise.resolve(null);
       }),
@@ -108,7 +109,10 @@ describe('BalanceService — idempotência de operações financeiras', () => {
     const manager = {
       query: vi.fn().mockResolvedValue(undefined),
       findOne: vi.fn().mockImplementation((entity: any) =>
-        Promise.resolve(entity === BalanceMovementEntity ? movement : null),
+        Promise.resolve(
+          entity === EventUserEntity ? { id: 'membership-1' }
+            : entity === BalanceMovementEntity ? movement : null,
+        ),
       ),
       save: vi.fn(),
       create: vi.fn(),
