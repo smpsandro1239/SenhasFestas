@@ -195,7 +195,8 @@ describe('AuditInterceptor — before/after', () => {
         id: 'user-1',
         email: 'teste@example.com',
         passwordHash: 'hash-secreto',
-        profile: { refreshToken: 'refresh-token-secreto' },
+        accessCode: '123456',
+        profile: { refreshToken: 'refresh-token-secreto', pin: '4321' },
       },
     };
 
@@ -210,7 +211,8 @@ describe('AuditInterceptor — before/after', () => {
         id: 'user-1',
         email: 'teste@example.com',
         passwordHash: '[REDACTED]',
-        profile: { refreshToken: '[REDACTED]' },
+        accessCode: '[REDACTED]',
+        profile: { refreshToken: '[REDACTED]', pin: '[REDACTED]' },
       },
     });
     expect(JSON.stringify(record.mock.calls[0][0].after)).not.toContain('secreto');
