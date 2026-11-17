@@ -108,6 +108,46 @@ describe('OrderService — idempotência na criação', () => {
     expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 
+  it('revalida a chave sob advisory lock antes de validar stock ou debitar saldo', async () => {
+    const seed = criarServico();
+    const requestHash = (seed.service as any).hashPedido(USER.id, DTO);
+    const existing = { id: 'order-1', status: 'received', requestHash };
+    const { service, orderRepository, dataSource, orderGateway, notificationService } = criarServico();
+    orderRepository.findOne.mockResolvedValueOnce(null);
+
+    const manager = {
+      query: vi.fn().mockResolvedValue([]),
+      findOne: vi.fn().mockResolvedValue(existing),
+      find: vi.fn(),
+      create: vi.fn(),
+      save: vi.fn(),
+    };
+    dataSource.transaction.mockImplementation(async (fn: any) => fn(manager));
+
+    const result = await service.create(USER, DTO as any, 'order-test-key-0001');
+
+    expect(result.id).toBe('order-1');
+    expect(manager.query).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      ['event-1:user-1', 'order-test-key-0001'],
+    );
+    expect(manager.findOne).toHaveBeenCalledWith(
+      OrderEntity,
+      expect.objectContaining({
+        where: {
+          event: { id: 'event-1' },
+          createdById: USER.id,
+          idempotencyKey: 'order-test-key-0001',
+        },
+      }),
+    );
+    expect(manager.find).not.toHaveBeenCalled();
+    expect(manager.create).not.toHaveBeenCalled();
+    expect(manager.save).not.toHaveBeenCalled();
+    expect(orderGateway.emitOrderUpdate).not.toHaveBeenCalled();
+    expect(notificationService.notifyNewOrder).not.toHaveBeenCalled();
+  });
+
   it('recupera o pedido vencedor quando duas transações competem pela mesma chave', async () => {
     const seed = criarServico();
     const requestHash = (seed.service as any).hashPedido(USER.id, DTO);
