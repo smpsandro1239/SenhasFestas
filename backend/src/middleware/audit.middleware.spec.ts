@@ -181,6 +181,21 @@ describe('LoginRateLimitMiddleware — reservas concorrentes e fallback local', 
     );
   });
 
+  it('não ultrapassa o limite local quando várias reservas falham no Redis em simultâneo', async () => {
+    redisService.incrementWithTtlStrict.mockRejectedValue(new Error('ECONNREFUSED'));
+    const next = vi.fn();
+    const primeira = fakeRes();
+    const segunda = fakeRes();
+
+    await Promise.all([
+      middleware.use(fakeReq('1.2.3.4', 'concorrente@b.com'), primeira, next),
+      middleware.use(fakeReq('1.2.3.4', 'concorrente@b.com'), segunda, next),
+    ]);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect([primeira.statusCode, segunda.statusCode]).toContain(429);
+  });
+
   it('mantém a tentativa 401 e bloqueia a seguinte', async () => {
     redisService.incrementWithTtlStrict.mockRejectedValue(new Error('ECONNREFUSED'));
     const primeira = fakeRes();
