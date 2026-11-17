@@ -1,6 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
-import { BalanceEntity, BalanceMovementEntity, EventEntity, MovementType } from '../../entities';
+import { BalanceMovementEntity, EventEntity, MovementType } from '../../entities';
 import { BalanceService } from './balance.service';
 
 function criarService(manager: any) {
