@@ -10,12 +10,12 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  success: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  warning: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
-  danger: 'bg-red-500/10 text-red-400 border-red-500/20',
-  info: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  neutral: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20',
-  brand: 'gradient-brand-soft text-amber-200 border-amber-300/25',
+  success: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
+  warning: 'bg-orange-500/10 text-orange-300 border-orange-500/20',
+  danger: 'bg-red-500/10 text-red-300 border-red-500/20',
+  info: 'bg-blue-500/10 text-blue-300 border-blue-500/20',
+  neutral: 'bg-zinc-500/10 text-zinc-300 border-zinc-500/20',
+  brand: 'gradient-brand-soft text-blue-200 border-blue-300/25',
 };
 
 const dotColors: Record<BadgeVariant, string> = {
@@ -50,7 +50,7 @@ export function Badge({
       )}
       {...props}
     >
-      {dot && <span className={cn('h-1.5 w-1.5 rounded-full', dotColors[variant])} />}
+      {dot && <span aria-hidden="true" className={cn('h-1.5 w-1.5 rounded-full', dotColors[variant])} />}
       {children}
     </span>
   );
