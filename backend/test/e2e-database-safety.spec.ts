@@ -11,6 +11,7 @@ describe('configuracaoBaseDadosE2e — barreira contra BD remota', () => {
         DB_HOST: '127.0.0.1',
         DB_PORT: '5433',
         DB_NAME: 'senhasfestas_test',
+        DB_SSL: 'false',
       }),
     ).toEqual({
       host: '127.0.0.1',
