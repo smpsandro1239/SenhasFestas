@@ -112,6 +112,10 @@ jobs:
         working-directory: frontend
         run: npm run typecheck
 
+      - name: Testes unitários (inclui componentes UI)
+        working-directory: frontend
+        run: npm test
+
       - name: Build
         working-directory: frontend
         run: npm run build
