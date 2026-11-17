@@ -517,10 +517,17 @@ describe('BalanceService — guard de janela operacional', () => {
       const balanceRepository = {
         find: vi.fn().mockResolvedValue([vencido, vigente, antigo]),
       };
+      const queryBuilder = {
+        leftJoinAndSelect: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        setLock: vi.fn().mockReturnThis(),
+        withDeleted: vi.fn().mockReturnThis(),
+        getOne: vi.fn().mockImplementation(async () => atuais.get(
+          (queryBuilder.where.mock.calls.at(-1)?.[1] as any)?.id,
+        )),
+      };
       const manager = {
-        findOne: vi.fn().mockImplementation((_entity: any, options: any) =>
-          Promise.resolve(atuais.get(options.where.id)),
-        ),
+        createQueryBuilder: vi.fn().mockReturnValue(queryBuilder),
         save: vi.fn().mockImplementation(async (_entity: any, entity: any) => entity),
       };
       const dataSource = {
@@ -541,11 +548,9 @@ describe('BalanceService — guard de janela operacional', () => {
       expect(resultado).toEqual({ arquivados: 1, removidos: 1 });
       expect(balanceRepository.find).toHaveBeenCalledWith(expect.objectContaining({ select: { id: true } }));
       expect(dataSource.transaction).toHaveBeenCalledTimes(3);
-      expect(manager.findOne).toHaveBeenCalledWith(BalanceEntity, expect.objectContaining({
-        where: { id: 'b1' },
-        withDeleted: true,
-        lock: { mode: 'pessimistic_write' },
-      }));
+      expect(manager.createQueryBuilder).toHaveBeenCalledWith(BalanceEntity, 'saldo');
+      expect(queryBuilder.setLock).toHaveBeenCalledWith('pessimistic_write', undefined, ['saldo']);
+      expect(queryBuilder.withDeleted).toHaveBeenCalledTimes(3);
       const guardados = manager.save.mock.calls.map((call: any[]) => call[1]);
       expect(guardados.map((balance: any) => balance.id)).toEqual(['b1', 'b3']);
       expect(guardados[0].archivedAt).toEqual(now);
@@ -566,8 +571,15 @@ describe('BalanceService — guard de janela operacional', () => {
         extendedUntil: new Date('2099-01-01T00:00:00.000Z'),
       };
       const balanceRepository = { find: vi.fn().mockResolvedValue([candidatoDesactualizado]) };
+      const queryBuilder = {
+        leftJoinAndSelect: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        setLock: vi.fn().mockReturnThis(),
+        withDeleted: vi.fn().mockReturnThis(),
+        getOne: vi.fn().mockResolvedValue(saldoActual),
+      };
       const manager = {
-        findOne: vi.fn().mockResolvedValue(saldoActual),
+        createQueryBuilder: vi.fn().mockReturnValue(queryBuilder),
         save: vi.fn(),
       };
       const dataSource = {
