@@ -294,7 +294,7 @@ export async function getBalance(userId: string, eventId?: string): Promise<any>
 
 async function runIdempotentBalanceMutation<T>(
   endpoint: string,
-  operation: 'load' | 'deduct' | 'reverse',
+  operation: 'load' | 'deduct' | 'reverse' | 'transfer',
   payload: Record<string, unknown>,
   explicitKey?: string,
 ): Promise<T> {
@@ -731,11 +731,14 @@ export async function ajustarStock(
 export async function transferirSaldo(
   userId: string,
   data: { fromEventId: string; toEventId: string; amount: number },
+  idempotencyKey?: string,
 ): Promise<any> {
-  return apiRequest(`/balances/${userId}/transfer`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
+  return runIdempotentBalanceMutation(
+    `/balances/${userId}/transfer`,
+    'transfer',
+    data,
+    idempotencyKey,
+  );
 }
 
 export async function getSaldosPorEvento(userId: string): Promise<any[]> {
