@@ -814,10 +814,10 @@ describe('BalanceService — transferência entre eventos (melhoria #8)', () => 
     (svc as any).dataSource.transaction.mockImplementation(async (fn: any) =>
       fn({
         findOne: vi.fn().mockImplementation((_entity: any, opts: any) =>
-        opts?.where?.event?.id === 'magusto'
-          ? Promise.resolve({ id: 'b-origem', currentBalance: 10 })
-          : Promise.resolve(null),
-      ),
+          opts?.where?.event?.id === 'magusto'
+            ? Promise.resolve({ id: 'b-origem', currentBalance: 10 })
+            : Promise.resolve(null),
+        ),
         save: vi.fn().mockImplementation(async (_e: any, d: any) => Promise.resolve(d)),
         create: vi.fn().mockImplementation((_e: any, d: any) => d),
       }),
