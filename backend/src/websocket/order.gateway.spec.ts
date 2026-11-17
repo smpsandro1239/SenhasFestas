@@ -213,6 +213,18 @@ describe('OrderGateway — handleConnection', () => {
     expect(client.disconnect).not.toHaveBeenCalled();
   });
 
+  it('rejeita tokens sem expiração para não manter sockets indefinidos', async () => {
+    const { gateway } = criarGateway({
+      jwt: { verify: vi.fn().mockReturnValue({ sub: 'u1', role: 'organizer' }) },
+    });
+    const client = socketFalso();
+    client.handshake = { auth: { token: 'sem-exp' }, headers: {} };
+
+    await gateway.handleConnection(client);
+
+    expect(client.disconnect).toHaveBeenCalledWith(true);
+  });
+
   it('usa a role atual da BD e ignora uma role superadmin antiga no JWT', async () => {
     const { gateway } = criarGateway({
       jwt: { verify: vi.fn().mockReturnValue({ sub: 'u1', role: 'superadmin', exp: Math.floor(Date.now() / 1000) + 900 }) },
