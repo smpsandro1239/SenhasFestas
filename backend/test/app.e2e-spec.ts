@@ -664,4 +664,101 @@ describe('App e2e (Postgres + Redis)', () => {
     expect(Number(destinoFinal.currentBalance)).toBe(20);
   });
 
+  it('reembolsa uma única vez quando caixa, gestão e cozinha cancelam em simultâneo', async () => {
+    const dataSource = app.get(DataSource);
+    const userRepository = dataSource.getRepository(UserEntity);
+    const eventRepository = dataSource.getRepository(EventEntity);
+    const eventUserRepository = dataSource.getRepository(EventUserEntity);
+    const productRepository = dataSource.getRepository(ProductEntity);
+    const balanceRepository = dataSource.getRepository(BalanceEntity);
+    const password = 'password123';
+    const email = `organizer-refund-${randomUUID()}@example.com`;
+    const organizer = await userRepository.save(
+      userRepository.create({
+        email,
+        password: await bcrypt.hash(password, 10),
+        name: 'Organizador E2E',
+        role: 'organizer',
+        accessCode: proximoAccessCode(),
+        isActive: true,
+      }),
+    );
+    const event = await eventRepository.save(
+      eventRepository.create({
+        name: 'E2E Reembolso concorrente',
+        shortCode: `REF-${randomUUID().slice(0, 8)}`,
+        startDate: new Date(Date.now() - 60 * 60 * 1000),
+        endDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        status: 'active',
+      }),
+    );
+    await eventUserRepository.save(
+      eventUserRepository.create({ event, user: organizer, role: 'organizer' }),
+    );
+    const { email: clientEmail } = await criarUtilizadorTeste(
+      `refund-client-${randomUUID()}@example.com`,
+    );
+    const client = await userRepository.findOneByOrFail({ email: clientEmail });
+    const product = await productRepository.save(
+      productRepository.create({
+        event,
+        name: 'E2E Artigo com stock',
+        price: 10,
+        stock: 5,
+        isActive: true,
+      }),
+    );
+    const balance = await balanceRepository.save(
+      balanceRepository.create({ user: client, event, currentBalance: 100 }),
+    );
+
+    const order = await app.get(OrderService).create(
+      organizer,
+      {
+        eventId: event.id,
+        source: 'pos',
+        paymentMethod: 'balance',
+        balanceId: balance.id,
+        balanceUsed: 10,
+        items: [{ productId: product.id, quantity: 1 }],
+      } as any,
+    );
+    const { token } = await app.get(AuthService).login(email, password);
+    const auth = (req: any) => req.set('Authorization', `Bearer ${token}`);
+
+    const [cancelFromCashier, cancelFromManagement, cancelFromKitchen] = await Promise.all([
+      auth(request(app.getHttpServer()).post(`/api/orders/${order.id}/cancel`)),
+      auth(request(app.getHttpServer()).patch(`/api/orders/${order.id}/status`))
+        .send({ status: 'cancelled' }),
+      auth(request(app.getHttpServer()).patch(
+        `/api/kitchen/orders/${order.id}/status?status=cancelled`,
+      )),
+    ]);
+
+    const responses = [cancelFromCashier, cancelFromManagement, cancelFromKitchen];
+    expect(responses.filter((response) => response.status >= 200 && response.status < 300)).toHaveLength(1);
+    expect(responses.every((response) => response.status < 500)).toBe(true);
+
+    const savedOrder = await dataSource.getRepository(OrderEntity).findOneByOrFail({
+      id: order.id,
+    });
+    expect(savedOrder.status).toBe('cancelled');
+
+    const finalBalance = await balanceRepository.findOneByOrFail({ id: balance.id });
+    expect(Number(finalBalance.currentBalance)).toBe(100);
+
+    const finalProduct = await productRepository.findOneByOrFail({ id: product.id });
+    expect(Number(finalProduct.stock)).toBe(5);
+
+    expect(
+      await dataSource.getRepository(BalanceMovementEntity).count({
+        where: {
+          orderId: order.id,
+          type: MovementType.REFUND,
+          createdById: organizer.id,
+        },
+      }),
+    ).toBe(1);
+  });
+
 });
