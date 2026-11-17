@@ -138,7 +138,13 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
         issuer: 'senhasfestas-api',
         audience: 'senhasfestas-app',
       });
-      if (!payload?.sub || !Number.isInteger(payload.exp) || payload.exp! * 1000 <= Date.now()) {
+      const tokenExp = payload?.exp;
+      if (
+        !payload?.sub ||
+        typeof tokenExp !== 'number' ||
+        !Number.isInteger(tokenExp) ||
+        tokenExp * 1000 <= Date.now()
+      ) {
         throw new Error('token inválido ou sem expiração');
       }
 
@@ -146,7 +152,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       // expira. Forçamos a desconexão no instante da expiração do access token.
       const authTimeout = setTimeout(
         () => client.disconnect(true),
-        Math.max(0, payload.exp * 1000 - Date.now()),
+        Math.max(0, tokenExp * 1000 - Date.now()),
       );
       authTimeout.unref?.();
       client.data.authTimeout = authTimeout;
