@@ -174,8 +174,25 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
     });
   }
 
+  private responderIndisponibilidade(res: Response): void {
+    res.setHeader('Retry-After', '30');
+    res.status(HttpStatus.SERVICE_UNAVAILABLE).json({
+      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+      message: 'O serviço de autenticação está temporariamente indisponível. Tente novamente.',
+    });
+  }
+
   async use(req: Request, res: Response, next: NextFunction) {
     const chave = this.chaveDoPedido(req);
+
+    // Em produção, o limite de tentativas de login tem de ser partilhado.
+    // Um contador em memória por instância não protege contra distribuição
+    // de pedidos por várias réplicas/serverless workers.
+    if (process.env.NODE_ENV === 'production' && !this.redisService.isEnabled) {
+      this.responderIndisponibilidade(res);
+      return;
+    }
+
     const locais = this.obterFalhasLocais(chave);
 
     if (locais.length >= this.maxAttempts) {
@@ -222,7 +239,15 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
       });
       next();
     } catch (error) {
-      Logger.warn(`Falha no rate limit de login via Redis (contagem local): ${(error as Error).message}`);
+      if (process.env.NODE_ENV === 'production') {
+        // Nunca degradar para um limite por processo em produção: isso permite
+        // contornar o brute force distribuindo tentativas por várias instâncias.
+        Logger.warn(`Rate limit de login indisponível no Redis (${(error as Error).name || 'erro'}); login temporariamente bloqueado.`);
+        this.responderIndisponibilidade(res);
+        return;
+      }
+
+      Logger.warn(`Falha no rate limit de login via Redis (${(error as Error).name || 'erro'}); a usar contador local fora de produção.`);
       const timestamp = this.reservarFalhaLocal(chave);
       if (timestamp === null) {
         this.responderLimite(res);
