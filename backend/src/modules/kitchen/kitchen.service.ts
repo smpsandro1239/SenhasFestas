@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { OrderEntity } from '../../entities';
+import { EventUserEntity, OrderEntity } from '../../entities';
 import { MembershipService } from '../../common/membership.service';
 import { reembolsarSaldoEmTransacao, temSaldoParaReembolsar } from '../../common/order-refund';
 import { assertPodeMexerEmSaldo } from '../../common/balance-guard';
@@ -108,6 +108,20 @@ export class KitchenService {
       if (novoEstado === 'cancelled' && temSaldoParaReembolsar(atual)) {
         assertPodeMexerEmSaldo(utilizador);
       }
+
+      // Revalidar a associação dentro da mesma transação e depois de bloquear
+      // a encomenda. Uma revogação concorrente não pode deixar uma sessão
+      // previamente autorizada alterar o pedido.
+      if (utilizador?.role !== 'superadmin') {
+        const membership = await manager.findOne(EventUserEntity, {
+          where: { event: { id: pedido.event?.id }, user: { id: utilizador?.id } },
+          lock: { mode: 'pessimistic_read' },
+        });
+        if (!membership) {
+          throw new ForbiddenException('Não pertence a este evento');
+        }
+      }
+
       atual.status = novoEstado;
       const salvo = await manager.save(OrderEntity, atual);
 

@@ -172,6 +172,7 @@ describe('KitchenService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
         findOne: vi
           .fn()
           .mockResolvedValueOnce({ id: 'o1', status: 'received', balanceId: 'b1', balanceUsed: 10 })
+          .mockResolvedValueOnce({ id: 'membership-1' })
           .mockResolvedValueOnce(null)
           .mockResolvedValueOnce({ id: 'b1', currentBalance: 5 }),
         save: vi.fn().mockImplementation((_entity: any, data: any) => {
@@ -189,6 +190,46 @@ describe('KitchenService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
     );
   });
 });
+describe('KitchenService — revalidação de membership na transação', () => {
+  it('bloqueia a alteração se a associação ao evento foi revogada após a validação inicial', async () => {
+    const order = { id: 'o1', status: 'received', event: { id: 'evt1' } };
+    const manager = {
+      findOne: vi
+        .fn()
+        .mockResolvedValueOnce(order)
+        .mockResolvedValueOnce(null),
+      save: vi.fn(),
+    };
+    const membershipService = {
+      assertMember: vi.fn().mockResolvedValue(undefined),
+      eventIdsFor: vi.fn().mockResolvedValue(null),
+      eventColumnFor: vi.fn().mockReturnValue(null),
+    };
+    const orderRepository = {
+      findOne: vi.fn().mockResolvedValue(order),
+      manager: {
+        transaction: vi.fn().mockImplementation(async (fn: any) => fn(manager)),
+      },
+    };
+    const service = new KitchenService(
+      orderRepository as any,
+      membershipService as any,
+      { emitOrderUpdate: vi.fn() } as any,
+    );
+
+    await expect(
+      service.atualizarEstado('o1', 'preparing', { id: 'u1', role: 'kitchen' }),
+    ).rejects.toThrow('Não pertence a este evento');
+
+    expect(membershipService.assertMember).toHaveBeenCalledWith(
+      { id: 'u1', role: 'kitchen' },
+      'evt1',
+    );
+    expect(manager.findOne).toHaveBeenCalledTimes(2);
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+});
+
 describe('KitchenService — A12: KDS mostra os pedidos mais recentes (ordem DESC, sem corte a 20)', () => {
   const criarPedidos = (n: number) =>
     Array.from({ length: n }, (_, i) => ({
