@@ -11,16 +11,16 @@ export default function OfflinePage() {
         📡
       </span>
       <h1 className="text-2xl font-bold text-zinc-100">Estás offline</h1>
-      <p className="max-w-md text-zinc-400">
-        Não há ligação à internet neste momento. Os pedidos já registados
-        continuam seguros no servidor — assim que a rede voltar, tudo é
-        sincronizado automaticamente.
+      <p className="max-w-md text-zinc-300">
+        Não há ligação à Internet neste momento. Esta página não consegue confirmar
+        se uma operação recente foi guardada. Quando a ligação regressar, volta à
+        aplicação e confirma o estado dos pedidos antes de repetir uma operação.
       </p>
       <Link
         href="/"
-        className="mt-2 rounded-full bg-zinc-100 px-6 py-3 font-medium text-zinc-900 transition hover:bg-zinc-200"
+        className="mt-2 inline-flex min-h-12 items-center justify-center rounded-full bg-zinc-100 px-6 py-3 font-semibold text-zinc-900 transition hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
       >
-        Tentar novamente
+        Voltar a tentar
       </Link>
     </main>
   );
