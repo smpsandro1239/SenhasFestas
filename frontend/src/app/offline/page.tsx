@@ -12,9 +12,13 @@ export default function OfflinePage() {
       </span>
       <h1 className="text-2xl font-bold text-zinc-100">Estás offline</h1>
       <p className="max-w-md text-zinc-400">
-        Não há ligação à internet neste momento. Os pedidos já registados
-        continuam seguros no servidor — assim que a rede voltar, tudo é
-        sincronizado automaticamente.
+        Não há ligação à internet neste momento. Podes voltar a tentar quando
+        a rede regressar. Nesta versão, os pedidos, pagamentos e alterações não
+        são guardados numa fila offline nem sincronizados automaticamente.
+      </p>
+      <p className="max-w-md text-sm text-zinc-500">
+        Se estavas a confirmar uma operação, verifica primeiro o seu estado no
+        sistema antes de a repetir, para evitar duplicações.
       </p>
       <Link
         href="/"
