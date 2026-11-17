@@ -46,7 +46,18 @@ export class CashClosureService {
       notes: dto.notes,
       status: 'open',
     });
-    const salvo = await this.cashClosureRepository.save(novoFecho);
+    let salvo: CashClosureEntity;
+    try {
+      salvo = await this.cashClosureRepository.save(novoFecho);
+    } catch (error) {
+      // O índice parcial único fecha a corrida entre duas aberturas
+      // simultâneas; converter a violação em conflito de domínio (409).
+      const codigo = (error as any)?.code ?? (error as any)?.driverError?.code;
+      if (codigo === '23505') {
+        throw new ConflictException('Já existe uma caixa aberta neste evento');
+      }
+      throw error;
+    }
     arquivar?.({
       entidadeId: salvo.id,
       eventId: dto.eventId,
