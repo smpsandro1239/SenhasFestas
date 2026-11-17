@@ -24,6 +24,49 @@ function matchesGate(pathname: string): string | null {
   return null;
 }
 
+function criarPoliticaCsp(request: NextRequest): { headers: Headers; policy: string } {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const nonce = btoa(String.fromCharCode(...bytes));
+  const originOf = (value: string | undefined): string => {
+    if (!value) return '';
+    try {
+      return new URL(value).origin;
+    } catch {
+      return '';
+    }
+  };
+  const apiOrigin = originOf(process.env.NEXT_PUBLIC_API_URL);
+  const wsOrigin = originOf(process.env.NEXT_PUBLIC_WS_URL);
+  const connectSrc = ["'self'", apiOrigin, wsOrigin].filter(Boolean).join(' ');
+  const scriptSrc =
+    process.env.NODE_ENV === 'production'
+      ? `'self' 'nonce-${nonce}'`
+      : `'self' 'nonce-${nonce}' 'unsafe-eval'`;
+  const policy = [
+    "default-src 'self'",
+    `script-src ${scriptSrc}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    `connect-src ${connectSrc}`,
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "worker-src 'self' blob:",
+  ].join('; ');
+
+  const headers = new Headers(request.headers);
+  headers.set('x-nonce', nonce);
+  headers.set('Content-Security-Policy', policy);
+  return { headers, policy };
+}
+
+function respostaComCsp(response: NextResponse, policy: string): NextResponse {
+  response.headers.set('Content-Security-Policy', policy);
+  return response;
+}
+
 type VerifyResult = { ok: boolean; role?: string; expired?: boolean; configError?: boolean };
 
 async function verifySessionToken(token: string): Promise<VerifyResult> {
@@ -46,9 +89,12 @@ async function verifySessionToken(token: string): Promise<VerifyResult> {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const { headers: requestHeaders, policy } = criarPoliticaCsp(request);
+  const seguir = () => respostaComCsp(NextResponse.next({ request: { headers: requestHeaders } }), policy);
+  const redirecionar = (url: URL) => respostaComCsp(NextResponse.redirect(url), policy);
 
   if (isPublic(pathname)) {
-    return NextResponse.next();
+    return seguir();
   }
 
   const token = request.cookies.get('sf_token')?.value;
@@ -56,7 +102,7 @@ export async function middleware(request: NextRequest) {
   if (!token) {
     const loginUrl = new URL('/auth/login', request.url);
     loginUrl.searchParams.set('from', pathname);
-    return NextResponse.redirect(loginUrl);
+    return redirecionar(loginUrl);
   }
 
   const payload = await verifySessionToken(token);
@@ -69,34 +115,31 @@ export async function middleware(request: NextRequest) {
       const erroUrl = new URL('/auth/login', request.url);
       erroUrl.searchParams.set('error', 'config');
       erroUrl.searchParams.set('from', pathname);
-      return NextResponse.redirect(erroUrl);
+      return redirecionar(erroUrl);
     }
     if (payload.expired) {
       // Load-bearing: api.ts faz refresh silencioso do token. Só depois de
       // falhar o refresh é que o cliente manda para o login.
-      return NextResponse.next();
+      return seguir();
     }
     const loginUrl = new URL('/auth/login', request.url);
     loginUrl.searchParams.set('from', pathname);
-    return NextResponse.redirect(loginUrl);
+    return redirecionar(loginUrl);
   }
 
   const gate = matchesGate(pathname);
   if (gate && !ROLE_GATES[gate].includes(payload.role ?? '')) {
-    return NextResponse.redirect(new URL('/pedidos', request.url));
+    return redirecionar(new URL('/pedidos', request.url));
   }
 
-  return NextResponse.next();
+  return seguir();
 }
 
 export const config = {
   matcher: [
-    // `/auth`, `/publico`, `/api`, `/entrar` e `/mesa` não precisam do
-    // middleware: são públicas por definição (ver PUBLIC_PATHS). Excluí-las
-    // aqui evita instanciar o `jose` e percorrer o middleware em cada pedido
-    // de quem só está a ver o ecrã público — a rota de maior tráfego, num
-    // evento cheio de clientes. O QR da mesa (rota turbilhão de tráfego na
-    // entrada dos eventos) fica acessível a quem não tem sessão.
-    '/((?!_next/static|_next/image|favicon.ico|auth(?:/|$)|publico(?:/|$)|api(?:/|$)|entrar(?:/|$)|mesa(?:/|$)|.*\\.(?:png|jpg|jpeg|svg|webp|gif|ico|css|js|txt|xml|woff2?|map|json|webmanifest)$).*)',
+    // Páginas públicas também passam pelo middleware para receber CSP nonce.
+    // Só API e assets estáticos são excluídos; as páginas de autenticação,
+    // público e QR continuam sem exigir sessão via isPublic().
+    '/((?!_next/static|_next/image|favicon.ico|api(?:/|$)|.*\\.(?:png|jpg|jpeg|svg|webp|gif|ico|css|js|txt|xml|woff2?|map|json|webmanifest)$).*)',
   ],
 };

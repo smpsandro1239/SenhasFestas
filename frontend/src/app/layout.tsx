@@ -6,6 +6,10 @@ import ServiceWorkerRegister from './sw-register';
 import OnlineIndicator from './online-indicator';
 import { ThemeProvider } from './theme-provider';
 
+// CSP com nonce por pedido exige rendering dinâmico: páginas pré-renderizadas
+// em build não recebem o nonce injectado pelo middleware.
+export const dynamic = 'force-dynamic';
+
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains' });
 

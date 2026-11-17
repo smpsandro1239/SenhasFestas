@@ -28,8 +28,8 @@ export class BootstrapAdminService implements OnApplicationBootstrap {
     }
 
     const fracas = ['admin123', 'senhasfestas', 'password', '12345678', 'qwerty123456'];
-    if (password.length < 12 || fracas.includes(password.toLowerCase())) {
-      throw new Error('BOOTSTRAP_ADMIN_PASSWORD: define uma password com pelo menos 12 caracteres e não previsível');
+    if (password.length < 12 || Buffer.byteLength(password, 'utf8') > 72 || fracas.includes(password.toLowerCase())) {
+      throw new Error('BOOTSTRAP_ADMIN_PASSWORD: define uma password entre 12 e 72 bytes UTF-8 e não previsível');
     }
     const hashedPassword = await bcrypt.hash(password, 10);
     await this.userRepository.save(

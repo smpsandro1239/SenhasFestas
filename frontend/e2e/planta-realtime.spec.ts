@@ -74,8 +74,17 @@ async function entrar(
 ): Promise<{ page: Page; fechar: () => Promise<void> }> {
   const context = await browser.newContext();
   const page = await context.newPage();
-  await page.goto(`${baseURL}/auth/login`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('input[type="email"]');
+  page.on('console', (message) => console.log(`[browser:${message.type()}] ${message.text()}`));
+  page.on('pageerror', (error) => console.log(`[browser:pageerror] ${error.message}`));
+  const loginResponse = await page.goto(`${baseURL}/auth/login`, { waitUntil: 'networkidle' });
+  console.log(`[E2E] login page status=${loginResponse?.status()} url=${page.url()}`);
+  try {
+    await page.waitForSelector('input[type="email"]', { timeout: 10_000 });
+  } catch (error) {
+    console.log('[E2E] login page body:', (await page.locator('body').innerText()).slice(0, 1500));
+    console.log('[E2E] login page HTML:', (await page.content()).slice(0, 2500));
+    throw error;
+  }
   await page.fill('input[type="email"]', email);
   await page.fill('input[type="password"]', password);
   await page.getByRole('button', { name: /Entrar/i }).click();

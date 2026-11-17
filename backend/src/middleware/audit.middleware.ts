@@ -1,4 +1,5 @@
 import { Injectable, NestMiddleware, Logger, HttpStatus } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { RedisService } from '../common/redis/redis.service';
 
@@ -14,13 +15,13 @@ export class RequestLogMiddleware implements NestMiddleware {
   private readonly logger = new Logger(RequestLogMiddleware.name);
 
   use(req: Request, res: Response, next: NextFunction) {
-    const { method, originalUrl } = req;
+    const { method, path } = req;
     const timestamp = new Date().toISOString();
 
     res.on('finish', () => {
       const { statusCode } = res;
       if (statusCode >= 400) {
-        this.logger.warn(`[${timestamp}] ALERTA: ${method} ${originalUrl} retornou ${statusCode}`);
+        this.logger.warn(`[${timestamp}] ALERTA: ${method} ${path} retornou ${statusCode}`);
       }
     });
 
@@ -112,7 +113,8 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
   private chaveDoPedido(req: Request): string {
     const ip = req.ip || 'unknown';
     const email = (req.body && typeof req.body.email === 'string' ? req.body.email.toLowerCase() : '').trim();
-    return `${ip}:${email}`;
+    const emailHash = createHash('sha256').update(email).digest('hex');
+    return `${ip}:${emailHash}`;
   }
 
   private verificarLimiteLocal(chave: string): boolean {
