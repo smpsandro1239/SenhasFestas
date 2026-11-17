@@ -165,6 +165,61 @@ describe('AuditInterceptor — before/after', () => {
     expect(record.mock.calls[0][0].entityId).toBe(PLANTA_ID);
     expect(record.mock.calls[0][0].eventId).toBe(EVENT_ID);
   });
+  it('usa o id devolvido para auditar criações de eventos', async () => {
+    const req = fazerReq('POST', '/api/events');
+    await correr(req, { id: EVENT_ID, name: 'Festa' });
+
+    expect(record.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ entity: 'event', entityId: EVENT_ID, eventId: EVENT_ID }),
+    );
+  });
+
+  it('usa os ids devolvidos para auditar criações de pedidos e utilizadores', async () => {
+    const ORDER_ID = 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e';
+    const USER_ID = 'c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f';
+    const orderReq = fazerReq('POST', '/api/orders');
+    await correr(orderReq, { id: ORDER_ID, event: { id: EVENT_ID } });
+
+    expect(record.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ entity: 'order', entityId: ORDER_ID, eventId: EVENT_ID }),
+    );
+
+    const userReq = fazerReq('POST', '/api/users');
+    await correr(userReq, { id: USER_ID });
+
+    expect(record.mock.calls[1][0]).toEqual(
+      expect.objectContaining({ entity: 'user', entityId: USER_ID }),
+    );
+    expect(record.mock.calls[1][0].eventId).toBeUndefined();
+  });
+
+  it('classifica importações, duplicações e alterações de membros com acções específicas', async () => {
+    await correr(fazerReq('POST', '/api/products/import'), { imported: 2 });
+    await correr(fazerReq('POST', `/api/products/${EVENT_ID}/duplicate`), { id: EVENT_ID });
+    await correr(fazerReq('DELETE', `/api/events/${EVENT_ID}/members/${USER_ID}`), { ok: true });
+
+    expect(record.mock.calls.map((call) => call[0].action)).toEqual([
+      'IMPORT',
+      'DUPLICATE',
+      'MEMBER',
+    ]);
+  });
+
+  it('usa os overrides de entidade e evento também quando a operação falha', async () => {
+    const req = fazerReq('POST', '/api/cash-closure/abrir');
+    arquivarAuditoria(req)({ entidadeId: EVENT_ID, eventId: EVENT_ID });
+    const contexto = fazerContexto(req);
+    const observable = interceptor.intercept(
+      contexto,
+      { handle: () => throwError(() => new Error('falha')) } as any,
+    );
+
+    await expect(lastValueFrom(observable)).rejects.toThrow('falha');
+    expect(record.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ entityId: EVENT_ID, eventId: EVENT_ID }),
+    );
+  });
+
   it('aguarda a persistência da auditoria antes de emitir a resposta HTTP', async () => {
     let concluir!: () => void;
     record.mockImplementation(() => new Promise<void>((resolve) => { concluir = resolve; }));
