@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ConflictException } from '@nestjs/common';
 import { OrderService } from './order.service';
+import { OrderEntity } from '../../entities';
 
 const USER = { id: 'user-1', role: 'client' };
 const DTO = {
@@ -69,6 +70,29 @@ describe('OrderService — idempotência na criação', () => {
     expect(qrCodeService.generateOrderQRCode).toHaveBeenCalledWith('order-1');
     expect(orderGateway.emitOrderUpdate).not.toHaveBeenCalled();
     expect(notificationService.notifyNewOrder).not.toHaveBeenCalled();
+  });
+
+  it('grava a chave e o hash na criação original e só emite os efeitos uma vez', async () => {
+    const { service, dataSource, orderGateway, notificationService } = criarServico();
+    const manager = {
+      find: vi.fn().mockResolvedValue([]),
+      create: vi.fn().mockImplementation((_entity: any, data: any) => data),
+      save: vi.fn().mockImplementation(async (_entity: any, data: any) => ({ ...data, id: 'order-1' })),
+    };
+    dataSource.transaction.mockImplementation(async (fn: any) => fn(manager));
+
+    await service.create(USER, DTO as any, 'order-test-key-0001');
+
+    expect(manager.create).toHaveBeenCalledWith(
+      OrderEntity,
+      expect.objectContaining({
+        createdById: USER.id,
+        idempotencyKey: 'order-test-key-0001',
+        requestHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    );
+    expect(orderGateway.emitOrderUpdate).toHaveBeenCalledTimes(1);
+    expect(notificationService.notifyNewOrder).toHaveBeenCalledTimes(1);
   });
 
   it('rejeita a reutilização da mesma chave com payload diferente', async () => {
