@@ -117,6 +117,7 @@ describe('LoginRateLimitMiddleware — reservas concorrentes e fallback local', 
 
   beforeEach(() => {
     vi.clearAllMocks();
+    redisService.isEnabled = true;
     process.env.LOGIN_RATE_LIMIT_MAX = '1';
     redisService.releaseCounterReservationStrict.mockResolvedValue(0);
     middleware = new LoginRateLimitMiddleware(redisService as any);
