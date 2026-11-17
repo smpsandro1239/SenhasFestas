@@ -1,4 +1,4 @@
-import { clearOrderIdempotencyContext, getOrderIdempotencyContext } from './order-idempotency';
+import { getOrderIdempotencyContext, releaseOrderIdempotencyContext } from './order-idempotency';
 
 // Sessão same-origin: o Next rewrite /api/:path* encaminha para a API.
 // Cookies ficam host-only no domínio do frontend — sem Domain, sem CORS, sem PSL.
@@ -254,14 +254,15 @@ export async function createOrder(data: any, idempotencyKey?: string): Promise<a
       headers: key ? { 'Idempotency-Key': key } : undefined,
       body: JSON.stringify(data),
     });
-    if (context) clearOrderIdempotencyContext(context);
+    if (context) releaseOrderIdempotencyContext(context, 'success');
     return result;
   } catch (error) {
     // 429 pode ser repetido com a mesma chave; os restantes 4xx são respostas
     // definitivas, incluindo 409 por reutilização com payload diferente.
-    if (context && error instanceof ApiError &&
-        error.status >= 400 && error.status < 500 && error.status !== 429) {
-      clearOrderIdempotencyContext(context);
+    if (context) {
+      const definitivo = error instanceof ApiError &&
+        error.status >= 400 && error.status < 500 && error.status !== 429;
+      releaseOrderIdempotencyContext(context, definitivo ? 'definitive-error' : 'ambiguous-error');
     }
     throw error;
   }
