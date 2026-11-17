@@ -51,6 +51,19 @@ function credentials() {
   }
 }
 
+export function setup() {
+  credentials();
+  const response = http.post(
+    `${API_URL}/auth/login`,
+    JSON.stringify({ email: EMAIL, password: PASSWORD }),
+    { headers: { 'Content-Type': 'application/json' }, tags: { endpoint: 'setup_login' } },
+  );
+  if (response.status !== 200 || !response.json('token')) {
+    throw new Error(`Não foi possível autenticar a conta de teste (HTTP ${response.status}).`);
+  }
+  return { token: response.json('token') };
+}
+
 export function loginFlow() {
   credentials();
   const response = http.post(
@@ -66,19 +79,8 @@ export function loginFlow() {
   sleep(1);
 }
 
-export function catalogFlow() {
-  credentials();
-  const login = http.post(
-    `${API_URL}/auth/login`,
-    JSON.stringify({ email: EMAIL, password: PASSWORD }),
-    { headers: { 'Content-Type': 'application/json' }, tags: { endpoint: 'login' } },
-  );
-  if (login.status !== 200 || !login.json('token')) {
-    loginFailures.add(1);
-    return;
-  }
-
-  const token = login.json('token');
+export function catalogFlow(data) {
+  const token = data.token;
   const response = http.get(`${API_URL}/products?page=1&limit=20`, {
     headers: { Authorization: `Bearer ${token}` },
     tags: { endpoint: 'catalog' },
