@@ -154,8 +154,8 @@ A arquitectura geral é coerente: monorepo npm workspaces, backend NestJS modula
 
 **Constatações**
 - `PLAN.md`, `TODO.md`, `PROGRESS.md` e `REVIEW.md` têm histórico operacional detalhado.
-- README descreve Next.js 14, mas `frontend/package.json` declara Next.js 15.5.24.
-- README promete sincronização offline automática; a implementação actual não tem fila IndexedDB/Background Sync nem idempotência de pedidos.
+- Na `main` auditada, o README descrevia Next.js 14, mas `frontend/package.json` declara Next.js 15.5.24; corrigido nesta branch para Next.js 15.
+- Na `main` auditada, o README prometia sincronização offline automática; corrigido nesta branch para declarar que só existe fallback PWA/cache estático. A implementação continua sem fila IndexedDB/Background Sync nem idempotência de pedidos.
 - Swagger é gerado a partir dos controllers NestJS; a documentação da API deve ser verificada contra DTOs e permissões reais.
 
 **Gravidade:** Média/Alta (offline, por expectativa de operação).
@@ -171,7 +171,7 @@ A arquitectura geral é coerente: monorepo npm workspaces, backend NestJS modula
 - Existe manifest, registo de Service Worker e página `/offline`.
 - A implementação não tem fila de pedidos, IndexedDB, Background Sync, política de conflitos nem chave idempotente para operações.
 - O Service Worker anterior guardava respostas de navegação e podia também interceptar respostas dinâmicas same-origin. Isso podia persistir HTML/RSC autenticado num dispositivo partilhado, mesmo depois do logout.
-- Nesta branch o Service Worker deixa de guardar navegações e deixa de interceptar RSC/HTML dinâmico; apenas mantém cache de assets estáticos e página offline precacheada.
+- Nesta branch o Service Worker deixa de guardar navegações e deixa de interceptar RSC/HTML dinâmico; apenas mantém cache de assets estáticos e página offline precacheada. Foi adicionado teste de regressão em `frontend/src/lib/service-worker-cache.test.ts`.
 - A página offline foi corrigida para não prometer sincronização inexistente.
 
 **Gravidade:** Alta.
