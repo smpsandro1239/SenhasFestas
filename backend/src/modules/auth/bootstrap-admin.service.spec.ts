@@ -23,8 +23,14 @@ function criarService(password: string) {
 describe('BootstrapAdminService — password policy', () => {
   it('recusa passwords de bootstrap inferiores a 12 caracteres', async () => {
     const { service, userRepository } = criarService('admin123');
-    await expect(service.onApplicationBootstrap()).rejects.toThrow(/pelo menos 12 caracteres/);
+    await expect(service.onApplicationBootstrap()).rejects.toThrow(/12 e 72 bytes UTF-8/);
     expect(userRepository.findOne).toHaveBeenCalledOnce();
+  });
+
+  it('recusa passwords multibyte acima dos 72 bytes do bcrypt', async () => {
+    const { service, userRepository } = criarService('🔐'.repeat(19));
+    await expect(service.onApplicationBootstrap()).rejects.toThrow(/72 bytes UTF-8/);
+    expect(userRepository.save).not.toHaveBeenCalled();
   });
 
   it('não bloqueia o arranque se o administrador bootstrap já existir', async () => {

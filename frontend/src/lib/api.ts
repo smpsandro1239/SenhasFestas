@@ -83,7 +83,7 @@ export async function ensureFreshToken(): Promise<boolean> {
 
 async function tryRefreshToken(): Promise<boolean> {
   if (!refreshing) {
-    refreshing = (async () => {
+    const renovar = async (): Promise<boolean> => {
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -104,10 +104,20 @@ async function tryRefreshToken(): Promise<boolean> {
         return true;
       } catch {
         return false;
-      } finally {
-        refreshing = null;
       }
-    })();
+    };
+
+    // Um lock partilhado entre separadores evita que dois refresh legítimos
+    // rodem o mesmo cookie em simultâneo. O servidor trata qualquer replay
+    // posterior como comprometimento e revoga as sessões do utilizador.
+    if (typeof navigator !== 'undefined' && navigator.locks?.request) {
+      refreshing = navigator.locks.request('senhasfestas-refresh-token', renovar);
+    } else {
+      refreshing = renovar();
+    }
+    refreshing = refreshing.finally(() => {
+      refreshing = null;
+    });
   }
   return refreshing;
 }
