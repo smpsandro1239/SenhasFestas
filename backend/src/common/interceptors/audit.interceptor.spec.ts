@@ -206,6 +206,45 @@ describe('AuditInterceptor — before/after', () => {
     ]);
   });
 
+  it('duplica a auditoria de uma transferência pelos dois eventos e saldos', async () => {
+    const ORIGIN_EVENT = 'd4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80';
+    const DEST_EVENT = 'e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8091';
+    const ORIGIN_BALANCE = 'f6a7b8c9-d0e1-4f2a-3b4c-5d6e7f8091a2';
+    const DEST_BALANCE = 'a7b8c9d0-e1f2-4a3b-4c5d-6e7f8091a2b3';
+    const req = fazerReq('POST', '/api/balances/user/transfer');
+    arquivarAuditoria(req)({
+      eventId: DEST_EVENT,
+      entidadeId: ORIGIN_BALANCE,
+      alvos: [
+        { eventId: ORIGIN_EVENT, entidadeId: ORIGIN_BALANCE },
+        { eventId: DEST_EVENT, entidadeId: DEST_BALANCE },
+        { eventId: DEST_EVENT, entidadeId: DEST_BALANCE },
+      ],
+      extras: { amount: 30, fromEventId: ORIGIN_EVENT, toEventId: DEST_EVENT },
+    });
+
+    await correr(req, { transferred: true });
+
+    expect(record).toHaveBeenCalledTimes(2);
+    expect(record.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        action: 'TRANSFER',
+        entity: 'balance',
+        entityId: ORIGIN_BALANCE,
+        eventId: ORIGIN_EVENT,
+      }),
+    );
+    expect(record.mock.calls[1][0]).toEqual(
+      expect.objectContaining({
+        action: 'TRANSFER',
+        entity: 'balance',
+        entityId: DEST_BALANCE,
+        eventId: DEST_EVENT,
+      }),
+    );
+    expect(record.mock.calls[0][0].details).toEqual(record.mock.calls[1][0].details);
+  });
+
   it('usa os overrides de entidade e evento também quando a operação falha', async () => {
     const req = fazerReq('POST', '/api/cash-closure/abrir');
     arquivarAuditoria(req)({ entidadeId: EVENT_ID, eventId: EVENT_ID });
