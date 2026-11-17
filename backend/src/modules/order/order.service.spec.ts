@@ -650,7 +650,7 @@ describe('OrderService — cancelamento repõe stock (B1c)', () => {
     const dataSource = { transaction: vi.fn().mockImplementation(async (fn: any) => fn(manager)) };
     const svc = new OrderService(
       orderRepository as any, {} as any, balanceRepository as any, {} as any, {} as any,
-      {} as any, {} as any, dataSource as any,
+      {} as any, { findOne: vi.fn().mockResolvedValue({ id: 'm1', role: 'client' }) } as any, dataSource as any,
       {} as any, {} as any, {} as any, {} as any,
     );
 
