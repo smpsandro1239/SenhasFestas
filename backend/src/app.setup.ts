@@ -110,7 +110,14 @@ export function configuracaoBaseDados(configService: ConfigService) {
       password: configService.get<string>('DB_PASSWORD') ?? 'postgres',
       database: configService.get<string>('DB_NAME') ?? 'senhasfestas',
       ssl:
-        configService.get<string>('DB_SSL') === 'true' ? { rejectUnauthorized: false } : undefined,
+        configService.get<string>('DB_SSL') === 'true'
+          ? {
+              rejectUnauthorized: true,
+              ...(configService.get<string>('DB_SSL_CA')
+                ? { ca: configService.get<string>('DB_SSL_CA') }
+                : {}),
+            }
+          : undefined,
     };
   }
 
@@ -124,7 +131,14 @@ export function configuracaoBaseDados(configService: ConfigService) {
     ssl:
       url.searchParams.get('sslmode') === 'require' ||
       configService.get<string>('DB_SSL') === 'true'
-        ? { rejectUnauthorized: false }
+        ? {
+            // Validar o certificado do servidor evita aceitar certificados
+            // arbitrários em ligações PostgreSQL remotas.
+            rejectUnauthorized: true,
+            ...(configService.get<string>('DB_SSL_CA')
+              ? { ca: configService.get<string>('DB_SSL_CA') }
+              : {}),
+          }
         : undefined,
   };
 }
