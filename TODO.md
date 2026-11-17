@@ -49,7 +49,7 @@ mesmo item — daí o prefixo.)
 | `[~]` | T36 o rate limit **falha aberto** quando o Redis está configurado mas inacessível | segurança | alta | D17 | Implementados `getStrict`/`incrementWithTtlStrict`; os dois middlewares usam fallback local em falhas de leitura/incremento, e os testes cobrem indisponibilidade e recuperação. Gates pendentes |
 | `[~]` | T37 o pré-voo do e2e não garante que a base de dados é local | segurança | alta | D18 | Helper comum exige `E2E_ALLOW_SCHEMA_RESET=true`, host loopback e sufixo `_test`/`_e2e`; carrega `.env.development`/`.env` como NestJS e aplica `DB_SSL`/`sslmode`; specs e CI actualizados; testes adicionados. Gates pendentes |
 | `[~]` | T38 o Service Worker podia guardar HTML/RSC autenticado e a UI prometia sincronização offline inexistente | pwa/segurança | alta | D19 | Cache de navegações e RSC removido; cache v5 elimina cache v4 potencialmente privado; cache limitado a assets estáticos; página offline corrigida; teste `service-worker-cache.test.ts`; gates pendentes. Fila offline transaccional continua por implementar e não deve ser anunciada como disponível |
-| `[x]` | Integrar suite Vitest do frontend no GitHub Actions | ci/testes | média | — | Job frontend executa `npm test` depois de lint/typecheck; passa a cobrir também `service-worker-cache.test.ts` |
+| `[~]` | Integrar suite Vitest do frontend no GitHub Actions | ci/testes | média | — | Job frontend executa `npm test` depois de lint/typecheck; passa a cobrir também `service-worker-cache.test.ts`; aguarda CI verde |
 
 Nota (Vercel de 2026-10-21): o push `fedc1fb` disparou os dois deployments da
 integração Vercel (frontend e API) e ambos acabaram `success` — a produção está
