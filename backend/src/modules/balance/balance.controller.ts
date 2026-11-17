@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Body, Query, UseGuards, Request, ForbiddenException, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Param, Post, Body, Query, UseGuards, Request, ForbiddenException, ParseUUIDPipe, Headers } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { BalanceService } from './balance.service';
 import { LoadBalanceDto, DeductBalanceDto, ReverseLoadDto, ExtendBalanceDto, BalanceEventDto, TransferBalanceDto } from './dto';
@@ -32,12 +32,13 @@ export class BalanceController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() dto: LoadBalanceDto,
     @Request() req: any,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     if (req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
     this.assertStaffEventScope(req.user, dto.eventId);
-    return this.balanceService.loadBalance(userId, dto, req.user, arquivarAuditoria(req));
+    return this.balanceService.loadBalance(userId, dto, req.user, arquivarAuditoria(req), idempotencyKey);
   }
 
   @Post(':userId/reverse/:movementId')
@@ -62,12 +63,13 @@ export class BalanceController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() dto: DeductBalanceDto,
     @Request() req: any,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     if (req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
     this.assertStaffEventScope(req.user, dto.eventId);
-    return this.balanceService.deductBalance(userId, dto, req.user, arquivarAuditoria(req));
+    return this.balanceService.deductBalance(userId, dto, req.user, arquivarAuditoria(req), idempotencyKey);
   }
 
   @Get(':userId/events')
