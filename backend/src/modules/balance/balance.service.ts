@@ -920,6 +920,10 @@ export class BalanceService {
           arquivar?.({
             eventId: dto.toEventId,
             entidadeId: saldoOrigemAnterior.id,
+            alvos: [
+              { eventId: dto.fromEventId, entidadeId: saldoOrigemAnterior.id },
+              { eventId: dto.toEventId, entidadeId: saldoDestinoAnterior.id },
+            ],
             extras: {
               fromEventId: dto.fromEventId,
               toEventId: dto.toEventId,
@@ -998,6 +1002,10 @@ export class BalanceService {
         },
         eventId: dto.toEventId,
         entidadeId: origem.id,
+        alvos: [
+          { eventId: dto.fromEventId, entidadeId: origem.id },
+          { eventId: dto.toEventId, entidadeId: destino.id },
+        ],
         extras: {
           fromEventId: dto.fromEventId,
           toEventId: dto.toEventId,
