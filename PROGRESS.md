@@ -46,6 +46,7 @@
 - Service Worker: deixa de persistir respostas de navegação autenticada e deixa de interceptar RSC/HTML dinâmico. Mantém cache de assets estáticos explicitamente permitidos e página offline precacheada. A cache passou de v4 para v5 para apagar dados privados antigos que pudessem já estar armazenados.
 - Página `/offline`: deixa claro que pedidos/pagamentos/alterações não são enfileirados nem sincronizados automaticamente; recomenda verificar o estado antes de repetir uma operação.
 - Adicionado teste de regressão `frontend/src/lib/service-worker-cache.test.ts`.
+- CI: o job frontend passa a executar `npm test` entre typecheck e build; anteriormente o workflow não executava a suite Vitest do frontend.
 - T38/D19 registado no plano e TODO.
 
 **Gates**
