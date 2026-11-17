@@ -20,9 +20,9 @@ A arquitectura geral é coerente: monorepo npm workspaces, backend NestJS modula
 | Alta | Service Worker podia guardar HTML/RSC autenticado em cache persistente | Corrigido nesta branch; CI em validação |
 | Alta | README prometia sincronização offline que não existe no código | Texto corrigido nesta branch; fila offline continua por implementar |
 | Alta | Fallback de rate limit em memória não é global entre réplicas | Limitação residual; requer Redis disponível ou rate limiter distribuído |
-| Média | README declara Next.js 14, enquanto o workspace usa Next.js 15.5.24 | A corrigir |
+| Média | README declarava Next.js 14, enquanto o workspace usa Next.js 15.5.24 | Corrigido nesta branch |
 | Média | Uso de `any` em serviços e API frontend reduz a segurança estática | Dívida técnica |
-| Média | Não foi encontrada evidência de SAST/Dependabot no workflow principal | Recomenda-se adicionar |
+| Média | Não existia SAST nem actualização automática de dependências | Dependabot e CodeQL adicionados nesta branch; CI de segurança ainda por validar |
 | Média | Helmet não está instalado/configurado; existem cabeçalhos manuais | Consolidar política de cabeçalhos |
 | Média | Cobertura de auditoria before/after não é universal | Expandir para mutações financeiras e administrativas |
 
@@ -140,12 +140,12 @@ A arquitectura geral é coerente: monorepo npm workspaces, backend NestJS modula
 - `.github/workflows/ci.yml` corre lint/test/build e E2E com serviços efémeros; deploy está condicionado aos jobs de validação e só corre em `main`.
 - As migrações são executadas no job de deploy antes do SSH; o script remoto executa `git pull --ff-only` e `scripts/deploy.sh`.
 - Os dois deployments Vercel podem falhar por limite de builds/conta, independentemente do CI GitHub.
-- Não foi encontrada uma etapa SAST/Dependabot explícita no workflow principal.
+- Dependabot e CodeQL foram adicionados nesta branch, mas ainda não há resultado de execução CodeQL confirmado.
 
 **Gravidade:** Média/Alta.
 
 **Recomendação**
-- Adicionar Dependabot para npm e GitHub Actions, CodeQL ou Semgrep, secret scanning e auditoria de dependências com política de severidade.
+- Dependabot para npm e GitHub Actions e workflow CodeQL foram adicionados nesta branch. Activar/confirmar secret scanning e definir política de triagem de alertas no GitHub.
 - Separar deploy de staging e produção, com aprovação e smoke tests pós-deploy.
 - Executar migrations com backup/rollback planeado e assegurar que o deploy da aplicação só avança após sucesso das migrations.
 - Fixar actions por SHA completo e rever permissões mínimas do GITHUB_TOKEN.
@@ -154,6 +154,7 @@ A arquitectura geral é coerente: monorepo npm workspaces, backend NestJS modula
 
 **Constatações**
 - `PLAN.md`, `TODO.md`, `PROGRESS.md` e `REVIEW.md` têm histórico operacional detalhado.
+- Nesta branch foram adicionados `SECURITY.md`, `.github/dependabot.yml` e `.github/workflows/codeql.yml`; o workflow CI principal passou a declarar `permissions: contents: read` por omissão.
 - Na `main` auditada, o README descrevia Next.js 14, mas `frontend/package.json` declara Next.js 15.5.24; corrigido nesta branch para Next.js 15.
 - Na `main` auditada, o README prometia sincronização offline automática; corrigido nesta branch para declarar que só existe fallback PWA/cache estático. A implementação continua sem fila IndexedDB/Background Sync nem idempotência de pedidos.
 - Swagger é gerado a partir dos controllers NestJS; a documentação da API deve ser verificada contra DTOs e permissões reais.
@@ -231,3 +232,10 @@ As ligações abaixo apontam para a branch auditada e para as linhas de entrada 
 | Docker/CI | [workflow CI](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/.github/workflows/ci.yml#L89) · [Compose](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/docker-compose.yml#L7) · [backend Dockerfile](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/Dockerfile#L3) · [CI](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/.github/workflows/ci.yml#L14) |
 | Versão Next.js | [frontend/package.json](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/frontend/package.json#L24) |
 
+
+
+### Governação de segurança adicionada nesta branch
+- [Política de divulgação responsável](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/SECURITY.md)
+- [Dependabot — npm e GitHub Actions](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/.github/dependabot.yml)
+- [Workflow CodeQL](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/.github/workflows/codeql.yml)
+- [Permissões mínimas do CI](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/.github/workflows/ci.yml)
