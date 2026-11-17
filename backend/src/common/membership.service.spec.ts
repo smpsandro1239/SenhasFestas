@@ -1,6 +1,5 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ForbiddenException } from '@nestjs/common';
 import { MembershipService } from './membership.service';
 
 // Política 2A (decidida): role efetiva dentro do evento = event-role, exceto
