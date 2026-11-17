@@ -15,6 +15,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lockfile-refresh:
+    name: Gerar lockfile para validação (temporário)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Regenerar lockfile das workspaces
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Publicar lockfile regenerado
+        uses: actions/upload-artifact@v4
+        with:
+          name: regenerated-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+
   backend:
     name: Backend (lint, testes, build, e2e)
     runs-on: ubuntu-latest
