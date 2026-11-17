@@ -12,8 +12,9 @@ Os valores de referência do README (incluindo respostas abaixo de 200 ms e cerc
 - Migrações aplicadas e dados sintéticos de teste.
 - Uma conta de teste com acesso a pelo menos um evento e permissões para consultar produtos.
 - k6 instalado (https://grafana.com/docs/k6/latest/set-up/install-k6/).
+- Base de dados descartável e isolada para performance; o fluxo de login cria refresh tokens e, por isso, não deve ser executado sobre dados reais.
 
-Não reutilizar credenciais reais. Criar uma conta exclusiva no ambiente local.
+Não reutilizar credenciais reais. Criar uma conta exclusiva no ambiente local e usar uma base de dados descartável, restaurável ou facilmente recriável.
 
 ## Teste inicial: autenticação + catálogo
 
