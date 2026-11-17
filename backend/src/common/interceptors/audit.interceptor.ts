@@ -300,7 +300,7 @@ export class AuditInterceptor implements NestInterceptor {
     }
 
     const resultado: Record<string, unknown> = {};
-    const camposSensíveis = /(password|passwd|token|secret|authorization|cookie|api[_-]?key|private[_-]?key|credential)/i;
+    const camposSensíveis = /(password|passwd|pwd|token|secret|authorization|cookie|api[_-]?key|private[_-]?key|credential|access[_-]?code|verification[_-]?code|one[_-]?time[_-]?code|code[_-]?verifier|otp|pin)/i;
     for (const [chave, conteudo] of Object.entries(valor)) {
       resultado[chave] = camposSensíveis.test(chave)
         ? '[REDACTED]'
