@@ -37,7 +37,14 @@ export class SecurityMiddleware implements NestMiddleware {
 
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && temCookie && !temBearer) {
       const origin = req.headers.origin;
-      if (origin) {
+      if (!origin) {
+        res.status(HttpStatus.FORBIDDEN).json({
+          statusCode: HttpStatus.FORBIDDEN,
+          message: 'Origem obrigatória para pedidos autenticados por cookie',
+        });
+        return;
+      }
+      {
         const proto = req.get('x-forwarded-proto') || req.protocol;
         const host = req.get('x-forwarded-host') || req.headers.host;
         const mesmaOrigem = origin.replace(/\/+$/, '') === `${proto}://${host}`;
