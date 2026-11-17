@@ -68,7 +68,7 @@ describe('OrderService — idempotência na criação', () => {
     expect(orderRepository.findOne).toHaveBeenCalledTimes(1);
     expect(dataSource.transaction).not.toHaveBeenCalled();
     expect(qrCodeService.generateOrderQRCode).toHaveBeenCalledWith('order-1');
-    expect(orderGateway.emitOrderUpdate).not.toHaveBeenCalled();
+    expect(orderGateway.emitOrderUpdate).toHaveBeenCalledWith('order-1', 'received', 'event-1');
     expect(notificationService.notifyNewOrder).not.toHaveBeenCalled();
   });
 
@@ -96,8 +96,6 @@ describe('OrderService — idempotência na criação', () => {
   });
 
   it('rejeita a reutilização da mesma chave com payload diferente', async () => {
-    const seed = criarServico();
-    const requestHash = (seed.service as any).hashPedido(USER.id, DTO);
     const { service, dataSource } = criarServico([
       { id: 'order-1', status: 'received', requestHash: 'different-payload-hash' },
     ]);
@@ -116,7 +114,9 @@ describe('OrderService — idempotência na criação', () => {
     orderRepository.findOne
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(existing);
-    dataSource.transaction.mockRejectedValue({ driverError: { code: '23505' } });
+    dataSource.transaction.mockRejectedValue({
+      driverError: { code: '23505', constraint: 'UQ_orders_idempotency' },
+    });
 
     const result = await service.create(USER, DTO as any, 'order-test-key-0001');
 
@@ -133,4 +133,15 @@ describe('OrderService — idempotência na criação', () => {
     await expect(service.create(USER, DTO as any, 'invalid\nkey-123')).rejects.toThrow('Idempotency-Key inválida');
     expect(orderRepository.findOne).not.toHaveBeenCalled();
   });
+  it('não trata outras violações UNIQUE como colisões de idempotência', async () => {
+    const { service, orderRepository, dataSource } = criarServico();
+    const erro = { driverError: { code: '23505', constraint: 'UQ_orders_other' } };
+    dataSource.transaction.mockRejectedValue(erro);
+
+    await expect(
+      service.create(USER, DTO as any, 'order-test-key-0001'),
+    ).rejects.toBe(erro);
+    expect(orderRepository.findOne).toHaveBeenCalledTimes(1);
+  });
+
 });

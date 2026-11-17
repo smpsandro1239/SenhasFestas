@@ -20,7 +20,7 @@ export class OrderController {
     @Body() dto: CreateOrderDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.orderService.create(req.user, dto, idempotencyKey);
+    return this.orderService.create(req.user, dto, idempotencyKey ?? dto.idempotencyKey);
   }
 
   @Patch(':id/status')
