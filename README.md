@@ -19,10 +19,10 @@ Plataforma completa para organização de festas, venda de senhas digitais/físi
 - **Cache:** Redis para estados ativos
 
 ### Frontend (Next.js + PWA)
-- **Framework:** Next.js 14 (React 18)
+- **Framework:** Next.js 15 (React 18)
 - **Tecnologias:** React + TypeScript + Tailwind CSS
 - **Progressive Web App:** Instalável em dispositivos móveis
-- **Offine:** Funciona sem internet, sincroniza depois
+- **Offline:** PWA com fallback offline e cache de assets estáticos; pedidos e pagamentos offline ainda não são suportados nem sincronizados automaticamente
 - **Screens:** POS Operador, Cozinha/KDS, Público, Administração
 
 ### DevOps
