@@ -133,14 +133,23 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       if (!rawToken || typeof rawToken !== 'string') {
         throw new Error('token em falta');
       }
-      const payload = this.jwtService.verify<{ sub: string; role: string }>(rawToken, {
+      const payload = this.jwtService.verify<{ sub: string; role: string; exp?: number }>(rawToken, {
         algorithms: ['HS256'],
         issuer: 'senhasfestas-api',
         audience: 'senhasfestas-app',
       });
-      if (!payload?.sub) {
-        throw new Error('token inválido');
+      if (!payload?.sub || !Number.isInteger(payload.exp) || payload.exp! * 1000 <= Date.now()) {
+        throw new Error('token inválido ou sem expiração');
       }
+
+      // O socket não é automaticamente encerrado pelo Socket.IO quando o JWT
+      // expira. Forçamos a desconexão no instante da expiração do access token.
+      const authTimeout = setTimeout(
+        () => client.disconnect(true),
+        Math.max(0, payload.exp * 1000 - Date.now()),
+      );
+      authTimeout.unref?.();
+      client.data.authTimeout = authTimeout;
 
       // A role do JWT pode estar desatualizada (ex.: utilizador despromovido).
       // A identidade e o estado ativo são sempre confirmados na BD.
@@ -164,6 +173,11 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
   }
 
   async handleDisconnect(client: Socket) {
+    const authTimeout = client.data?.authTimeout as NodeJS.Timeout | undefined;
+    if (authTimeout) {
+      clearTimeout(authTimeout);
+      delete client.data.authTimeout;
+    }
     const user = client.data?.user as { id?: string } | undefined;
     if (user?.id) {
       await this.removerSocket(user.id, client.id);
