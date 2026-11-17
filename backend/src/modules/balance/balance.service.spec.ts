@@ -1010,7 +1010,12 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
 
     await svc.loadBalance('u1', { amount: 10, eventId: 'evt1' } as any, { id: 'staff' }, arquivar);
 
-    expect(arquivar).toHaveBeenCalledWith({ antes: { currentBalance: 40 }, eventId: 'evt1' });
+    expect(arquivar).toHaveBeenCalledWith({
+      antes: { currentBalance: 40 },
+      eventId: 'evt1',
+      entidadeId: 'b1',
+      extras: { amount: 10, paymentMethod: 'Carregamento' },
+    });
   });
 
   it('deductBalance arquiva o saldo anterior e o evento', async () => {
@@ -1028,7 +1033,12 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
 
     await svc.deductBalance('u1', { amount: 30, eventId: 'evt1' } as any, { id: 'staff' }, arquivar);
 
-    expect(arquivar).toHaveBeenCalledWith({ antes: { currentBalance: 100 }, eventId: 'evt1' });
+    expect(arquivar).toHaveBeenCalledWith({
+      antes: { currentBalance: 100 },
+      eventId: 'evt1',
+      entidadeId: 'b1',
+      extras: { amount: 30, description: 'Desconto de saldo (caixa)' },
+    });
   });
 
   it('reverseLoad arquiva o saldo atual e o evento do movimento', async () => {
@@ -1060,7 +1070,18 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
 
     await svc.reverseLoad('u1', 'mov1', { id: 'root', role: 'superadmin' }, {} as any, arquivar);
 
-    expect(arquivar).toHaveBeenCalledWith({ antes: { currentBalance: 100 }, eventId: 'evtA' });
+    expect(arquivar).toHaveBeenCalledWith({
+      antes: { currentBalance: 100 },
+      eventId: 'evtA',
+      entidadeId: 'b1',
+      extras: {
+        movementId: 'mov1',
+        originalAmount: 10,
+        alreadyReversedAmount: 0,
+        reversalAmount: 10,
+        fullyReversed: true,
+      },
+    });
   });
 
   it('transferBalance arquiva os dois lados, o evento destino e os extras', async () => {
@@ -1089,7 +1110,14 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
         destinationBalance: { id: 'b-destino', currentBalance: 20 },
       },
       eventId: 'atual',
-      extras: { fromEventId: 'magusto', toEventId: 'atual' },
+      entidadeId: 'b-origem',
+      extras: {
+        fromEventId: 'magusto',
+        toEventId: 'atual',
+        originBalanceId: 'b-origem',
+        destinationBalanceId: 'b-destino',
+        amount: 30,
+      },
     });
   });
 
@@ -1113,6 +1141,8 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
     expect(arquivar).toHaveBeenCalledWith({
       antes: { extendedUntil: null, archivedAt: new Date('2026-01-01') },
       eventId: 'evt1',
+      entidadeId: 'b1',
+      extras: { extendedUntil: expect.any(String) },
     });
   });
 
@@ -1125,7 +1155,11 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
 
     await svc.unarchiveBalance('u1', 'evt1', arquivar);
 
-    expect(arquivar).toHaveBeenCalledWith({ antes: { archivedAt }, eventId: 'evt1' });
+    expect(arquivar).toHaveBeenCalledWith({
+      antes: { archivedAt },
+      eventId: 'evt1',
+      entidadeId: 'b1',
+    });
   });
 
   it('markNotified arquiva o notifiedAt anterior', async () => {
@@ -1136,6 +1170,10 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
 
     await svc.markNotified('u1', 'evt1', arquivar);
 
-    expect(arquivar).toHaveBeenCalledWith({ antes: { notifiedAt: null }, eventId: 'evt1' });
+    expect(arquivar).toHaveBeenCalledWith({
+      antes: { notifiedAt: null },
+      eventId: 'evt1',
+      entidadeId: 'b1',
+    });
   });
 });
