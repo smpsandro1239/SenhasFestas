@@ -211,3 +211,23 @@ A arquitectura geral é coerente: monorepo npm workspaces, backend NestJS modula
 - Os resultados do CI variam por commit; consultar sempre os checks associados ao HEAD actual da PR.
 - Não foram testados neste lote: carga real de 1000 utilizadores, failover multi-instância, operação financeira offline, disaster recovery/restore de backups, nem migração em produção.
 - Não fazer merge nem deploy automático até à validação final do CI e revisão humana do comportamento financeiro.
+
+
+## Referências directas ao código
+
+As ligações abaixo apontam para a branch auditada e para as linhas de entrada dos fluxos:
+
+| Tema | Evidência |
+|---|---|
+| Rate limit e fallback | [RateLimitMiddleware / LoginRateLimitMiddleware](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/src/middleware/audit.middleware.ts#L32) · [operações Redis estritas](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/src/common/redis/redis.service.ts#L20) |
+| Protecção E2E | [helper de validação do destino](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/test/e2e-database-safety.ts#L22) · [spec que faz DROP SCHEMA](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/test/app.e2e-spec.ts#L26) |
+| PWA/cache privado | [Service Worker](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/frontend/public/sw.js#L35) · [teste de regressão](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/frontend/src/lib/service-worker-cache.test.ts#L7) |
+| Autenticação e refresh | [AuthService](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/src/modules/auth/auth.service.ts#L82) · [cookies e DTOs](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/src/modules/auth/auth.controller.ts#L29) |
+| RBAC por evento | [RolesGuard](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/src/common/guards/roles.guard.ts#L31) |
+| Pedidos e transacções | [OrderService.create](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/src/modules/order/order.service.ts#L42) |
+| Saldo e estornos | [BalanceService](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/src/modules/balance/balance.service.ts#L60) |
+| CORS e validação | [app.setup.ts](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/src/app.setup.ts#L67) |
+| Índices/migrações | [HardeningIndexes migration](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/src/database/migrations/1789000000000-HardeningIndexes.ts#L12) |
+| Docker/CI | [Compose](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/docker-compose.yml#L7) · [backend Dockerfile](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/Dockerfile#L3) · [CI](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/.github/workflows/ci.yml#L14) |
+| Versão Next.js | [frontend/package.json](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/frontend/package.json#L24) |
+
