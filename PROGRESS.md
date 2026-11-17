@@ -43,7 +43,7 @@
 **Feito na branch `codex/autonomous-hardening-2026-11`**
 - Criado `AUDIT.md` com arquitectura, segurança, dados, testes, performance, CI/CD, documentação, PWA e roadmap priorizado.
 - Corrigido README: Next.js 15 e descrição honesta do modo offline (fallback PWA/cache estático; não há fila transaccional).
-- Service Worker: deixa de persistir respostas de navegação autenticada e deixa de interceptar RSC/HTML dinâmico. Mantém cache de assets estáticos explicitamente permitidos e página offline precacheada.
+- Service Worker: deixa de persistir respostas de navegação autenticada e deixa de interceptar RSC/HTML dinâmico. Mantém cache de assets estáticos explicitamente permitidos e página offline precacheada. A cache passou de v4 para v5 para apagar dados privados antigos que pudessem já estar armazenados.
 - Página `/offline`: deixa claro que pedidos/pagamentos/alterações não são enfileirados nem sincronizados automaticamente; recomenda verificar o estado antes de repetir uma operação.
 - Adicionado teste de regressão `frontend/src/lib/service-worker-cache.test.ts`.
 - T38/D19 registado no plano e TODO.
