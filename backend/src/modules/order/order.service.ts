@@ -506,7 +506,7 @@ export class OrderService {
       antes: this.snapshotFinanceiroAuditoria(order),
       eventId: order.event?.id,
       extras: {
-        stockRestoration: true,
+        stockRestorationProcessed: true,
         refundAmount: temSaldoParaReembolsar(order) ? centavos(Number(order.balanceUsed)) : 0,
       },
     });
@@ -613,7 +613,7 @@ export class OrderService {
       eventId: order.event?.id,
       extras: {
         transition: `${order.status} -> ${status}`,
-        stockRestoration: status === 'cancelled',
+        stockRestorationProcessed: status === 'cancelled',
         refundAmount: status === 'cancelled' && temSaldoParaReembolsar(order)
           ? centavos(Number(order.balanceUsed))
           : 0,
