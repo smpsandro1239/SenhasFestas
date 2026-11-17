@@ -6,6 +6,7 @@ describe('RedisService — incrementWithTtl (A3: INCR+EXPIRE atómico)', () => {
     incr: vi.fn(),
     expire: vi.fn(),
     eval: vi.fn(),
+    get: vi.fn(),
   };
 
   let service: RedisService;
@@ -40,9 +41,23 @@ describe('RedisService — incrementWithTtl (A3: INCR+EXPIRE atómico)', () => {
     );
   });
 
-  it('devolve null quando o cliente está indisponível', async () => {
+  it('devolve null quando o cliente está indisponível no método tolerante', async () => {
     const disabled = new RedisService(null);
 
     await expect(disabled.incrementWithTtl('k', 60)).resolves.toBeNull();
+  });
+
+  it('o incremento estrito propaga indisponibilidade em vez de devolver null', async () => {
+    const disabled = new RedisService(null);
+
+    await expect(disabled.incrementWithTtlStrict('k', 60)).rejects.toThrow('Redis não configurado');
+  });
+
+  it('a leitura estrita distingue chave ausente de falha Redis', async () => {
+    client.get.mockResolvedValue(null);
+    await expect(service.getStrict('rl:login:x')).resolves.toBeNull();
+
+    client.get.mockRejectedValue(new Error('ECONNREFUSED'));
+    await expect(service.getStrict('rl:login:x')).rejects.toThrow('ECONNREFUSED');
   });
 });
