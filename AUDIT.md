@@ -106,7 +106,7 @@ A arquitectura geral é coerente: monorepo npm workspaces, backend NestJS modula
 
 **Constatações**
 - Backend usa Vitest unitário e E2E com PostgreSQL/Redis; frontend usa Vitest e Playwright.
-- CI separa lint, typecheck, build, backend E2E, browser E2E e validação de documentação.
+- CI separa lint, typecheck, Vitest frontend, build, backend E2E, browser E2E e validação de documentação. O job frontend passou a executar a sua suite Vitest nesta branch.
 - Num run inicial da branch, o backend reportou 498 testes passados e 2 falhados: um teste assumia `DB_SSL` ausente apesar do ambiente o definir, e outro teste de fallback não cobria correctamente a transição para recuperação do Redis. Ambos foram alvo de correcção na branch.
 - A validação da BD E2E agora exige opt-in explícito, host loopback e nome terminado em `_test` ou `_e2e`.
 
@@ -228,6 +228,6 @@ As ligações abaixo apontam para a branch auditada e para as linhas de entrada 
 | Saldo e estornos | [BalanceService](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/src/modules/balance/balance.service.ts#L60) |
 | CORS e validação | [app.setup.ts](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/src/app.setup.ts#L67) |
 | Índices/migrações | [HardeningIndexes migration](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/src/database/migrations/1789000000000-HardeningIndexes.ts#L12) |
-| Docker/CI | [Compose](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/docker-compose.yml#L7) · [backend Dockerfile](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/Dockerfile#L3) · [CI](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/.github/workflows/ci.yml#L14) |
+| Docker/CI | [workflow CI] (https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/.github/workflows/ci.yml#L89) · [Compose](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/docker-compose.yml#L7) · [backend Dockerfile](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/backend/Dockerfile#L3) · [CI](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/.github/workflows/ci.yml#L14) |
 | Versão Next.js | [frontend/package.json](https://github.com/smpsandro1239/SenhasFestas/blob/codex/autonomous-hardening-2026-11/frontend/package.json#L24) |
 
