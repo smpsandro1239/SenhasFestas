@@ -233,7 +233,7 @@ describe('AuditInterceptor — before/after', () => {
     const details = record.mock.calls[0][0].details;
     expect(details.authorization).toBe('[REDACTED]');
     expect(details.integration.apiKey).toBe('[REDACTED]');
-    expect(details.integration.note).toContain('Bearer [REDACTED]');
+    expect(details.integration.note).toContain('Bearer [JWT REDACTED]');
     expect(details.integration.note).toContain('[JWT REDACTED]');
     expect(JSON.stringify(details)).not.toContain('api-secret');
     expect(JSON.stringify(details)).not.toContain(jwt);
