@@ -113,6 +113,15 @@ describe('A9 — unicidade de caixa aberta por evento', () => {
     );
   });
 
+  it('converte a violação do índice único em HTTP 409 quando duas aberturas correm em simultâneo', async () => {
+    const { service, repository } = criarServico();
+    repository.save.mockRejectedValue({ code: '23505' });
+
+    await expect(
+      service.abrirCaixa('op1', { id: 'op1', role: 'cashier' }, { eventId: 'evt1' } as any),
+    ).rejects.toThrow(ConflictException);
+  });
+
   it('obterCaixaAberta ordena por openedAt DESC (determinístico mesmo com duplicados legados)', async () => {
     const { service, repository } = criarServico();
 
