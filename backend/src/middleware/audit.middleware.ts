@@ -37,57 +37,56 @@ export class RateLimitMiddleware implements NestMiddleware {
 
   constructor(private readonly redisService: RedisService) {}
 
-  private verificarLimiteLocal(ip: string): boolean {
+  private obterPedidosLocais(ip: string): number[] {
     const recentes = nunca(this.local.get(ip) || [], this.windowMs, Date.now());
-    if (recentes.length > 0) {
-      this.local.set(ip, recentes);
-    } else {
-      this.local.delete(ip);
-    }
-    return recentes.length >= this.maxRequests;
+    if (recentes.length > 0) this.local.set(ip, recentes);
+    else this.local.delete(ip);
+    return recentes;
   }
 
   private registarPedidoLocal(ip: string): void {
-    const recentes = nunca(this.local.get(ip) || [], this.windowMs, Date.now());
+    const recentes = this.obterPedidosLocais(ip);
     recentes.push(Date.now());
     this.local.set(ip, recentes);
 
     const timer = setTimeout(() => {
-      const atualizadas = nunca(this.local.get(ip) || [], this.windowMs, Date.now());
-      if (atualizadas.length > 0) {
-        this.local.set(ip, atualizadas);
-      } else {
-        this.local.delete(ip);
-      }
+      this.obterPedidosLocais(ip);
     }, this.windowMs);
     timer.unref?.();
   }
 
+  private responderLimite(res: Response): void {
+    res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+      statusCode: HttpStatus.TOO_MANY_REQUESTS,
+      message: 'Muitas requisições. Tente novamente mais tarde.',
+    });
+  }
+
   async use(req: Request, res: Response, next: NextFunction) {
     const ip = req.ip || 'unknown';
+    const locais = this.obterPedidosLocais(ip);
 
-    // Contagens locais feitas durante uma falha Redis mantêm-se activas
-    // durante toda a janela, mesmo quando o Redis recupera entretanto.
-    if (this.verificarLimiteLocal(ip)) {
-      res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-        statusCode: HttpStatus.TOO_MANY_REQUESTS,
-        message: 'Muitas requisições. Tente novamente mais tarde.',
-      });
+    if (locais.length >= this.maxRequests) {
+      this.responderLimite(res);
+      return;
+    }
+
+    // Depois de um fallback, a memória continua a ser a fonte única até
+    // terminar a janela. Não somar uma nova janela Redis ao orçamento local.
+    if (locais.length > 0 || !this.redisService.isEnabled) {
+      this.registarPedidoLocal(ip);
+      next();
       return;
     }
 
     if (this.redisService.isEnabled) {
-      const key = `${RL_IP_PREFIX}${ip}`;
       try {
         const count = await this.redisService.incrementWithTtlStrict(
-          key,
+          `${RL_IP_PREFIX}${ip}`,
           Math.ceil(this.windowMs / 1000),
         );
         if (count > this.maxRequests) {
-          res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-            statusCode: HttpStatus.TOO_MANY_REQUESTS,
-            message: 'Muitas requisições. Tente novamente mais tarde.',
-          });
+          this.responderLimite(res);
           return;
         }
         next();
