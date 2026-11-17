@@ -11,7 +11,7 @@ export class AddBalanceOperationIdempotency1794880000000 implements MigrationInt
       'ALTER TABLE "balance_movements" ADD COLUMN "requestHash" char(64) NULL',
     );
     await queryRunner.query(
-      'CREATE UNIQUE INDEX "UQ_balance_movements_idempotency" ON "balance_movements" ("createdById", "idempotencyKey") WHERE "idempotencyKey" IS NOT NULL AND "createdById" IS NOT NULL',
+      'CREATE UNIQUE INDEX "UQ_balance_movements_idempotency" ON "balance_movements" ("createdById", "type", "idempotencyKey") WHERE "idempotencyKey" IS NOT NULL AND "createdById" IS NOT NULL',
     );
   }
 
