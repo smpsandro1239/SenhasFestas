@@ -44,15 +44,17 @@ export class RateLimitMiddleware implements NestMiddleware {
     return recentes;
   }
 
-  private registarPedidoLocal(ip: string): void {
+  private reservarPedidoLocal(ip: string): boolean {
+    // Reavaliar o contador no momento da reserva: várias chamadas podem ter
+    // aguardado Redis em paralelo e chegar aqui com uma leitura inicial obsoleta.
     const recentes = this.obterPedidosLocais(ip);
+    if (recentes.length >= this.maxRequests) return false;
+
     recentes.push(Date.now());
     this.local.set(ip, recentes);
-
-    const timer = setTimeout(() => {
-      this.obterPedidosLocais(ip);
-    }, this.windowMs);
+    const timer = setTimeout(() => this.obterPedidosLocais(ip), this.windowMs);
     timer.unref?.();
+    return true;
   }
 
   private responderLimite(res: Response): void {
@@ -74,7 +76,10 @@ export class RateLimitMiddleware implements NestMiddleware {
     // Depois de um fallback, a memória continua a ser a fonte única até
     // terminar a janela. Não somar uma nova janela Redis ao orçamento local.
     if (locais.length > 0 || !this.redisService.isEnabled) {
-      this.registarPedidoLocal(ip);
+      if (!this.reservarPedidoLocal(ip)) {
+        this.responderLimite(res);
+        return;
+      }
       next();
       return;
     }
@@ -96,7 +101,10 @@ export class RateLimitMiddleware implements NestMiddleware {
       }
     }
 
-    this.registarPedidoLocal(ip);
+    if (!this.reservarPedidoLocal(ip)) {
+      this.responderLimite(res);
+      return;
+    }
     next();
   }
 }
@@ -126,16 +134,16 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
     return recentes;
   }
 
-  private registarFalhaLocal(chave: string): number {
+  private reservarFalhaLocal(chave: string): number | null {
+    // A reserva local também tem de ser atómica ao nível do event loop.
+    // Não reutilizar o tamanho calculado antes de um await ao Redis.
     const falhas = this.obterFalhasLocais(chave);
+    if (falhas.length >= this.maxAttempts) return null;
+
     const timestamp = Date.now();
     falhas.push(timestamp);
     this.local.set(chave, falhas);
-
-    const timer = setTimeout(() => {
-      const atualizadas = this.obterFalhasLocais(chave);
-      if (atualizadas.length === 0) this.local.delete(chave);
-    }, this.windowMs);
+    const timer = setTimeout(() => this.obterFalhasLocais(chave), this.windowMs);
     timer.unref?.();
     return timestamp;
   }
@@ -178,9 +186,8 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
     // Se já houve fallback local nesta janela, manter a mesma fonte de contagem
     // até expirar. Misturar Redis e memória ao recuperar cria orçamento duplo.
     if (locais.length > 0 || !this.redisService.isEnabled) {
-      const timestamp = this.registarFalhaLocal(chave);
-      if (locais.length >= this.maxAttempts) {
-        this.removerReservaLocal(chave, timestamp);
+      const timestamp = this.reservarFalhaLocal(chave);
+      if (timestamp === null) {
         this.responderLimite(res);
         return;
       }
@@ -216,7 +223,11 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
       next();
     } catch (error) {
       Logger.warn(`Falha no rate limit de login via Redis (contagem local): ${(error as Error).message}`);
-      const timestamp = this.registarFalhaLocal(chave);
+      const timestamp = this.reservarFalhaLocal(chave);
+      if (timestamp === null) {
+        this.responderLimite(res);
+        return;
+      }
       res.on('finish', () => {
         if (res.statusCode !== HttpStatus.UNAUTHORIZED) {
           this.removerReservaLocal(chave, timestamp);
