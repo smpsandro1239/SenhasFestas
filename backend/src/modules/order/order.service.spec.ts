@@ -758,7 +758,15 @@ describe('OrderService — snapshot anterior para auditoria (arquivar)', () => {
 
   it('cancelOrder arquiva o estado anterior e o evento', async () => {
     const orderRepo = {
-      findOne: vi.fn().mockResolvedValue({ id: 'o1', status: 'received', event: { id: 'evt1' } }),
+      findOne: vi.fn().mockResolvedValue({
+        id: 'o1',
+        status: 'received',
+        total: 12.5,
+        balanceUsed: 0,
+        paymentMethod: 'cash',
+        balanceId: null,
+        event: { id: 'evt1' },
+      }),
     };
     const svc = svcCom(orderRepo, managerBase());
     const arquivar = vi.fn();
