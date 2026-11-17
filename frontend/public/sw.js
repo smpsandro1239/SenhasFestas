@@ -35,20 +35,13 @@ function isSameOrigin(url) {
 async function networkFirst(request) {
   const cache = await caches.open(CACHE_NAME);
   try {
-    const response = await fetch(request, { cache: 'no-store' });
-    if (response && response.status === 200 && request.method === 'GET') {
-      cache.put(request, response.clone());
-    }
-    return response;
+    // Nunca guardar HTML/RSC de páginas autenticadas: o Service Worker pode
+    // sobreviver ao logout e expor dados privados num dispositivo partilhado.
+    return await fetch(request, { cache: 'no-store' });
   } catch {
-    const cached = await cache.match(request);
-    if (cached) return cached;
     const offlinePage = await cache.match('/offline');
     if (offlinePage) return offlinePage;
-    const files = await cache.matchAll('/');
-    const fallback = files.length ? files[0] : null;
-    if (fallback) return fallback;
-    return new Response('', { status: 200, headers: { 'Content-Type': 'text/html' } });
+    return new Response('', { status: 503, headers: { 'Content-Type': 'text/plain' } });
   }
 }
 
@@ -84,21 +77,25 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Restante (manifest, ícones): stale-while-revalidate
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((response) => {
+  // Não interceptar RSC, HTML dinâmico, respostas personalizadas ou dados
+  // de utilizador. Só os assets estáticos explicitamente identificados acima
+  // e os recursos precacheados são elegíveis para cache. A API já está excluída.
+  if (
+    url.pathname === '/manifest.webmanifest' ||
+    url.pathname === '/icon-192.png' ||
+    url.pathname === '/icon-512.png'
+  ) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
           if (response && response.ok) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            void caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
           }
           return response;
-        })
-        .catch(() => {
-          return cached || new Response('', { status: 200, headers: { 'Content-Type': 'text/html' } });
         });
-      return cached || network;
-    }),
-  );
+      }),
+    );
+  }
 });
