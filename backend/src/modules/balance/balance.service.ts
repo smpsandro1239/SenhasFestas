@@ -72,7 +72,7 @@ export class BalanceService {
   ): Promise<void> {
     await manager.query(
       'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
-      [actorId, idempotencyKey],
+      [`${actorId}:${operation}`, idempotencyKey],
     );
   }
 
@@ -272,7 +272,7 @@ export class BalanceService {
         if (idempotencyKey) {
           await this.lockOperationKey(manager, actor.id, 'load', idempotencyKey);
           const anterior = await manager.findOne(BalanceMovementEntity, {
-            where: { createdById: actor.id, idempotencyKey },
+            where: { createdById: actor.id, idempotencyKey, type: MovementType.LOAD },
             relations: { balance: { event: true, user: true } },
             withDeleted: true,
           });
@@ -375,7 +375,7 @@ export class BalanceService {
       if (idempotencyKey) {
         await this.lockOperationKey(manager, actor.id, 'deduct', idempotencyKey);
         const anterior = await manager.findOne(BalanceMovementEntity, {
-          where: { createdById: actor.id, idempotencyKey },
+          where: { createdById: actor.id, idempotencyKey, type: MovementType.CONSUME },
           relations: { balance: true },
         });
         if (anterior) {
