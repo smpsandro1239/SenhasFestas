@@ -64,6 +64,12 @@ export class BalanceService {
       .digest('hex');
   }
 
+  private hashChaveIdempotencia(operation: 'reverse-load' | 'transfer', key: string): string {
+    return createHash('sha256')
+      .update(`senhasfestas:${operation}:${key}`)
+      .digest('hex');
+  }
+
   private async lockOperationKey(
     manager: import('typeorm').EntityManager,
     actorId: string,
@@ -151,6 +157,9 @@ export class BalanceService {
     eventId?: string;
   }> {
     const idempotencyKey = this.validarChaveIdempotencia(rawIdempotencyKey, actor);
+    const storedIdempotencyKey = idempotencyKey
+      ? this.hashChaveIdempotencia('reverse-load', idempotencyKey)
+      : undefined;
     const resultado = await this.dataSource.transaction(async (manager) => {
       const movement = await manager.findOne(BalanceMovementEntity, {
         where: { id: movementId },
@@ -195,7 +204,7 @@ export class BalanceService {
         const anterior = await manager.findOne(BalanceMovementEntity, {
           where: {
             createdById: actor.id,
-            idempotencyKey,
+            idempotencyKey: storedIdempotencyKey,
             type: MovementType.CANCEL,
           },
           relations: { balance: true },
@@ -281,7 +290,7 @@ export class BalanceService {
         description: estorno >= montanteOriginal - 0.005 ? 'Estorno de carregamento' : 'Estorno parcial de carregamento',
         reversedOfId: locked.id,
         createdById: actor?.id,
-        idempotencyKey,
+        idempotencyKey: storedIdempotencyKey,
         requestHash,
       });
       const savedReversal = await manager.save(BalanceMovementEntity, reversal);
@@ -725,6 +734,9 @@ export class BalanceService {
       throw new ForbiddenException('Origem e destino têm de ser eventos diferentes');
     }
     const idempotencyKey = this.validarChaveIdempotencia(rawIdempotencyKey, actor);
+    const storedIdempotencyKey = idempotencyKey
+      ? this.hashChaveIdempotencia('transfer', idempotencyKey)
+      : undefined;
     const requestHash = idempotencyKey
       ? this.hashOperacaoFinanceira('transfer', actor.id, userId, dto.fromEventId, {
           toEventId: dto.toEventId,
@@ -868,7 +880,7 @@ export class BalanceService {
         amount: montante,
         description: `Transferência para ${toEvent.name}`,
         createdById: actor?.id,
-        idempotencyKey,
+        idempotencyKey: storedIdempotencyKey,
         requestHash,
       });
       await manager.save(BalanceMovementEntity, movOrigem);
