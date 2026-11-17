@@ -83,19 +83,23 @@ export class CatalogService {
     // Avoid loading every order and every related product into Node.js memory.
     const query = this.orderItemRepository
       .createQueryBuilder('item')
-      .innerJoin('item.order', 'order')
+      .innerJoin('item.order', 'purchase')
       .innerJoin('item.product', 'product')
       .select('product.id', 'productId')
       .addSelect('SUM(item.quantity)', 'totalQuantity')
-      .where('order.status IN (:...statuses)', {
+      .where('purchase.status IN (:...statuses)', {
         statuses: ['received', 'preparing', 'ready', 'delivered'],
       })
+      .andWhere(
+        'purchase.id IN (SELECT target_item."orderId" FROM order_items target_item WHERE target_item."productId" = :targetProductId)',
+        { targetProductId: productId },
+      )
       .andWhere('product.id <> :productId', { productId })
       .andWhere('product.isActive = :isActive', { isActive: true })
       .andWhere('product.deletedAt IS NULL');
 
     if (escopoEvento) {
-      query.andWhere('order.eventId = :eventId', { eventId: escopoEvento });
+      query.andWhere('purchase.eventId = :eventId', { eventId: escopoEvento });
     }
 
     const cooccurrence = await query
