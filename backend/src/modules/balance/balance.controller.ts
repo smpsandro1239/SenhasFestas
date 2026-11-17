@@ -6,11 +6,15 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { FINANCE_ROLES } from '../../common/roles';
 import { arquivarAuditoria } from '../../common/interceptors/audit.interceptor';
+import { MembershipService } from '../../common/membership.service';
 
 @Controller('balances')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 export class BalanceController {
-  constructor(private readonly balanceService: BalanceService) {}
+  constructor(
+    private readonly balanceService: BalanceService,
+    private readonly membershipService: MembershipService,
+  ) {}
 
   @Get(':userId')
   async getBalance(
@@ -18,11 +22,7 @@ export class BalanceController {
     @Request() req: any,
     @Query('eventId', new ParseUUIDPipe({ optional: true })) eventId?: string,
   ) {
-    this.assertCanAccess(req.user, userId);
-    this.assertStaffEventScope(req.user, eventId);
-    if (eventId && req.user.role !== 'superadmin') {
-      await this.balanceService.assertMemberEvent(req.user.id, eventId);
-    }
+    await this.assertCanAccess(req.user, userId, eventId);
     return this.balanceService.getBalance(userId, eventId);
   }
 
@@ -88,11 +88,7 @@ export class BalanceController {
     @Request() req: any,
     @Query('eventId', new ParseUUIDPipe({ optional: true })) eventId?: string,
   ) {
-    this.assertCanAccess(req.user, userId);
-    this.assertStaffEventScope(req.user, eventId);
-    if (eventId && req.user.role !== 'superadmin') {
-      await this.balanceService.assertMemberEvent(req.user.id, eventId);
-    }
+    await this.assertCanAccess(req.user, userId, eventId);
     return this.balanceService.getBalanceHistory(userId, eventId);
   }
 
@@ -159,24 +155,29 @@ export class BalanceController {
     return this.balanceService.listSaldosPendentes(eventId, req.user);
   }
 
-  private assertCanAccess(requestUser: any, userId: string) {
-    if (requestUser.role === 'client') {
-      if (requestUser.id !== userId) {
-        throw new ForbiddenException('Não pode consultar o saldo de outro utilizador');
-      }
+  private async assertCanAccess(requestUser: any, userId: string, eventId?: string): Promise<void> {
+    if (requestUser.role === 'superadmin') {
       return;
     }
-    if (!FINANCE_ROLES.includes(requestUser.role)) {
-      throw new ForbiddenException('Sem permissão para consultar saldos');
-    }
-  }
 
-  private assertStaffEventScope(requestUser: any, eventId?: string) {
-    if (requestUser.role === 'superadmin' || requestUser.role === 'client') {
+    // Sem evento explícito, qualquer utilizador só pode consultar os próprios
+    // saldos. Para consultar o saldo de terceiros é obrigatória a role efectiva
+    // no evento concreto — nunca a role global do JWT.
+    if (!eventId) {
+      if (requestUser.id === userId) {
+        return;
+      }
+      throw new ForbiddenException('Indique o evento (eventId) para consultar saldos de terceiros');
+    }
+
+    await this.balanceService.assertMemberEvent(requestUser.id, eventId);
+    if (requestUser.id === userId) {
       return;
     }
-    if (!eventId) {
-      throw new ForbiddenException('Indique o evento (eventId) para consultar saldos');
+
+    const role = await this.membershipService.roleEfetiva(requestUser, eventId);
+    if (!FINANCE_ROLES.includes(role)) {
+      throw new ForbiddenException('A tua função neste evento não permite consultar saldos de terceiros');
     }
   }
 }
