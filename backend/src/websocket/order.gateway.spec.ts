@@ -168,6 +168,74 @@ describe('OrderGateway — emissão local vs Redis (subscriberAtivo)', () => {
   });
 });
 
+describe('OrderGateway — revogação imediata de rooms por alteração de membership', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    redisInstancias.length = 0;
+  });
+
+  it('remove as rooms de pedidos e planta dos sockets locais do utilizador', () => {
+    const { gateway, redisService } = criarGateway();
+    const socketDoMembro = {
+      data: { user: { id: 'u1', role: 'organizer' } },
+      leave: vi.fn(),
+      emit: vi.fn(),
+    };
+    const socketDeOutro = {
+      data: { user: { id: 'u2', role: 'organizer' } },
+      leave: vi.fn(),
+      emit: vi.fn(),
+    };
+    gateway.server = {
+      sockets: { sockets: new Map([['s1', socketDoMembro], ['s2', socketDeOutro]]) },
+    } as any;
+
+    gateway.revogarAcessoEvento('u1', 'evt1');
+
+    expect(socketDoMembro.leave).toHaveBeenCalledWith('event:evt1');
+    expect(socketDoMembro.leave).toHaveBeenCalledWith('event:evt1:planta');
+    expect(socketDoMembro.emit).toHaveBeenCalledWith('membership:revoked', { eventId: 'evt1' });
+    expect(socketDeOutro.leave).not.toHaveBeenCalled();
+    expect(redisService.publish).not.toHaveBeenCalled();
+  });
+
+  it('propaga a revogação às restantes instâncias quando Redis está activo', () => {
+    const { gateway, redisService } = criarGateway({
+      config: { get: vi.fn().mockReturnValue('redis://localhost:6379') },
+    });
+    (gateway as any).subscriberAtivo = true;
+
+    gateway.revogarAcessoEvento('u1', 'evt1');
+
+    expect(redisService.publish).toHaveBeenCalledWith(
+      'membership:revoked',
+      JSON.stringify({ userId: 'u1', eventId: 'evt1' }),
+    );
+  });
+
+  it('processa a mensagem Redis e remove as rooms na instância remota', () => {
+    const { gateway } = criarGateway({
+      config: { get: vi.fn().mockReturnValue('redis://localhost:6379') },
+    });
+    const socket = {
+      data: { user: { id: 'u1', role: 'cashier' } },
+      leave: vi.fn(),
+      emit: vi.fn(),
+    };
+    gateway.server = { sockets: { sockets: new Map([['s1', socket]]) } } as any;
+
+    redisInstancias[0].emit(
+      'message',
+      'membership:revoked',
+      JSON.stringify({ userId: 'u1', eventId: 'evt1' }),
+    );
+
+    expect(socket.leave).toHaveBeenCalledWith('event:evt1');
+    expect(socket.leave).toHaveBeenCalledWith('event:evt1:planta');
+    expect(socket.emit).toHaveBeenCalledWith('membership:revoked', { eventId: 'evt1' });
+  });
+});
+
 describe('OrderGateway — handleConnection', () => {
   beforeEach(() => {
     vi.clearAllMocks();

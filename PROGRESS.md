@@ -1,3 +1,25 @@
+## 2026-11-17 — T44: revogação imediata de rooms WebSocket
+
+**Problema confirmado**
+- A autorização de `joinEvent` e `joinEventPlanta` era validada no momento da entrada. Alterar/remover a membership depois não retirava sockets já ligados das rooms do evento.
+
+**Alterações**
+- `OrderGateway.revogarAcessoEvento` retira, em todas as sockets locais do utilizador, as rooms de pedidos e de planta do evento e emite `membership:revoked`.
+- O canal Redis `membership:revoked` propaga a invalidação às restantes instâncias.
+- `EventController` chama a revogação depois de atribuir/alterar ou remover uma membership.
+- Acrescentados testes para revogação local, publicação Redis e consumo da mensagem numa instância remota.
+
+**Limitações**
+- Se Redis estiver configurado mas indisponível, a revogação é local e o gateway regista um aviso; o modo multi-instância não pode garantir propagação sem o broker.
+- O fluxo `POST /auth/enter-event` com `replace=true` remove memberships no serviço de autenticação e ainda precisa de ligar a mesma invalidação.
+- Não há revalidação periódica de permissões em operações longas; os sockets são expulsos das rooms após a alteração explícita de membership via administração.
+
+**Validação**
+- Testes adicionados; gates remotos ainda por executar. Não declarar T44 concluída.
+- Sem migrations, alterações de dados ou deploy nesta alteração.
+
+---
+
 ## 2026-11-17 — recuperação da CI e autorização por evento
 
 **Falhas reproduzidas na CI**

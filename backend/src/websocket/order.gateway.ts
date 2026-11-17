@@ -24,6 +24,7 @@ export type { TipoAlteracaoPlanta } from '@senhasfestas/shared';
 const ORDER_STATUS_CACHE_TTL = 60 * 60 * 24;
 const CHANNEL = CANAIS_REALTIME.pedidos;
 const PLANTA_CHANNEL = CANAIS_REALTIME.planta;
+const MEMBERSHIP_CHANNEL = 'membership:revoked';
 
 const JOIN_WINDOW_MS = 60_000;
 const JOIN_LIMIT = 10;
@@ -92,6 +93,14 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     });
     subscriber.on('message', (_channel, rawMessage) => {
       try {
+        if (_channel === MEMBERSHIP_CHANNEL) {
+          const payload = JSON.parse(rawMessage) as { userId?: string; eventId?: string };
+          if (!payload?.userId || !payload.eventId) {
+            return;
+          }
+          this.revogarAcessoLocal(payload.userId, payload.eventId);
+          return;
+        }
         if (_channel === PLANTA_CHANNEL) {
           const payload = JSON.parse(rawMessage) as { plantaId?: string; version?: number; tipo?: TipoAlteracaoPlanta; eventId?: string };
           if (!payload?.plantaId || !payload.eventId) {
@@ -118,7 +127,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
         this.logger.warn('Mensagem malformada no canal de updates');
       }
     });
-    subscriber.subscribe(CHANNEL, PLANTA_CHANNEL).catch((error) => {
+    subscriber.subscribe(CHANNEL, PLANTA_CHANNEL, MEMBERSHIP_CHANNEL).catch((error) => {
       this.logger.warn(`Não foi possível subscrever os canais de updates: ${error.message}`);
     });
     this.subscriber = subscriber;
@@ -373,6 +382,39 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     }
     await client.join(roomPlanta(eventId));
     return { ok: true };
+  }
+
+  private revogarAcessoLocal(userId: string, eventId: string): void {
+    const sockets = this.server?.sockets?.sockets;
+    if (!sockets) {
+      return;
+    }
+    for (const socket of sockets.values()) {
+      if (socket.data?.user?.id !== userId) {
+        continue;
+      }
+      socket.leave(roomEvento(eventId));
+      socket.leave(roomPlanta(eventId));
+      socket.emit('membership:revoked', { eventId });
+    }
+  }
+
+  /**
+   * Remove imediatamente as rooms do evento quando a role muda ou a membership
+   * é revogada. Redis propaga a invalidação às restantes instâncias.
+   */
+  revogarAcessoEvento(userId: string, eventId: string): void {
+    if (!userId || !eventId) {
+      return;
+    }
+    this.revogarAcessoLocal(userId, eventId);
+    if (this.distribuirViaRedis) {
+      void this.redisService
+        .publish(MEMBERSHIP_CHANNEL, JSON.stringify({ userId, eventId }))
+        .catch((error) => this.logger.warn(`Não foi possível propagar revogação WebSocket: ${error.message}`));
+    } else if (this.subscriber) {
+      this.logger.warn('Redis indisponível: revogação WebSocket limitada a esta instância');
+    }
   }
 
   /**

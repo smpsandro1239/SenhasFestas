@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { EventService } from './event.service';
+import { OrderGateway } from '../../websocket/order.gateway';
 import { CreateEventDto, UpdateEventDto, UpdateEventStatusDto, AddMemberDto, EventSettingsDto } from './dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -21,7 +22,10 @@ import { arquivarAuditoria } from '../../common/interceptors/audit.interceptor';
 @Controller('events')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 export class EventController {
-  constructor(private readonly eventService: EventService) {}
+  constructor(
+    private readonly eventService: EventService,
+    private readonly orderGateway: OrderGateway,
+  ) {}
 
   @Get()
   async findAll(@Request() req: any) {
@@ -87,7 +91,9 @@ export class EventController {
     @Request() req: any,
     @Body() dto: AddMemberDto,
   ) {
-    return this.eventService.addMember(id, req.user, dto, arquivarAuditoria(req));
+    const membro = await this.eventService.addMember(id, req.user, dto, arquivarAuditoria(req));
+    this.orderGateway.revogarAcessoEvento(dto.userId, id);
+    return membro;
   }
 
   @Delete(':id/members/:userId')
@@ -97,7 +103,9 @@ export class EventController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @Request() req: any,
   ) {
-    return this.eventService.removeMember(id, req.user, userId, arquivarAuditoria(req));
+    const resultado = await this.eventService.removeMember(id, req.user, userId, arquivarAuditoria(req));
+    this.orderGateway.revogarAcessoEvento(userId, id);
+    return resultado;
   }
 
   @Delete(':id')
