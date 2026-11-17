@@ -22,6 +22,11 @@
 - O login mantém temporariamente o mínimo de 6 caracteres para não bloquear contas existentes. A migração das contas antigas deve ser acompanhada por um processo de alteração de password e MFA para perfis privilegiados.
 - Foram acrescentados testes de validação do DTO.
 
+### Proteção CSRF
+- Pedidos mutáveis autenticados por cookie são rejeitados quando não incluem o cabeçalho `Origin`.
+- Quando existe `Origin`, mantém-se a validação contra a origem do próprio host ou a allowlist `FRONTEND_URL`.
+- Pedidos com Bearer token não são abrangidos por esta verificação de cookie; devem continuar sujeitos à autenticação e autorização normais.
+
 ### TLS PostgreSQL
 - `DB_SSL=true` e `sslmode=require` passam a exigir validação do certificado (`rejectUnauthorized: true`).
 - É possível fornecer uma CA privada através de `DB_SSL_CA` em formato PEM.
