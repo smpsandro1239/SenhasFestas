@@ -70,6 +70,9 @@ describe('RateLimitMiddleware — fallback local quando Redis falha', () => {
     for (let i = 0; i < 2; i++) {
       await middleware.use(fakeReq(), fakeRes(), next);
     }
+    // Mesmo depois de o Redis recuperar, as falhas registadas localmente
+    // continuam a contar até terminar a janela.
+    redisService.incrementWithTtlStrict.mockResolvedValue(1);
     const res = fakeRes();
     await middleware.use(fakeReq(), res, next);
 
@@ -130,6 +133,7 @@ describe('LoginRateLimitMiddleware — fallback local quando Redis falha', () =>
     const finishCb = primeira.on.mock.calls.find(([event]: [string]) => event === 'finish')?.[1];
     await finishCb();
 
+    redisService.getStrict.mockResolvedValue(null);
     const segunda = fakeRes();
     await middleware.use(fakeReq('1.2.3.4', 'a@b.com'), segunda, next);
 
