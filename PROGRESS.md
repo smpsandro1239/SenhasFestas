@@ -1,3 +1,30 @@
+## 2026-11-17 — T43: completar identificação e metadados das operações de saldo
+
+**Feito directamente na `main`**
+- As operações de carregamento, desconto, estorno, transferência, extensão, desarquivamento e notificação passam a definir explicitamente o `entityId` real do `BalanceEntity`, em vez de deixar o interceptor inferir o ID do utilizador a partir do URL.
+- Carregamentos e descontos registam montante e método/descrição; estornos registam movimento original, montante original, valor já estornado, montante deste estorno e se o movimento fica totalmente estornado.
+- Transferências registam os IDs dos saldos de origem e destino, os dois eventos e o montante. O registo principal fica associado ao saldo de origem e ao evento de destino; a visibilidade bilateral para tesoureiros dos dois eventos continua por resolver.
+- Replays idempotentes de carregamento, desconto, estorno e transferência também produzem metadados de auditoria, sem repetir a mutação financeira.
+- Corrigida uma duplicação acidental do callback de auditoria no replay de carregamento antes de prosseguir.
+
+**Testes actualizados**
+- Testes de BalanceService validam entityId e metadados de carregamento, desconto, estorno, transferência, extensão, desarquivamento e notificação.
+- Testes de OrderService validam snapshots financeiros de cancelamento e transição de estado.
+- A suite completa ainda não foi confirmada após estas alterações.
+
+**Commits**
+- `6c45cb9` — identificar entidades e metadados das operações de saldo.
+- `f3da54d` — testes de auditoria para operações de saldo.
+- `86e2d53` — corrigir callback duplicado e cobrir replay de estorno.
+- Este registo e a actualização do TODO ficam no commit seguinte.
+
+**Validação**
+- CI de pushes anteriores foi cancelada devido a novos pushes enquanto o workflow estava em execução (`concurrency.cancel-in-progress`); não é uma falha de código.
+- A próxima validação será feita após terminar este lote, sem novos commits intermédios.
+- Vercel continua a reportar apenas limite diário de deployments; não foi feito deploy.
+
+---
+
 ## 2026-11-17 — T43: enriquecer auditoria de cancelamentos de pedidos
 
 **Feito directamente na `main`**
