@@ -325,7 +325,7 @@ export class EventService {
   ): Promise<Record<string, any>> {
     const event = await this.findOne(id, user);
     arquivar?.({ antes: { settings: event.settings ?? {} }, eventId: id });
-    event.settings = { ...(event.settings ?? {}), ...settings };
+    event.settings = { ...event.settings, ...settings };
     await this.eventRepository.save(event);
     return event.settings;
   }
