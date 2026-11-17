@@ -195,7 +195,7 @@ export class OrderService {
   private validarChaveIdempotencia(value?: string): string | undefined {
     if (value === undefined) return undefined;
     const key = value.trim();
-    if (key.length < 8 || key.length > 128 || !/^[\\x21-\\x7E]+$/.test(key)) {
+    if (key.length < 8 || key.length > 128 || !/^[\x21-\x7E]+$/.test(key)) {
       throw new BadRequestException('Idempotency-Key inválida (8 a 128 caracteres ASCII visíveis)');
     }
     return key;
