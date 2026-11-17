@@ -281,11 +281,36 @@ describe('CatalogService', () => {
   });
 
   describe('findOne', () => {
-    it('returns the product when found', async () => {
-      const product = { id: 'p1', name: 'Bifana' };
+    it('returns the product only after validating membership in its event', async () => {
+      const product = { id: 'p1', name: 'Bifana', event: { id: 'evt1' } };
       mockProductRepository.findOne.mockResolvedValue(product);
 
-      await expect(service.findOne('p1', {} as any)).resolves.toEqual(product);
+      await expect(service.findOne('p1', { id: 'u1', role: 'client' } as any)).resolves.toEqual(product);
+      expect(mockMembershipService.assertMember).toHaveBeenCalledWith(
+        { id: 'u1', role: 'client' },
+        'evt1',
+      );
+    });
+
+    it('rejects direct product lookup from another event', async () => {
+      mockProductRepository.findOne.mockResolvedValue({
+        id: 'p1',
+        name: 'Bifana',
+        event: { id: 'evt2' },
+      });
+      mockMembershipService.assertMember.mockRejectedValueOnce(new ForbiddenException());
+
+      await expect(
+        service.findOne('p1', { id: 'u1', role: 'client' } as any),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('allows superadmin to inspect a product without event membership', async () => {
+      const product = { id: 'p1', name: 'Bifana', event: { id: 'evt2' } };
+      mockProductRepository.findOne.mockResolvedValue(product);
+
+      await expect(service.findOne('p1', { id: 'root', role: 'superadmin' } as any)).resolves.toEqual(product);
+      expect(mockMembershipService.assertMember).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundException when missing', async () => {
