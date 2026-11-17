@@ -2,16 +2,6 @@
 const path = require('path');
 const isProd = process.env.NODE_ENV === 'production';
 
-const apiOrigin = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000')
-  .replace(/\/+$/, '')
-  .replace(/\/api$/, '');
-
-const connectSrc = [
-  "'self'",
-  apiOrigin,
-  apiOrigin.replace(/^http/, 'ws'),
-].join(' ');
-
 const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
