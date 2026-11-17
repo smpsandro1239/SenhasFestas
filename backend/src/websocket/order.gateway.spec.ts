@@ -273,11 +273,13 @@ describe('OrderGateway — handleJoinEventPlanta', () => {
       membership: { roleEfetiva: vi.fn().mockRejectedValue(new Error('Não pertence a este evento')) },
     });
     const client = socketFalso({ id: 'u1', role: 'kitchen' });
+    const ack = vi.fn();
 
-    await gateway.handleJoinEventPlanta(client, 'evt1');
+    await gateway.handleJoinEventPlanta(client, 'evt1', ack);
 
     expect(membershipService.roleEfetiva).toHaveBeenCalledWith(client.data.user, 'evt1');
     expect(client.emit).toHaveBeenCalledWith('error', { message: 'Não pertence a este evento' });
+    expect(ack).toHaveBeenCalledWith({ ok: false, message: 'Não pertence a este evento' });
     expect(client.join).not.toHaveBeenCalled();
   });
 
@@ -300,10 +302,12 @@ describe('OrderGateway — handleJoinEventPlanta', () => {
       membership: { roleEfetiva: vi.fn().mockResolvedValue('organizer') },
     });
     const client = socketFalso({ id: 'u1', role: 'organizer' });
+    const ack = vi.fn();
 
-    await gateway.handleJoinEventPlanta(client, 'evt1');
+    await gateway.handleJoinEventPlanta(client, 'evt1', ack);
 
     expect(client.join).toHaveBeenCalledWith('event:evt1:planta');
+    expect(ack).toHaveBeenCalledWith({ ok: true });
     expect(client.emit).not.toHaveBeenCalled();
   });
 
@@ -391,5 +395,31 @@ describe('OrderGateway — wiring subscriberAtivo via Redis', () => {
   it('sem REDIS_URL não cria subscriber nem consome o construtor', () => {
     const { gateway } = criarGateway();
     expect(gateway['subscriber']).toBeNull();
+  });
+});
+
+
+describe('OrderGateway — confirmação de entrada na room de pedidos', () => {
+  it('confirma a room apenas depois de validar a membership e entrar', async () => {
+    const { gateway, eventUserRepository } = criarGateway();
+    eventUserRepository.findOne.mockResolvedValue({ id: 'membership-1' });
+    const client = socketFalso({ id: 'u1', role: 'organizer' });
+    const ack = vi.fn();
+
+    await gateway.handleJoinEvent(client, 'evt1', ack);
+
+    expect(client.join).toHaveBeenCalledWith('event:evt1');
+    expect(ack).toHaveBeenCalledWith({ ok: true });
+  });
+
+  it('devolve erro de confirmação quando a membership não existe', async () => {
+    const { gateway } = criarGateway();
+    const client = socketFalso({ id: 'u1', role: 'organizer' });
+    const ack = vi.fn();
+
+    await gateway.handleJoinEvent(client, 'evt1', ack);
+
+    expect(client.join).not.toHaveBeenCalled();
+    expect(ack).toHaveBeenCalledWith({ ok: false, message: 'Não pertence a este evento' });
   });
 });
