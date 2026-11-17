@@ -504,8 +504,21 @@ export class OrderService {
       throw new ForbiddenException('Pedido não pode ser cancelado neste estado');
     }
 
-    const isStaff = user?.role !== 'client';
-    if (!isStaff) {
+    const membershipInicial = user?.role === 'superadmin'
+      ? null
+      : await this.eventUserRepository.findOne({
+          where: { event: { id: order.event?.id }, user: { id: user?.id } },
+        });
+    if (user?.role !== 'superadmin' && !membershipInicial) {
+      throw new ForbiddenException('Não pertence a este evento');
+    }
+    // A event-role é a autoridade para este pedido. A role global do JWT não
+    // pode transformar um cliente deste evento em staff (ou o inverso).
+    const roleEfetiva = user?.role === 'superadmin'
+      ? 'superadmin'
+      : membershipInicial?.role ?? user?.role;
+    const eCliente = roleEfetiva === 'client';
+    if (eCliente) {
       if (!order.balanceId) {
         throw new ForbiddenException('Não pode cancelar este pedido');
       }
@@ -516,13 +529,6 @@ export class OrderService {
       });
       if (!balance || balance.user?.id !== user.id) {
         throw new ForbiddenException('Não pode cancelar o pedido de outro utilizador');
-      }
-    } else if (user?.role !== 'superadmin') {
-      const membership = await this.eventUserRepository.findOne({
-        where: { event: { id: order.event?.id }, user: { id: user.id } },
-      });
-      if (!membership) {
-        throw new ForbiddenException('Não pertence a este evento');
       }
     }
 
@@ -547,21 +553,21 @@ export class OrderService {
         throw new ForbiddenException('Pedido não pode ser cancelado neste estado');
       }
 
-      // A associação do utilizador já foi verificada antes da transação.
-      // A verificação final do saldo (com lock) ocorre depois dos locks de
-      // produto para manter a ordem global produtos -> saldo.
-      if (user?.role !== 'client' && user?.role !== 'superadmin') {
+      // Revalidar a membership e a role efectiva dentro da transacção.
+      // A verificação final da titularidade do saldo (com lock) ocorre depois
+      // dos locks de produto para manter a ordem global produtos -> saldo.
+      if (roleEfetiva !== 'superadmin') {
         const membership = await manager.findOne(EventUserEntity, {
           where: { event: { id: order.event?.id }, user: { id: user?.id } },
           lock: { mode: 'pessimistic_read' },
         });
-        if (!membership) {
-          throw new ForbiddenException('Não pertence a este evento');
+        if (!membership || (membership.role && membership.role !== roleEfetiva)) {
+          throw new ForbiddenException('Membership ou permissões alteradas; tente novamente');
         }
       }
 
       if (temSaldoParaReembolsar(currentOrder)) {
-        assertPodeMexerEmSaldo(user);
+        assertPodeMexerEmSaldo({ ...user, role: roleEfetiva });
       }
 
       currentOrder.status = 'cancelled';
@@ -573,7 +579,7 @@ export class OrderService {
       // Para clientes, revalidar a titularidade com lock só depois dos locks
       // de produto. A validação precede qualquer escrita na encomenda: se falhar,
       // a transação termina sem persistir alterações (também simplifica retries).
-      if (user?.role === 'client') {
+      if (eCliente) {
         const balance = currentOrder.balanceId
           ? await manager.findOne(BalanceEntity, {
               where: { id: currentOrder.balanceId, user: { id: user.id } },
@@ -612,14 +618,17 @@ export class OrderService {
       throw new NotFoundException('Pedido não encontrado');
     }
 
-    if (user && user.role !== 'superadmin') {
-      const membership = await this.eventUserRepository.findOne({
-        where: { event: { id: order.event?.id }, user: { id: user.id } },
-      });
-      if (!membership) {
-        throw new ForbiddenException('Não pertence a este evento');
-      }
+    const membershipInicial = user && user.role !== 'superadmin'
+      ? await this.eventUserRepository.findOne({
+          where: { event: { id: order.event?.id }, user: { id: user.id } },
+        })
+      : null;
+    if (user && user.role !== 'superadmin' && !membershipInicial) {
+      throw new ForbiddenException('Não pertence a este evento');
     }
+    const roleEfetiva = user?.role === 'superadmin'
+      ? 'superadmin'
+      : membershipInicial?.role ?? user?.role;
 
     const transicoesValidas: Record<string, string[]> = {
       received: ['preparing', 'cancelled'],
@@ -652,25 +661,22 @@ export class OrderService {
       if (!currentOrder || currentOrder.status !== order.status) {
         throw new ForbiddenException('Pedido mudou de estado, tente novamente');
       }
-      if (user && user.role !== 'superadmin') {
+      if (user && roleEfetiva !== 'superadmin') {
         const membership = await manager.findOne(EventUserEntity, {
           where: { event: { id: order.event?.id }, user: { id: user.id } },
           lock: { mode: 'pessimistic_read' },
         });
-        if (!membership) {
-          throw new ForbiddenException('Não pertence a este evento');
+        if (!membership || (membership.role && membership.role !== roleEfetiva)) {
+          throw new ForbiddenException('Membership ou permissões alteradas; tente novamente');
         }
       }
       if (status === 'cancelled' && temSaldoParaReembolsar(currentOrder)) {
-        assertPodeMexerEmSaldo(user);
+        assertPodeMexerEmSaldo({ ...user, role: roleEfetiva });
       }
       currentOrder.status = status as 'received' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
       const updated = await manager.save(OrderEntity, currentOrder);
 
       if (status === 'cancelled') {
-        if (temSaldoParaReembolsar(currentOrder)) {
-          assertPodeMexerEmSaldo(user);
-        }
         // Ordem global de locks: pedido -> produtos (ID ascendente) -> saldo.
         await reporStockEmTransacao(manager, currentOrder.id);
         await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
