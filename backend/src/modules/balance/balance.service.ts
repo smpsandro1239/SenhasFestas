@@ -747,11 +747,11 @@ export class BalanceService {
     // A leitura simples permite reproduzir uma transferência confirmada mesmo
     // que o evento de destino tenha fechado entretanto. A operabilidade só é
     // validada depois de procurar um resultado idempotente anterior.
-    const toEvent = await this.eventRepository.findOne({ where: { id: dto.toEventId } });
+    const toEvent = await this.eventRepository.findOne({ where: { id: dto.toEventId }, withDeleted: true });
     if (!toEvent) {
       throw new NotFoundException('Evento de destino não encontrado');
     }
-    const fromEvent = await this.eventRepository.findOne({ where: { id: dto.fromEventId } });
+    const fromEvent = await this.eventRepository.findOne({ where: { id: dto.fromEventId }, withDeleted: true });
     if (!fromEvent) {
       throw new NotFoundException('Evento de origem não encontrado');
     }
@@ -819,7 +819,7 @@ export class BalanceService {
         }
       }
 
-      await this.eventService.assertEventOperavelById(dto.toEventId);
+      const eventoDestinoOperavel = await this.eventService.assertEventOperavelById(dto.toEventId);
 
       // Todas as transferências bloqueiam os saldos pela mesma ordem de evento.
       // Sem isto, A→B e B→A podem bloquear origem/destino em ordem inversa.
@@ -880,7 +880,7 @@ export class BalanceService {
         balance: origemSalva,
         type: MovementType.CANCEL,
         amount: montante,
-        description: `Transferência para ${toEvent.name}`,
+        description: `Transferência para ${eventoDestinoOperavel.name}`,
         createdById: actor?.id,
         idempotencyKey: storedIdempotencyKey,
         requestHash,
