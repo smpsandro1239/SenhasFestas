@@ -171,7 +171,7 @@ A arquitectura geral é coerente: monorepo npm workspaces, backend NestJS modula
 - Existe manifest, registo de Service Worker e página `/offline`.
 - A implementação não tem fila de pedidos, IndexedDB, Background Sync, política de conflitos nem chave idempotente para operações.
 - O Service Worker anterior guardava respostas de navegação e podia também interceptar respostas dinâmicas same-origin. Isso podia persistir HTML/RSC autenticado num dispositivo partilhado, mesmo depois do logout.
-- Nesta branch o Service Worker deixa de guardar navegações e deixa de interceptar RSC/HTML dinâmico; apenas mantém cache de assets estáticos e página offline precacheada. Foi adicionado teste de regressão em `frontend/src/lib/service-worker-cache.test.ts`.
+- Nesta branch o Service Worker deixa de guardar navegações e deixa de interceptar RSC/HTML dinâmico; apenas mantém cache de assets estáticos e página offline precacheada. A versão da cache foi aumentada para v5 para eliminar caches v4 antigas que podiam conter HTML privado. Foi adicionado teste de regressão em `frontend/src/lib/service-worker-cache.test.ts`.
 - A página offline foi corrigida para não prometer sincronização inexistente.
 
 **Gravidade:** Alta.
