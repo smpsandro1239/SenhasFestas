@@ -1,4 +1,4 @@
-const CACHE_NAME = 'senhasfestas-v4';
+const CACHE_NAME = 'senhasfestas-v5';
 const PRECACHE_URLS = [
   '/manifest.webmanifest',
   '/icon-192.png',
