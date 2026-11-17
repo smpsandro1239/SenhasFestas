@@ -196,7 +196,12 @@ export class BalanceService {
         throw new ForbiddenException('Apenas carregamentos podem ser estornados');
       }
 
-      // Autorização scoped pelo evento REAL do movimento (não pelo eventId da query)
+      // Serializar retries antes de adquirir o lock de autorização.
+      if (idempotencyKey && storedIdempotencyKey) {
+        await this.lockOperationKey(manager, actor.id, 'reverse', idempotencyKey);
+      }
+
+      // Autorização scoped pelo evento REAL do movimento (não pelo eventId da query).
       if (actor && actor.role !== 'superadmin') {
         const eventoMovimento = (movement.balance as any)?.event?.id as string | undefined;
         if (!eventoMovimento) {
@@ -212,7 +217,6 @@ export class BalanceService {
       }
 
       if (idempotencyKey && storedIdempotencyKey) {
-        await this.lockOperationKey(manager, actor.id, 'reverse', idempotencyKey);
         const anterior = await manager.findOne(BalanceMovementEntity, {
           where: {
             createdById: actor.id,
@@ -335,13 +339,14 @@ export class BalanceService {
         let event: EventEntity | undefined;
         if (dto.eventId) {
           event = await manager.findOne(EventEntity, { where: { id: dto.eventId } }) ?? undefined;
-          if (actor && actor.role !== 'superadmin') {
-            await this.assertMemberEventInTransaction(manager, actor.id, dto.eventId);
-          }
         }
 
         if (idempotencyKey) {
+          // Primeiro serializar retries; só depois bloquear a membership e os saldos.
           await this.lockOperationKey(manager, actor.id, 'load', idempotencyKey);
+          if (actor && actor.role !== 'superadmin') {
+            await this.assertMemberEventInTransaction(manager, actor.id, dto.eventId);
+          }
           const anterior = await manager.findOne(BalanceMovementEntity, {
             where: { createdById: actor.id, idempotencyKey, type: MovementType.LOAD },
             relations: { balance: { event: true, user: true } },
@@ -353,6 +358,8 @@ export class BalanceService {
             return anterior.balance;
           }
           await this.eventService.assertEventOperavelById(dto.eventId);
+        } else if (actor && actor.role !== 'superadmin') {
+          await this.assertMemberEventInTransaction(manager, actor.id, dto.eventId);
         }
 
         let balance = await manager.findOne(BalanceEntity, {
@@ -443,11 +450,12 @@ export class BalanceService {
       await this.eventService.assertEventOperavelById(dto.eventId);
     }
     const resultado = await this.dataSource.transaction(async (manager) => {
-      if (actor && actor.role !== 'superadmin') {
-        await this.assertMemberEventInTransaction(manager, actor.id, dto.eventId);
-      }
       if (idempotencyKey) {
+        // Evita que retries concorrentes mantenham locks de membership enquanto aguardam a mesma chave.
         await this.lockOperationKey(manager, actor.id, 'deduct', idempotencyKey);
+        if (actor && actor.role !== 'superadmin') {
+          await this.assertMemberEventInTransaction(manager, actor.id, dto.eventId);
+        }
         const anterior = await manager.findOne(BalanceMovementEntity, {
           where: { createdById: actor.id, idempotencyKey, type: MovementType.CONSUME },
           relations: { balance: true },
@@ -463,6 +471,8 @@ export class BalanceService {
           };
         }
         await this.eventService.assertEventOperavelById(dto.eventId);
+      } else if (actor && actor.role !== 'superadmin') {
+        await this.assertMemberEventInTransaction(manager, actor.id, dto.eventId);
       }
       const balance = await manager.findOne(BalanceEntity, {
         where: dto.eventId
@@ -784,6 +794,10 @@ export class BalanceService {
 
     const montante = centavos(dto.amount);
     const resultado = await this.dataSource.transaction(async (manager) => {
+      if (idempotencyKey && storedIdempotencyKey) {
+        // Serializar retries antes de adquirir os locks de membership.
+        await this.lockOperationKey(manager, actor.id, 'transfer', idempotencyKey);
+      }
       if (actor && actor.role !== 'superadmin') {
         // Adquirir locks de membership na mesma ordem para transferências A→B e B→A.
         for (const eventId of [...new Set([dto.fromEventId, dto.toEventId])].sort()) {
@@ -791,7 +805,6 @@ export class BalanceService {
         }
       }
       if (idempotencyKey && storedIdempotencyKey) {
-        await this.lockOperationKey(manager, actor.id, 'transfer', idempotencyKey);
         const movimentoDestinoAnterior = await manager.findOne(BalanceMovementEntity, {
           where: {
             createdById: actor.id,
