@@ -9,6 +9,8 @@
 
 ## Resumo executivo
 
+**Actualização 2026-11-17 (T40):** o `AuditInterceptor` sanitiza recursivamente `before`, `after` e `details`. Tokens de sessão, passwords, API keys, cookies e credenciais não são persistidos; strings Bearer/JWT são mascaradas e mensagens de erro brutas não são gravadas. Testes de regressão cobrem login/refresh e detalhes aninhados. A alteração está em validação por CI na PR de hardening de auditoria.
+
 A arquitectura geral é coerente: monorepo npm workspaces, backend NestJS modular, frontend Next.js App Router, pacote partilhado de contratos realtime, PostgreSQL, Redis e CI com jobs separados. Existem boas decisões já implementadas: validação global dos DTOs, RBAC com função efectiva por evento, refresh tokens armazenados por hash, transacções nos fluxos financeiros, índices únicos para invariantes importantes e builds Docker multi-stage.
 
 **Conclusão:** boa base técnica para um MVP avançado, mas ainda não deve ser tratado como pronto para produção financeira/offline sem fechar os riscos abaixo.
