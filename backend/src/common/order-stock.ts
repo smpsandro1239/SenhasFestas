@@ -1,14 +1,9 @@
+import { In } from 'typeorm';
 import { OrderItemEntity, ProductEntity } from '../entities';
 
-// Repõe no stock (produtos com controlo) as unidades de um pedido. Idempotente
-// por design tirando os cases abaixo: é chamado dentro da transação em que o
-// pedido deixa de estar vendável, sempre com lock pessimista do pedido.
-//
-// Nota: o reembolso de saldo tem uma proteção extra (temSaldoParaReembolsar
-// + movimento de REFUND), mas o stock é *físico*: repor duas vezes devolveria
-// unidades que não existem. A garantia de não-duplicação vem de o status
-// cancelled ser terminal em todos os mapas de transição e de os pontos de
-// escrita (order.service, kitchen.service) passarem pelo stale check com lock.
+// Repor stock dentro da transação que torna o pedido terminal.
+// Todos os caminhos de escrita bloqueiam os produtos por ID ascendente,
+// evitando ciclos entre vendas e cancelamentos com artigos em ordens distintas.
 export async function reporStockEmTransacao(
   manager: import('typeorm').EntityManager,
   orderId: string,
@@ -17,12 +12,31 @@ export async function reporStockEmTransacao(
     where: { order: { id: orderId } },
     relations: { product: true },
   });
+
+  const quantidadePorProduto = new Map<string, number>();
   for (const item of itens) {
-    const product = item.product as any;
-    if (!product || product.stock == null) {
-      continue;
-    }
-    product.stock = Number(product.stock) + Number(item.quantity);
+    const productId = item.product?.id;
+    if (!productId) continue;
+    quantidadePorProduto.set(
+      productId,
+      (quantidadePorProduto.get(productId) ?? 0) + Number(item.quantity),
+    );
+  }
+
+  const productIds = [...quantidadePorProduto.keys()];
+  if (productIds.length === 0) return;
+
+  // Não confiar na ordem dos itens persistidos: duas reposições concorrentes
+  // têm de adquirir os locks exactamente pela mesma ordem.
+  const produtosBloqueados = await manager.find(ProductEntity, {
+    where: { id: In(productIds) },
+    order: { id: 'ASC' },
+    lock: { mode: 'pessimistic_write' },
+  });
+
+  for (const product of produtosBloqueados) {
+    if (product.stock == null) continue;
+    product.stock = Number(product.stock) + quantidadePorProduto.get(product.id)!;
     await manager.save(ProductEntity, product);
   }
 }
