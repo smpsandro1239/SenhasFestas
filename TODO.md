@@ -12,6 +12,7 @@ mesmo item — daí o prefixo.)
 
 | Estado | Item | Área | Prioridade | Depende de | Notas / prova |
 |---|---|---|---|---|---|
+| `[~]` | T40 redacção de segredos nos logs de auditoria (`before`/`after`/`details`) | segurança/auditoria | alta | — | `AuditInterceptor` sanitiza recursivamente tokens, passwords, cookies, API keys e strings Bearer/JWT; mensagens de erro brutas deixam de ser persistidas. Testes adicionados; gates da PR pendentes |
 | `[x]` | #11 multi-planta | planta | alta | — | commits `19b0349`…`4b2ee92`; E2E Playwright 9/9; vitest FE 278/278 |
 | `[x]` | #12-backend `plantaUpdated` + fallback Redis | realtime | alta | — | commits `ec1c2eb` + `2d6df0d`; E2E socket.io com Redis parado |
 | `[x]` | T1 contrato `tipo` + room `event:<id>:planta` restrita a `MANAGEMENT_ROLES` | realtime | alta | — | commit `13d0ca4`; boot `:3011` com DI resolvida; vitest 482/482 |
