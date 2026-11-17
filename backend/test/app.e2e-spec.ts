@@ -4,7 +4,8 @@ import { Client } from 'pg';
 import request from 'supertest';
 import * as bcrypt from 'bcryptjs';
 import { criarAplicacao } from '../src/app.setup';
-import { UserEntity } from '../src/entities';
+import { UserEntity, ProductEntity, OrderEntity, OrderItemEntity } from '../src/entities';
+import { CatalogService } from '../src/modules/catalog/catalog.service';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { configuracaoBaseDadosE2e } from './e2e-database-safety';
 
@@ -158,5 +159,75 @@ describe('App e2e (Postgres + Redis)', () => {
       .post('/api/auth/refresh')
       .set('Content-Type', 'application/json')
       .expect(401);
+  });
+
+  it('sugestões por coocorrência só contam artigos de pedidos com o produto alvo', async () => {
+    const dataSource = app.get(DataSource);
+    const products = dataSource.getRepository(ProductEntity);
+    const orders = dataSource.getRepository(OrderEntity);
+    const orderItems = dataSource.getRepository(OrderItemEntity);
+    const catalog = app.get(CatalogService);
+
+    const alvo = await products.save(
+      products.create({ name: 'E2E Produto Alvo', price: 1, isActive: true }),
+    );
+    const candidatoA = await products.save(
+      products.create({ name: 'E2E Candidato A', price: 2, isActive: true }),
+    );
+    const candidatoB = await products.save(
+      products.create({ name: 'E2E Candidato B', price: 3, isActive: true }),
+    );
+    const inativo = await products.save(
+      products.create({ name: 'E2E Produto Inativo', price: 4, isActive: false }),
+    );
+
+    const criarPedido = (status: OrderEntity['status']) =>
+      orders.save(orders.create({ source: 'qr', status, total: 10 }));
+    const adicionarArtigo = (
+      order: OrderEntity,
+      product: ProductEntity,
+      quantity: number,
+    ) =>
+      orderItems.save(
+        orderItems.create({
+          order,
+          product,
+          quantity,
+          unitPrice: Number(product.price),
+          subtotal: Number(product.price) * quantity,
+        }),
+      );
+
+    const pedido1 = await criarPedido('delivered');
+    await adicionarArtigo(pedido1, alvo, 1);
+    await adicionarArtigo(pedido1, candidatoA, 2);
+
+    const pedido2 = await criarPedido('received');
+    await adicionarArtigo(pedido2, alvo, 1);
+    await adicionarArtigo(pedido2, candidatoA, 1);
+    await adicionarArtigo(pedido2, candidatoB, 1);
+    await adicionarArtigo(pedido2, inativo, 1);
+
+    // Um pedido sem o produto alvo não pode influenciar a classificação.
+    const pedidoSemAlvo = await criarPedido('delivered');
+    await adicionarArtigo(pedidoSemAlvo, candidatoB, 99);
+
+    // Pedidos cancelados também não entram nas sugestões.
+    const pedidoCancelado = await criarPedido('cancelled');
+    await adicionarArtigo(pedidoCancelado, alvo, 1);
+    await adicionarArtigo(pedidoCancelado, candidatoB, 50);
+
+    const resultado = await catalog.findSuggestions(
+      { id: 'e2e-catalog', role: 'client' } as any,
+      undefined,
+      alvo.id,
+      4,
+    );
+
+    expect(resultado.source).toBe('cooccurrence');
+    expect(resultado.items.map((produto) => produto.id)).toEqual([
+      candidatoA.id,
+      candidatoB.id,
+    ]);
   });
 });
