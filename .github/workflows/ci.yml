@@ -200,7 +200,7 @@ jobs:
       - name: Arrancar backend e frontend
         run: |
           (cd backend && npm run start:prod > /tmp/backend.log 2>&1 &)
-          (cd frontend && npm run start > /tmp/frontend.log 2>&1 &)
+          (cd frontend && PORT=3001 npm run start > /tmp/frontend.log 2>&1 &)
           echo "à espera do backend (:3000) e frontend (:3001)…"
           npx --yes wait-on@8 http-get://localhost:3000/api/health http-get://localhost:3001/auth/login --timeout 120000
 
