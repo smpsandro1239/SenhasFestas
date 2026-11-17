@@ -27,6 +27,10 @@
 - Quando existe `Origin`, mantém-se a validação contra a origem do próprio host ou a allowlist `FRONTEND_URL`.
 - Pedidos com Bearer token não são abrangidos por esta verificação de cookie; devem continuar sujeitos à autenticação e autorização normais.
 
+### Password do administrador de bootstrap
+- O bootstrap de Superadmin exige pelo menos 12 caracteres e rejeita passwords comuns, em qualquer ambiente.
+- O workflow E2E usa uma password de teste longa e não reutilizada em produção.
+
 ### TLS PostgreSQL
 - `DB_SSL=true` e `sslmode=require` passam a exigir validação do certificado (`rejectUnauthorized: true`).
 - É possível fornecer uma CA privada através de `DB_SSL_CA` em formato PEM.
