@@ -17,10 +17,12 @@ describe('KitchenService — cancelamento via atualizarEstado deve reembolsar sa
     };
     const balanceSave = vi.fn();
     const manager = {
+      query: vi.fn().mockResolvedValue(undefined),
       find: vi.fn().mockResolvedValue([]),
       findOne: vi
         .fn()
         .mockResolvedValueOnce({ id: 'o1', status: 'received', balanceId: 'b1', balanceUsed: 10 })
+        .mockResolvedValueOnce(null)
         .mockResolvedValueOnce({ id: 'b1', currentBalance: 5 }),
       save: vi.fn().mockImplementation((_entity: any, data: any) => {
         if (data?.currentBalance !== undefined) balanceSave(data);
@@ -165,10 +167,12 @@ describe('KitchenService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
     const balanceSave = vi.fn();
     orderRepository.manager.transaction = vi.fn().mockImplementation(async (fn: any) =>
       fn({
+        query: vi.fn().mockResolvedValue(undefined),
         find: vi.fn().mockResolvedValue([]),
         findOne: vi
           .fn()
           .mockResolvedValueOnce({ id: 'o1', status: 'received', balanceId: 'b1', balanceUsed: 10 })
+          .mockResolvedValueOnce(null)
           .mockResolvedValueOnce({ id: 'b1', currentBalance: 5 }),
         save: vi.fn().mockImplementation((_entity: any, data: any) => {
           if (data?.currentBalance !== undefined) balanceSave(data);
