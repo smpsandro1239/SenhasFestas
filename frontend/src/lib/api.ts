@@ -1,4 +1,5 @@
 import { getOrderIdempotencyContext, releaseOrderIdempotencyContext } from './order-idempotency';
+import { getBalanceIdempotencyContext, releaseBalanceIdempotencyContext } from './balance-idempotency';
 
 // Sessão same-origin: o Next rewrite /api/:path* encaminha para a API.
 // Cookies ficam host-only no domínio do frontend — sem Domain, sem CORS, sem PSL.
@@ -280,23 +281,66 @@ export async function getBalance(userId: string, eventId?: string): Promise<any>
   return apiRequest(`/balances/${userId}${query}`);
 }
 
-export async function loadBalance(userId: string, amount: number, eventId?: string): Promise<any> {
-  const body: Record<string, unknown> = { amount, paymentMethod: 'cash' };
-  if (eventId) body.eventId = eventId;
-  return apiRequest(`/balances/${userId}/load`, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
+async function runIdempotentBalanceMutation<T>(
+  endpoint: string,
+  operation: 'load' | 'deduct',
+  payload: Record<string, unknown>,
+  explicitKey?: string,
+): Promise<T> {
+  const context = !explicitKey && typeof window !== 'undefined'
+    ? await getBalanceIdempotencyContext({ operation, endpoint, payload })
+    : undefined;
+  const key = explicitKey ?? context?.key;
+  try {
+    const result = await apiRequest<T>(endpoint, {
+      method: 'POST',
+      headers: key ? { 'Idempotency-Key': key } : undefined,
+      body: JSON.stringify(payload),
+    });
+    if (context) releaseBalanceIdempotencyContext(context, 'success');
+    return result;
+  } catch (error) {
+    if (context) {
+      const definitivo = error instanceof ApiError &&
+        error.status >= 400 && error.status < 500 && error.status !== 429;
+      releaseBalanceIdempotencyContext(context, definitivo ? 'definitive-error' : 'ambiguous-error');
+    }
+    throw error;
+  }
 }
 
-export async function deductBalance(userId: string, amount: number, eventId?: string, description?: string): Promise<any> {
+export async function loadBalance(
+  userId: string,
+  amount: number,
+  eventId?: string,
+  idempotencyKey?: string,
+): Promise<any> {
+  const body: Record<string, unknown> = { amount, paymentMethod: 'cash' };
+  if (eventId) body.eventId = eventId;
+  return runIdempotentBalanceMutation(
+    `/balances/${userId}/load`,
+    'load',
+    body,
+    idempotencyKey,
+  );
+}
+
+export async function deductBalance(
+  userId: string,
+  amount: number,
+  eventId?: string,
+  description?: string,
+  idempotencyKey?: string,
+): Promise<any> {
   const body: Record<string, unknown> = { amount };
   if (eventId) body.eventId = eventId;
   if (description) body.description = description;
-  return apiRequest(`/balances/${userId}/deduct`, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
+  return runIdempotentBalanceMutation(
+    `/balances/${userId}/deduct`,
+    'deduct',
+    body,
+    idempotencyKey,
+  );
 }
 
 export async function getBalanceHistory(userId: string, eventId?: string): Promise<any> {
