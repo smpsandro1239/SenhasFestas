@@ -1,3 +1,31 @@
+## 2026-11-17 — T44: lookup de produto e rooms WebSocket
+
+**Novos riscos corrigidos**
+- `GET /products/:id` devolvia o produto encontrado sem validar se o utilizador pertencia ao evento do produto. Um UUID conhecido permitia leitura cross-event.
+- `OrderGateway.handleJoinEvent` permitia que qualquer membro, incluindo `client`, entrasse na room do evento e recebesse actualizações de todos os pedidos desse evento.
+
+**Alterações directas na main**
+- `CatalogService.findOne` valida agora a membership no evento associado ao produto; superadmin mantém acesso global.
+- `OrderGateway.handleJoinEvent` resolve a event-role actual na base de dados e só permite `STAFF_ROLES`. Clientes recebem erro e não entram na room de pedidos; a room de planta mantém a política mais restrita `MANAGEMENT_ROLES`.
+- Removida a dependência directa do gateway sobre o repositório de memberships; usa o serviço comum de memberships para a decisão de autorização.
+
+**Testes**
+- CatalogService: produto do evento, rejeição de utilizador de outro evento e excepção superadmin.
+- OrderGateway: staff autorizado, membership inexistente e cliente impedido de subscrever o fluxo global.
+- Os testes da primeira ronda T44 passaram na CI do commit `6c3ee03`; estes novos testes ainda aguardam CI.
+
+**Commits**
+- `09267ef` / `5273337` — validar membership no lookup directo de produto e testes.
+- `69becd6` / `c3b44f0` — restringir room de pedidos a staff e testes.
+- `ddd2c0b` — remover mock redundante do gateway.
+
+**Âmbito ainda em aberto**
+- Revisão sistemática de todos os endpoints com IDs directos, relatórios, exportações e operações administrativas.
+- Rever a emissão de eventos para rooms sem `eventId`, revogação de membership com sockets já ligados e revalidação de permissões em operações longas.
+- Não foi feito deploy nem alteração à base de dados.
+
+---
+
 ## 2026-11-17 — T44: primeira ronda de isolamento multi-evento
 
 **Riscos confirmados**
