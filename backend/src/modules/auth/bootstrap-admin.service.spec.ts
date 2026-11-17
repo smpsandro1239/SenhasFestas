@@ -24,7 +24,15 @@ describe('BootstrapAdminService — password policy', () => {
   it('recusa passwords de bootstrap inferiores a 12 caracteres', async () => {
     const { service, userRepository } = criarService('admin123');
     await expect(service.onApplicationBootstrap()).rejects.toThrow(/pelo menos 12 caracteres/);
-    expect(userRepository.findOne).not.toHaveBeenCalled();
+    expect(userRepository.findOne).toHaveBeenCalledOnce();
+  });
+
+  it('não bloqueia o arranque se o administrador bootstrap já existir', async () => {
+    const { service, userRepository } = criarService('admin123');
+    userRepository.findOne.mockResolvedValue({ id: 'existing-admin' });
+
+    await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
+    expect(userRepository.save).not.toHaveBeenCalled();
   });
 
   it('cria o administrador com password forte e armazenada por hash', async () => {
