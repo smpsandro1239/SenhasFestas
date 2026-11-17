@@ -1111,6 +1111,10 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
       },
       eventId: 'atual',
       entidadeId: 'b-origem',
+      alvos: [
+        { eventId: 'magusto', entidadeId: 'b-origem' },
+        { eventId: 'atual', entidadeId: 'b-destino' },
+      ],
       extras: {
         fromEventId: 'magusto',
         toEventId: 'atual',
