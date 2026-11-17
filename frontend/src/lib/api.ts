@@ -27,6 +27,18 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Erros 408/425/429 podem ser transitórios ou ocorrer depois de o servidor
+ * ter recebido a operação. Mantemos a chave para que um retry não duplique
+ * movimentos financeiros ou encomendas.
+ */
+export function isDefinitiveIdempotencyError(error: unknown): boolean {
+  return error instanceof ApiError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    ![408, 425, 429].includes(error.status);
+}
+
 function getStorage(): Storage | null {
   return typeof window !== 'undefined' ? window.localStorage : null;
 }
@@ -261,8 +273,7 @@ export async function createOrder(data: any, idempotencyKey?: string): Promise<a
     // 429 pode ser repetido com a mesma chave; os restantes 4xx são respostas
     // definitivas, incluindo 409 por reutilização com payload diferente.
     if (context) {
-      const definitivo = error instanceof ApiError &&
-        error.status >= 400 && error.status < 500 && error.status !== 429;
+      const definitivo = isDefinitiveIdempotencyError(error);
       releaseOrderIdempotencyContext(context, definitivo ? 'definitive-error' : 'ambiguous-error');
     }
     throw error;
@@ -301,8 +312,7 @@ async function runIdempotentBalanceMutation<T>(
     return result;
   } catch (error) {
     if (context) {
-      const definitivo = error instanceof ApiError &&
-        error.status >= 400 && error.status < 500 && error.status !== 429;
+      const definitivo = isDefinitiveIdempotencyError(error);
       releaseBalanceIdempotencyContext(context, definitivo ? 'definitive-error' : 'ambiguous-error');
     }
     throw error;
