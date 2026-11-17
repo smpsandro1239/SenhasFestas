@@ -399,18 +399,28 @@ export class OrderService {
       .leftJoinAndSelect('items.product', 'product')
       .orderBy('order.createdAt', 'DESC');
 
-    if (balanceIds && balanceIds.length > 0) {
-      query.where('order.balanceId IN (:...balanceIds)', { balanceIds });
-    } else if (balanceIds) {
-      return { items: [], total: 0, page, limit };
-    }
-
     if (eventId) {
       query.andWhere('order.event.id = :eventId', { eventId });
     }
 
-    if (eventIds && eventIds.length > 0) {
-      query.andWhere('order.event.id IN (:...eventIds)', { eventIds });
+    if (balanceIds !== undefined || eventIds !== undefined) {
+      const condicoes: string[] = [];
+      const parametros: Record<string, unknown> = {};
+      if (balanceIds?.length) {
+        condicoes.push('order.balanceId IN (:...balanceIds)');
+        parametros.balanceIds = balanceIds;
+      }
+      if (eventIds?.length) {
+        condicoes.push('order.event.id IN (:...eventIds)');
+        parametros.eventIds = eventIds;
+      }
+      if (condicoes.length === 0) {
+        return { items: [], total: 0, page, limit };
+      }
+      // Um utilizador pode ser cliente num evento e staff noutro. O resultado
+      // agregado é a união dos seus próprios pedidos e dos pedidos dos eventos
+      // onde tem uma função de staff, nunca a role global do JWT.
+      query.andWhere(`(${condicoes.join(' OR ')})`, parametros);
     }
 
     const [items, total] = await query
@@ -426,12 +436,6 @@ export class OrderService {
     page: number;
     limit: number;
   }> {
-    if (user.role === 'client') {
-      const balances = await this.balanceRepository.find({
-        where: { user: { id: user.id } as any },
-      });
-      return this.findAll(undefined, balances.map((b) => b.id), undefined, page, limit);
-    }
     if (user.role === 'superadmin') {
       return this.findAll(undefined, undefined, undefined, page, limit);
     }
@@ -439,11 +443,31 @@ export class OrderService {
       where: { user: { id: user.id } as any },
       relations: { event: true },
     });
-    const eventIds = memberships.map((m) => m.event?.id).filter((id): id is string => Boolean(id));
-    if (eventIds.length === 0) {
+    if (memberships.length === 0) {
       return { items: [], total: 0, page, limit };
     }
-    return this.findAll(undefined, undefined, eventIds, page, limit);
+
+    const eventIdsStaff = memberships
+      .filter((membership) => membership.role !== 'client')
+      .map((membership) => membership.event?.id)
+      .filter((id): id is string => Boolean(id));
+    const eventIdsClient = memberships
+      .filter((membership) => membership.role === 'client')
+      .map((membership) => membership.event?.id)
+      .filter((id): id is string => Boolean(id));
+    const balancesCliente = eventIdsClient.length > 0
+      ? await this.balanceRepository.find({
+          where: { user: { id: user.id }, event: { id: In(eventIdsClient) } } as any,
+        })
+      : [];
+
+    return this.findAll(
+      undefined,
+      balancesCliente.map((balance) => balance.id),
+      eventIdsStaff,
+      page,
+      limit,
+    );
   }
 
   async findOne(id: string): Promise<any> {
