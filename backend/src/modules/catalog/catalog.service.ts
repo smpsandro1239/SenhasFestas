@@ -31,6 +31,7 @@ export class CatalogService {
       availability?: string;
       includeInactive?: boolean;
     } = {},
+    eventIds?: string[],
   ): Promise<{ items: ProductEntity[]; total: number; page: number; limit: number }> {
     // Sem includeInactive ficam so os ativos — este é o default que POS e QR
     // usam. Quem pede includeInactive recebe ativos e inativos, não só os
@@ -41,6 +42,11 @@ export class CatalogService {
     }
     if (eventId) {
       where.event = { id: eventId };
+    } else if (eventIds !== undefined) {
+      if (eventIds.length === 0) {
+        return { items: [], total: 0, page, limit };
+      }
+      where.event = { id: In(eventIds) };
     }
     if (filters.q?.trim()) {
       where.name = ILike(`%${filters.q.trim()}%`);
@@ -330,9 +336,15 @@ export class CatalogService {
     return this.productRepository.save(copy);
   }
 
-  async findCategories(): Promise<CategoryEntity[]> {
+  async findCategories(eventIds?: string[]): Promise<CategoryEntity[]> {
+    if (eventIds !== undefined && eventIds.length === 0) {
+      return [];
+    }
     return this.categoryRepository.find({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        ...(eventIds !== undefined ? { event: { id: In(eventIds) } } : {}),
+      },
       order: { sortOrder: 'ASC', name: 'ASC' },
     });
   }
