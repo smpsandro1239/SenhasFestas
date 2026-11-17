@@ -292,6 +292,14 @@ export class BalanceService {
       arquivar?.({
         antes: { currentBalance: saldoAtual },
         eventId: (movement.balance as any)?.event?.id as string | undefined,
+        entidadeId: balance.id,
+        extras: {
+          movementId,
+          originalAmount: montanteOriginal,
+          alreadyReversedAmount: jaEstornado,
+          reversalAmount: estorno,
+          fullyReversed: estorno >= restante - 0.005,
+        },
       });
 
       locked.reversedAmount = centavos(jaEstornado + estorno);
@@ -355,7 +363,19 @@ export class BalanceService {
           if (anterior) {
             this.assertHashOperacao(anterior, requestHash!);
             if (!anterior.balance) throw new NotFoundException('Saldo do carregamento não encontrado');
-            return anterior.balance;
+            arquivar?.({
+              antes: { currentBalance: centavos(Number(anterior.balance.currentBalance)) },
+              eventId: dto.eventId,
+              entidadeId: anterior.balance.id,
+              extras: { idempotentReplay: true },
+            });
+            arquivar?.({
+            antes: { currentBalance: centavos(Number(anterior.balance.currentBalance)) },
+            eventId: dto.eventId,
+            entidadeId: anterior.balance.id,
+            extras: { amount: centavos(dto.amount), idempotentReplay: true },
+          });
+          return anterior.balance;
           }
           await this.eventService.assertEventOperavelById(dto.eventId);
         } else if (actor && actor.role !== 'superadmin') {
@@ -399,7 +419,15 @@ export class BalanceService {
           await manager.save(BalanceEntity, balance);
         }
 
-        arquivar?.({ antes: { currentBalance: centavos(Number(balance.currentBalance)) }, eventId: dto.eventId });
+        arquivar?.({
+          antes: { currentBalance: centavos(Number(balance.currentBalance)) },
+          eventId: dto.eventId,
+          entidadeId: balance.id,
+          extras: {
+            amount: centavos(dto.amount),
+            paymentMethod: dto.paymentMethod ?? 'Carregamento',
+          },
+        });
 
         balance.currentBalance = soma(Number(balance.currentBalance), centavos(dto.amount));
         const saved = await manager.save(BalanceEntity, balance);
@@ -464,6 +492,12 @@ export class BalanceService {
         if (anterior) {
           this.assertHashOperacao(anterior, requestHash!);
           if (!anterior.balance) throw new NotFoundException('Saldo do desconto não encontrado');
+          arquivar?.({
+            antes: { currentBalance: centavos(Number(anterior.balance.currentBalance)) },
+            eventId: dto.eventId,
+            entidadeId: anterior.balance.id,
+            extras: { amount: centavos(dto.amount), idempotentReplay: true },
+          });
           return {
             id: anterior.balance.id,
             currentBalance: Number(anterior.balance.currentBalance),
@@ -499,7 +533,15 @@ export class BalanceService {
         throw new ForbiddenException('Saldo insuficiente para descontar');
       }
 
-      arquivar?.({ antes: { currentBalance: centavos(Number(balance.currentBalance)) }, eventId: dto.eventId });
+      arquivar?.({
+        antes: { currentBalance: centavos(Number(balance.currentBalance)) },
+        eventId: dto.eventId,
+        entidadeId: balance.id,
+        extras: {
+          amount: montante,
+          description: dto.description || 'Desconto de saldo (caixa)',
+        },
+      });
 
       balance.currentBalance = subtrai(Number(balance.currentBalance), montante);
       const savedBalance = await manager.save(BalanceEntity, balance);
@@ -621,6 +663,8 @@ export class BalanceService {
     arquivar?.({
       antes: { extendedUntil: balance.extendedUntil ?? null, archivedAt: balance.archivedAt ?? null },
       eventId: dto.eventId,
+      entidadeId: balance.id,
+      extras: { extendedUntil: until.toISOString() },
     });
     balance.extendedUntil = until;
     if (balance.archivedAt) {
@@ -639,7 +683,11 @@ export class BalanceService {
     arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<SaldoEstado> {
     const balance = await this.carregarSaldoEvento(userId, eventId, true);
-    arquivar?.({ antes: { archivedAt: balance.archivedAt ?? null }, eventId });
+    arquivar?.({
+      antes: { archivedAt: balance.archivedAt ?? null },
+      eventId,
+      entidadeId: balance.id,
+    });
     balance.archivedAt = null;
     balance.deletedAt = null;
     const saved = await this.balanceRepository.save(balance);
@@ -652,7 +700,11 @@ export class BalanceService {
     arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<SaldoEstado> {
     const balance = await this.carregarSaldoEvento(userId, eventId);
-    arquivar?.({ antes: { notifiedAt: balance.notifiedAt ?? null }, eventId });
+    arquivar?.({
+      antes: { notifiedAt: balance.notifiedAt ?? null },
+      eventId,
+      entidadeId: balance.id,
+    });
     balance.notifiedAt = new Date();
     const saved = await this.balanceRepository.save(balance);
     return this.resumoSaldo(userId, saved);
@@ -861,6 +913,18 @@ export class BalanceService {
           if (!saldoDestinoAnterior || !saldoOrigemAnterior) {
             throw new NotFoundException('Saldo da transferência não encontrado');
           }
+          arquivar?.({
+            eventId: dto.toEventId,
+            entidadeId: saldoOrigemAnterior.id,
+            extras: {
+              fromEventId: dto.fromEventId,
+              toEventId: dto.toEventId,
+              originBalanceId: saldoOrigemAnterior.id,
+              destinationBalanceId: saldoDestinoAnterior.id,
+              amount: montante,
+              idempotentReplay: true,
+            },
+          });
           return {
             balance: {
               id: saldoDestinoAnterior.id,
@@ -929,7 +993,14 @@ export class BalanceService {
           destinationBalance: { id: destino.id, currentBalance: centavos(Number(destino.currentBalance)) },
         },
         eventId: dto.toEventId,
-        extras: { fromEventId: dto.fromEventId, toEventId: dto.toEventId },
+        entidadeId: origem.id,
+        extras: {
+          fromEventId: dto.fromEventId,
+          toEventId: dto.toEventId,
+          originBalanceId: origem.id,
+          destinationBalanceId: destino.id,
+          amount: montante,
+        },
       });
 
       origem.currentBalance = subtrai(Number(origem.currentBalance), montante);
