@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Repository, IsNull, Brackets } from 'typeorm';
+import { Repository, IsNull, Brackets, DataSource } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
@@ -42,6 +42,7 @@ export class AuthService {
     private readonly refreshTokenRepository: Repository<RefreshTokenEntity>,
     private readonly jwtService: JwtService,
     private readonly eventService: EventService,
+    private readonly dataSource: DataSource,
   ) {}
 
   private hashToken(token: string): string {
@@ -98,67 +99,86 @@ export class AuthService {
     };
   }
 
-  private async seguirCadeiaRotacao(stored: RefreshTokenEntity): Promise<RefreshTokenEntity> {
-    let atual = stored;
-    const visitados = new Set<string>();
-    while (atual.revokedAt || atual.isUsed) {
-      if (visitados.has(atual.id)) {
-        break;
-      }
-      visitados.add(atual.id);
-      const sucessor = await this.refreshTokenRepository.findOne({
-        where: { replacedByTokenId: atual.id },
-      });
-      if (!sucessor) {
-        break;
-      }
-      atual = sucessor;
-    }
-    return atual;
-  }
-
   async refresh(refreshToken: string): Promise<AuthResult> {
     if (!refreshToken || typeof refreshToken !== 'string') {
       throw new UnauthorizedException('Refresh token inválido');
     }
+
     const tokenHash = this.hashToken(refreshToken);
-    const stored = await this.refreshTokenRepository.findOne({
-      where: { tokenHash },
+    const resultado = await this.dataSource.transaction(async (manager) => {
+      const tokens = manager.getRepository(RefreshTokenEntity);
+      const utilizadores = manager.getRepository(UserEntity);
+      const stored = await tokens.findOne({
+        where: { tokenHash },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!stored) {
+        return { erro: 'invalid' as const };
+      }
+
+      // Um refresh token é de utilização única. Reutilizar um token revogado
+      // é um sinal de replay/roubo: revogar todas as sessões do utilizador.
+      // A atualização e a emissão do sucessor ocorrem na mesma transação,
+      // serializadas pelo lock pessimista sobre a linha do token.
+      if (stored.revokedAt || stored.isUsed) {
+        await tokens.update(
+          { userId: stored.userId, revokedAt: IsNull() },
+          { revokedAt: new Date(), isUsed: true },
+        );
+        return { erro: 'reuse' as const };
+      }
+
+      if (stored.expiresAt <= new Date()) {
+        return { erro: 'expired' as const };
+      }
+
+      const user = await utilizadores.findOne({
+        where: { id: stored.userId, isActive: true },
+      });
+      if (!user) {
+        return { erro: 'inactive' as const };
+      }
+
+      const revoked = await tokens.update(
+        { id: stored.id, revokedAt: IsNull(), isUsed: false },
+        { revokedAt: new Date(), isUsed: true },
+      );
+      if (!revoked.affected) {
+        await tokens.update(
+          { userId: stored.userId, revokedAt: IsNull() },
+          { revokedAt: new Date(), isUsed: true },
+        );
+        return { erro: 'reuse' as const };
+      }
+
+      const raw = crypto.randomBytes(48).toString('base64url');
+      const sucessor = tokens.create({
+        userId: user.id,
+        tokenHash: this.hashToken(raw),
+        expiresAt: new Date(Date.now() + REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000),
+        replacedByTokenId: stored.id,
+      });
+      await tokens.save(sucessor);
+
+      return { user, refreshToken: raw };
     });
-    if (!stored) {
-      throw new UnauthorizedException('Refresh token inválido');
+
+    if ('erro' in resultado) {
+      if (resultado.erro === 'reuse') {
+        throw new UnauthorizedException('Refresh token reutilizado; todas as sessões foram revogadas');
+      }
+      throw new UnauthorizedException(
+        resultado.erro === 'expired'
+          ? 'Refresh token expirado'
+          : 'Refresh token inválido ou sessão inativa',
+      );
     }
 
-    // Tolerar rotação em andamento: se o token do cookie já foi substituído
-    // (corrida entre abas/intervalo/401 simultâneos), avança para o sucessor
-    // ativo em vez de devolver 401 para sempre e deixar a sessão presa.
-    const ativo = await this.seguirCadeiaRotacao(stored);
-    if (ativo.expiresAt <= new Date()) {
-      throw new UnauthorizedException('Refresh token expirado ou já utilizado');
-    }
-
-    const user = await this.assertUserActive(ativo.userId);
-
-    const revoked = await this.refreshTokenRepository.update(
-      { id: ativo.id, revokedAt: IsNull(), isUsed: false },
-      { revokedAt: new Date(), isUsed: true },
-    );
-    if (!revoked.affected) {
-      throw new UnauthorizedException('Refresh token já utilizado');
-    }
-
-    const raw = await this.emitRefreshToken(user.id);
-    const newHash = this.hashToken(raw);
-    await this.refreshTokenRepository.update(
-      { userId: user.id, tokenHash: newHash },
-      { replacedByTokenId: ativo.id },
-    );
-
-    const token = this.signAccessToken(user);
     return {
-      token,
-      refreshToken: raw,
-      user: this.sanitizeUser(user),
+      token: this.signAccessToken(resultado.user),
+      refreshToken: resultado.refreshToken,
+      user: this.sanitizeUser(resultado.user),
     };
   }
 
