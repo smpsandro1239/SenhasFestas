@@ -641,6 +641,7 @@ describe('OrderService — cancelamento repõe stock (B1c)', () => {
       find: vi.fn().mockResolvedValue([]),
       findOne: vi.fn().mockImplementation((entity: any) =>
         entity === OrderEntity ? Promise.resolve(order) :
+        entity === EventUserEntity ? Promise.resolve({ id: 'm1', role: 'client' }) :
         entity === BalanceEntity ? Promise.resolve({ id: 'b1', user: { id: 'u2' }, deletedAt: new Date('2026-02-01') }) :
         Promise.resolve(null),
       ),
