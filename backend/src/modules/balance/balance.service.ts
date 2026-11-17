@@ -421,7 +421,7 @@ export class BalanceService {
     eventId: string,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<SaldoEstado> {
-    const balance = await this.carregarSaldoEvento(userId, eventId);
+    const balance = await this.carregarSaldoEvento(userId, eventId, true);
     arquivar?.({ antes: { archivedAt: balance.archivedAt ?? null }, eventId });
     balance.archivedAt = null;
     balance.deletedAt = null;
