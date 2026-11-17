@@ -26,7 +26,23 @@ export function toPublicUser<T extends Partial<UserEntity>>(
   return safe;
 }
 
-const CAMPOS_SENSIVEIS = new Set(['password', 'token', 'refreshToken', 'tokenHash']);
+const CAMPOS_SENSIVEIS = new Set([
+  'password',
+  'token',
+  'refreshtoken',
+  'tokenhash',
+  'authorization',
+  'cookie',
+  'secret',
+  'jwtsecret',
+  'email',
+  'phone',
+  'accesscode',
+  'qrcode',
+  'nif',
+  'taxid',
+  'address',
+]);
 
 export function snapshot(value: unknown, profundidade = 4): unknown {
   if (value === null || value === undefined) {
@@ -41,7 +57,7 @@ export function snapshot(value: unknown, profundidade = 4): unknown {
   if (typeof value === 'object') {
     const entrada: Record<string, unknown> = {};
     for (const [chave, valor] of Object.entries(value as Record<string, unknown>)) {
-      if (CAMPOS_SENSIVEIS.has(chave)) {
+      if (CAMPOS_SENSIVEIS.has(chave.toLowerCase())) {
         continue;
       }
       if (typeof valor === 'function') {
