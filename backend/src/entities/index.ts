@@ -293,7 +293,7 @@ export enum MovementType {
 
 @Entity('balance_movements')
 @Index(['balance', 'createdAt'])
-@Index('UQ_balance_movements_idempotency', ['createdById', 'idempotencyKey'], {
+@Index('UQ_balance_movements_idempotency', ['createdById', 'type', 'idempotencyKey'], {
   unique: true,
   where: '"idempotencyKey" IS NOT NULL AND "createdById" IS NOT NULL',
 })
