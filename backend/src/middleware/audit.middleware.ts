@@ -64,8 +64,33 @@ export class RateLimitMiddleware implements NestMiddleware {
     });
   }
 
+  private responderIndisponibilidade(res: Response): void {
+    res.setHeader('Retry-After', '30');
+    res.status(HttpStatus.SERVICE_UNAVAILABLE).json({
+      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+      message: 'O serviço está temporariamente indisponível. Tente novamente.',
+    });
+  }
+
+  private eEndpointDeSaude(path: string): boolean {
+    return /^\\/api\\/health(?:\\/(?:ready|live))?\\/?$/.test(path);
+  }
+
   async use(req: Request, res: Response, next: NextFunction) {
     const ip = req.ip || 'unknown';
+
+    // Os health checks têm de continuar acessíveis para o orquestrador conseguir
+    // distinguir liveness de readiness quando o Redis está indisponível.
+    if (this.eEndpointDeSaude(req.path || req.url || '')) {
+      next();
+      return;
+    }
+
+    // Em produção, o rate limit geral também tem de ser partilhado entre réplicas.
+    if (process.env.NODE_ENV === 'production' && !this.redisService.isEnabled) {
+      this.responderIndisponibilidade(res);
+      return;
+    }
     const locais = this.obterPedidosLocais(ip);
 
     if (locais.length >= this.maxRequests) {
@@ -97,7 +122,12 @@ export class RateLimitMiddleware implements NestMiddleware {
         next();
         return;
       } catch (error) {
-        Logger.warn(`Falha no rate limit via Redis (contagem local): ${(error as Error).message}`);
+        if (process.env.NODE_ENV === 'production') {
+          Logger.warn(`Rate limit geral indisponível no Redis (${(error as Error).name || 'erro'}); pedido temporariamente bloqueado.`);
+          this.responderIndisponibilidade(res);
+          return;
+        }
+        Logger.warn(`Falha no rate limit via Redis (${(error as Error).name || 'erro'}); a usar contador local fora de produção.`);
       }
     }
 
