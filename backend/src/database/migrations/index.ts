@@ -18,5 +18,5 @@ export { BackfillOrphanBalanceMembers1790300000000 } from './1790300000000-Backf
 export { AddEventFloorPlan1790400000000 } from './1790400000000-AddEventFloorPlan';
 export { FloorPlanZonas1790500000000 } from './1790500000000-FloorPlanZonas';
 export { CreateFloorPlans1790600000000 } from './1790600000000-CreateFloorPlans';
-export { AddOrderIdempotency1794860000000 } from './1794860000000-AddOrderIdempotency';
 export { OrderItemsProductOrderIndex1790700000000 } from './1790700000000-OrderItemsProductOrderIndex';
+export { AddOrderIdempotency1794860000000 } from './1794860000000-AddOrderIdempotency';
