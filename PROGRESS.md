@@ -16,6 +16,24 @@
 
 # SenhasFestas — Progresso
 
+## 2026-11-17 — Redacção de segredos na auditoria (T40)
+
+**Objectivo**: impedir que respostas de autenticação ou snapshots administrativos persistam credenciais no histórico de auditoria.
+
+**Feito na branch `fix/audit-redact-auth-secrets-2026-11`**
+- Sanitização recursiva, sem mutação da resposta HTTP, aplicada aos snapshots `before` e `after` e aos `details`.
+- Campos com nomes relacionados com password, token, secret, authorization, cookie, API key, private key e credential são substituídos por `[REDACTED]`.
+- Strings Bearer e JWT em campos textuais são mascaradas.
+- Mensagens brutas de erro deixam de ser persistidas; mantém-se apenas o nome da classe de erro.
+- Testes de regressão para login, refresh, segredos aninhados, JWT/Bearer e erros com credenciais.
+
+**Gates**
+- Ainda por executar no GitHub Actions: backend lint, typecheck, Vitest, build, E2E, frontend e Browser E2E.
+- Não foi executado qualquer deploy nem alterada a base de dados.
+
+---
+
+
 > Log de sessões. Mais recente no topo.
 > Actualizar no fim de cada batch.
 
