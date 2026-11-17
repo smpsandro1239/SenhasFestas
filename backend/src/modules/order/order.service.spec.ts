@@ -893,3 +893,86 @@ describe('OrderService — integridade do saldo associado ao pedido', () => {
     expect(manager.findOne).toHaveBeenCalledOnce();
   });
 });
+
+
+describe('OrderService — isolamento multi-evento na listagem e cancelamento', () => {
+  it('agrega apenas pedidos próprios nos eventos client e pedidos dos eventos staff', async () => {
+    const query = {
+      leftJoinAndSelect: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      take: vi.fn().mockReturnThis(),
+      getManyAndCount: vi.fn().mockResolvedValue([[], 0]),
+    };
+    const orderRepository = { createQueryBuilder: vi.fn().mockReturnValue(query) };
+    const balanceRepository = { find: vi.fn().mockResolvedValue([{ id: 'balance-client' }]) };
+    const eventUserRepository = {
+      find: vi.fn().mockResolvedValue([
+        { role: 'client', event: { id: 'evt-client' } },
+        { role: 'cashier', event: { id: 'evt-staff' } },
+      ]),
+    };
+    const service = new OrderService(
+      orderRepository as any,
+      {} as any,
+      balanceRepository as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      eventUserRepository as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    await service.findAllForUser({ id: 'u1', role: 'organizer' }, 1, 20);
+
+    expect(balanceRepository.find).toHaveBeenCalledWith({
+      where: { user: { id: 'u1' }, event: { id: expect.anything() } },
+    });
+    expect(query.andWhere).toHaveBeenCalledWith(
+      '(order.balanceId IN (:...balanceIds) OR order.event.id IN (:...eventIds))',
+      { balanceIds: ['balance-client'], eventIds: ['evt-staff'] },
+    );
+  });
+
+  it('não permite que a role global organizer cancele pedidos no evento onde é client', async () => {
+    const order = {
+      id: 'o1',
+      status: 'received',
+      event: { id: 'evt-client' },
+      balanceId: 'balance-client',
+      balanceUsed: 10,
+    };
+    const orderRepository = { findOne: vi.fn().mockResolvedValue(order) };
+    const balanceRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'balance-client', user: { id: 'u2' } }),
+    };
+    const eventUserRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'm1', role: 'client' }),
+    };
+    const dataSource = { transaction: vi.fn() };
+    const service = new OrderService(
+      orderRepository as any,
+      {} as any,
+      balanceRepository as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      eventUserRepository as any,
+      dataSource as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    await expect(
+      service.cancelOrder('o1', { id: 'u1', role: 'organizer' }),
+    ).rejects.toThrow('Não pode cancelar o pedido de outro utilizador');
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+});
