@@ -1,4 +1,4 @@
-import { WebSocketGateway, WebSocketServer, SubscribeMessage, Ack, OnGatewayConnection, OnGatewayDisconnect, MessageBody, ConnectedSocket } from '@nestjs/websockets';
+import { WebSocketGateway, WebSocketServer, SubscribeMessage, OnGatewayConnection, OnGatewayDisconnect, MessageBody, ConnectedSocket } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger, OnModuleDestroy } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -285,32 +285,27 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
   async handleJoinEvent(
     @ConnectedSocket() client: Socket,
     @MessageBody() eventId: string,
-    @Ack() ack?: (resultado: { ok: boolean; message?: string }) => void,
   ) {
     const rejeitar = (message: string) => {
       client.emit('error', { message });
-      ack?.({ ok: false, message });
+      return { ok: false, message };
     };
     const user = client.data?.user;
     if (!user) {
-      rejeitar('Não autenticado');
-      return;
+      return rejeitar('Não autenticado');
     }
     if (!eventId || typeof eventId !== 'string') {
-      rejeitar('eventId inválido');
-      return;
+      return rejeitar('eventId inválido');
     }
     if (!(await this.contarJoin(user.id))) {
-      rejeitar('Demasiados pedidos, aguarde um pouco');
-      return;
+      return rejeitar('Demasiados pedidos, aguarde um pouco');
     }
     const utilizadorAtual = await this.userRepository.findOne({
       where: { id: user.id, isActive: true },
     });
     if (!utilizadorAtual) {
       client.disconnect(true);
-      ack?.({ ok: false, message: 'Utilizador inativo' });
-      return;
+      return { ok: false, message: 'Utilizador inativo' };
     }
     client.data.user = { id: utilizadorAtual.id, role: utilizadorAtual.role };
     if (utilizadorAtual.role !== 'superadmin') {
@@ -318,12 +313,11 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
         where: { event: { id: eventId }, user: { id: utilizadorAtual.id } },
       });
       if (!membership) {
-        rejeitar('Não pertence a este evento');
-        return;
+        return rejeitar('Não pertence a este evento');
       }
     }
     await client.join(roomEvento(eventId));
-    ack?.({ ok: true });
+    return { ok: true };
   }
 
   /**
@@ -336,28 +330,24 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
   async handleJoinEventPlanta(
     @ConnectedSocket() client: Socket,
     @MessageBody() eventId: string,
-    @Ack() ack?: (resultado: { ok: boolean; message?: string }) => void,
   ) {
     const rejeitar = (message: string) => {
       client.emit('error', { message });
-      ack?.({ ok: false, message });
+      return { ok: false, message };
     };
     const user = client.data?.user;
     if (!user) {
-      rejeitar('Não autenticado');
-      return;
+      return rejeitar('Não autenticado');
     }
     if (!eventId || typeof eventId !== 'string') {
-      rejeitar('eventId inválido');
-      return;
+      return rejeitar('eventId inválido');
     }
     const utilizadorAtual = await this.userRepository.findOne({
       where: { id: user.id, isActive: true },
     });
     if (!utilizadorAtual) {
       client.disconnect(true);
-      ack?.({ ok: false, message: 'Utilizador inativo' });
-      return;
+      return { ok: false, message: 'Utilizador inativo' };
     }
     client.data.user = { id: utilizadorAtual.id, role: utilizadorAtual.role };
 
@@ -365,19 +355,16 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     try {
       role = await this.membershipService.roleEfetiva(client.data.user, eventId);
     } catch {
-      rejeitar('Não pertence a este evento');
-      return;
+      return rejeitar('Não pertence a este evento');
     }
     if (!MANAGEMENT_ROLES.includes(role)) {
-      rejeitar('Sem permissão para a planta deste evento');
-      return;
+      return rejeitar('Sem permissão para a planta deste evento');
     }
     if (!(await this.contarJoin(user.id))) {
-      rejeitar('Demasiados pedidos, aguarde um pouco');
-      return;
+      return rejeitar('Demasiados pedidos, aguarde um pouco');
     }
     await client.join(roomPlanta(eventId));
-    ack?.({ ok: true });
+    return { ok: true };
   }
 
   /**
