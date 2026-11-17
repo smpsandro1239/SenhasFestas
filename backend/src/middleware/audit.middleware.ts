@@ -113,6 +113,16 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
     const falhas = nunca(this.local.get(chave) || [], this.windowMs, Date.now());
     falhas.push(Date.now());
     this.local.set(chave, falhas);
+
+    const timer = setTimeout(() => {
+      const atualizadas = nunca(this.local.get(chave) || [], this.windowMs, Date.now());
+      if (atualizadas.length > 0) {
+        this.local.set(chave, atualizadas);
+      } else {
+        this.local.delete(chave);
+      }
+    }, this.windowMs);
+    timer.unref?.();
   }
 
   private async registarFalhaRedis(chave: string): Promise<void> {
