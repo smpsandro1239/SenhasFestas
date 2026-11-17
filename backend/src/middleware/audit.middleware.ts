@@ -100,7 +100,10 @@ export class RateLimitMiddleware implements NestMiddleware {
 
     // Depois de um fallback, a memória continua a ser a fonte única até
     // terminar a janela. Não somar uma nova janela Redis ao orçamento local.
-    if (locais.length > 0 || !this.redisService.isEnabled) {
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      (locais.length > 0 || !this.redisService.isEnabled)
+    ) {
       if (!this.reservarPedidoLocal(ip)) {
         this.responderLimite(res);
         return;
@@ -232,7 +235,10 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
 
     // Se já houve fallback local nesta janela, manter a mesma fonte de contagem
     // até expirar. Misturar Redis e memória ao recuperar cria orçamento duplo.
-    if (locais.length > 0 || !this.redisService.isEnabled) {
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      (locais.length > 0 || !this.redisService.isEnabled)
+    ) {
       const timestamp = this.reservarFalhaLocal(chave);
       if (timestamp === null) {
         this.responderLimite(res);
