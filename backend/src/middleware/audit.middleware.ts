@@ -73,7 +73,7 @@ export class RateLimitMiddleware implements NestMiddleware {
   }
 
   private eEndpointDeSaude(path: string): boolean {
-    return /^\\/api\\/health(?:\\/(?:ready|live))?\\/?$/.test(path);
+    return /^\/api\/health(?:\/(?:ready|live))?\/?$/.test(path);
   }
 
   async use(req: Request, res: Response, next: NextFunction) {
