@@ -55,6 +55,7 @@
   "overrides": {
     "@nestjs/schematics": {
       "typescript": "~5.7.3"
-    }
+    },
+    "postcss": "^8.5.33"
   }
 }
