@@ -477,6 +477,7 @@ describe('BalanceService — guard de janela operacional', () => {
         id: 'b1',
         currentBalance: 10,
         archivedAt: new Date('2026-10-14T05:00:00Z'),
+        deletedAt: new Date('2026-11-14T05:00:00Z'),
         extendedUntil: null,
         notifiedAt: null,
         user: { id: 'u1' },
@@ -486,10 +487,12 @@ describe('BalanceService — guard de janela operacional', () => {
 
       const res = await service.extendBalance('u1', { eventId: 'evt1', until: '2099-01-01' });
 
+      expect(repo.findOne).toHaveBeenCalledWith(expect.objectContaining({ withDeleted: true }));
       expect(repo.save).toHaveBeenCalledTimes(1);
       const guardado = repo.save.mock.calls[0][0];
       expect(guardado.extendedUntil.toISOString()).toBe('2099-01-01T00:00:00.000Z');
       expect(guardado.archivedAt).toBeNull();
+      expect(guardado.deletedAt).toBeNull();
       expect(res.deadline).toBe('2099-01-01T00:00:00.000Z');
     });
 
@@ -513,6 +516,7 @@ describe('BalanceService — guard de janela operacional', () => {
         id: 'b1',
         currentBalance: 10,
         archivedAt: new Date('2026-10-14T05:00:00Z'),
+        deletedAt: new Date('2026-11-14T05:00:00Z'),
         extendedUntil: null,
         notifiedAt: null,
         user: { id: 'u1' },
@@ -522,8 +526,10 @@ describe('BalanceService — guard de janela operacional', () => {
 
       const res = await service.unarchiveBalance('u1', 'evt1');
 
+      expect(repo.findOne).toHaveBeenCalledWith(expect.objectContaining({ withDeleted: true }));
       const guardado = repo.save.mock.calls[0][0];
       expect(guardado.archivedAt).toBeNull();
+      expect(guardado.deletedAt).toBeNull();
       expect(res.archivedAt).toBeNull();
     });
 
@@ -657,7 +663,7 @@ describe('BalanceService — lista de saldos pendentes com estado de arquivo/avi
 });
 describe('BalanceService — transferência entre eventos (melhoria #8)', () => {
   const eventService = {
-    assertEventOperavelById: vi.fn().mockResolvedValue(undefined),
+    assertEventOperavelById: vi.fn().mockResolvedValue({ id: 'atual', name: 'Atual' }),
     vincularCliente: vi.fn().mockResolvedValue(undefined),
   } as unknown as EventService;
 
@@ -715,7 +721,7 @@ describe('BalanceService — transferência entre eventos (melhoria #8)', () => 
       expect.objectContaining({
         type: MovementType.CANCEL,
         amount: 30,
-        description: 'Transferência para Magusto',
+        description: 'Transferência para Atual',
       }),
     );
     expect(eventService.vincularCliente).toHaveBeenCalledWith('u1', 'atual');
@@ -795,7 +801,7 @@ describe('BalanceService — transferência entre eventos (melhoria #8)', () => 
 
 describe('BalanceService — snapshot anterior para auditoria (arquivar)', () => {
   const eventService = {
-    assertEventOperavelById: vi.fn().mockResolvedValue(undefined),
+    assertEventOperavelById: vi.fn().mockResolvedValue({ id: 'atual', name: 'Atual' }),
     vincularCliente: vi.fn().mockResolvedValue(undefined),
   } as unknown as EventService;
 

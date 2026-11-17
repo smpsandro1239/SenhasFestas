@@ -205,11 +205,27 @@ jobs:
       - name: Build do frontend
         working-directory: frontend
         run: npm run build
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_API_URL: http://localhost:3000
+          NEXT_PUBLIC_WS_URL: ws://localhost:3000
 
-      - name: Arrancar backend e frontend
+      - name: Arrancar backend e frontend (Next standalone)
         run: |
           (cd backend && PORT=3000 npm run start:prod > /tmp/backend.log 2>&1 &)
-          (cd frontend && npx next start -p 3001 > /tmp/frontend.log 2>&1 &)
+          (
+            cd frontend
+            SERVER_FILE="$(find .next/standalone -path '*/node_modules' -prune -o -type f -name server.js -print -quit)"
+            if [ -z "$SERVER_FILE" ]; then
+              echo "Não foi encontrado o server.js do output standalone"
+              exit 1
+            fi
+            SERVER_DIR="$(dirname "$SERVER_FILE")"
+            mkdir -p "$SERVER_DIR/.next"
+            cp -R .next/static "$SERVER_DIR/.next/"
+            if [ -d public ]; then cp -R public "$SERVER_DIR/"; fi
+            (cd "$SERVER_DIR" && PORT=3001 HOSTNAME=0.0.0.0 NODE_ENV=production node server.js > /tmp/frontend.log 2>&1 &)
+          )
           echo "à espera do backend (:3000) e frontend (:3001)…"
           npx --yes wait-on@8 http-get://localhost:3000/api/health http-get://localhost:3001/auth/login --timeout 120000
 

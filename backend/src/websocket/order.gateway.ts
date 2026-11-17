@@ -126,52 +126,59 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     this.subscriber = subscriber;
   }
 
-  async handleConnection(client: Socket) {
-    try {
-      const rawToken =
-        client.handshake.auth?.token || client.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '');
-      if (!rawToken || typeof rawToken !== 'string') {
-        throw new Error('token em falta');
-      }
-      const payload = this.jwtService.verify<{ sub: string; role: string; exp?: number }>(rawToken, {
-        algorithms: ['HS256'],
-        issuer: 'senhasfestas-api',
-        audience: 'senhasfestas-app',
-      });
-      const tokenExp = payload?.exp;
-      if (
-        !payload?.sub ||
-        typeof tokenExp !== 'number' ||
-        !Number.isInteger(tokenExp) ||
-        tokenExp * 1000 <= Date.now()
-      ) {
-        throw new Error('token inválido ou sem expiração');
-      }
+  /**
+   * O NestJS não aguarda handleConnection() assíncrono antes de despachar
+   * mensagens. Por isso, cada join autentica também a partir do handshake,
+   * sem depender de client.data.user já ter sido preenchido pelo lifecycle hook.
+   */
+  private async autenticarSocket(client: Socket): Promise<{ id: string; role: string }> {
+    const rawToken =
+      client.handshake.auth?.token || client.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '');
+    if (!rawToken || typeof rawToken !== 'string') {
+      throw new Error('token em falta');
+    }
+    const payload = this.jwtService.verify<{ sub: string; role: string; exp?: number }>(rawToken, {
+      algorithms: ['HS256'],
+      issuer: 'senhasfestas-api',
+      audience: 'senhasfestas-app',
+    });
+    const tokenExp = payload?.exp;
+    if (
+      !payload?.sub ||
+      typeof tokenExp !== 'number' ||
+      !Number.isInteger(tokenExp) ||
+      tokenExp * 1000 <= Date.now()
+    ) {
+      throw new Error('token inválido ou sem expiração');
+    }
 
-      // O socket não é automaticamente encerrado pelo Socket.IO quando o JWT
-      // expira. Forçamos a desconexão no instante da expiração do access token.
+    if (!client.data.authTimeout) {
       const authTimeout = setTimeout(
         () => client.disconnect(true),
         Math.max(0, tokenExp * 1000 - Date.now()),
       );
       authTimeout.unref?.();
       client.data.authTimeout = authTimeout;
+    }
 
-      // A role do JWT pode estar desatualizada (ex.: utilizador despromovido).
-      // A identidade e o estado ativo são sempre confirmados na BD.
-      const utilizador = await this.userRepository.findOne({
-        where: { id: payload.sub, isActive: true },
-      });
-      if (!utilizador) {
-        throw new Error('utilizador inexistente ou inativo');
-      }
-      client.data.user = { id: utilizador.id, role: utilizador.role };
+    const utilizador = await this.userRepository.findOne({
+      where: { id: payload.sub, isActive: true },
+    });
+    if (!utilizador) {
+      throw new Error('utilizador inexistente ou inativo');
+    }
+    const autenticado = { id: utilizador.id, role: utilizador.role };
+    client.data.user = autenticado;
+    return autenticado;
+  }
 
+  async handleConnection(client: Socket) {
+    try {
+      const utilizador = await this.autenticarSocket(client);
       const ok = await this.registarSocket(utilizador.id, client.id);
       if (!ok) {
-        this.logger.warn(`Limite de sockets por utilizador excedido: ${payload.sub}`);
+        this.logger.warn(`Limite de sockets por utilizador excedido: ${utilizador.id}`);
         client.disconnect(true);
-        return;
       }
     } catch {
       client.disconnect(true);
@@ -282,38 +289,40 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
   }
 
   @SubscribeMessage(MENSAGENS_ENTRADA.evento)
-  async handleJoinEvent(@ConnectedSocket() client: Socket, @MessageBody() eventId: string) {
-    const user = client.data?.user;
-    if (!user) {
-      client.emit('error', { message: 'Não autenticado' });
-      return;
+  async handleJoinEvent(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() eventId: string,
+  ) {
+    let user: { id: string; role: string };
+    try {
+      user = await this.autenticarSocket(client);
+    } catch {
+      const message = 'Não autenticado';
+      client.emit('error', { message });
+      client.disconnect(true);
+      return { ok: false, message };
     }
     if (!eventId || typeof eventId !== 'string') {
       client.emit('error', { message: 'eventId inválido' });
-      return;
+      return { ok: false, message: 'eventId inválido' };
     }
     if (!(await this.contarJoin(user.id))) {
-      client.emit('error', { message: 'Demasiados pedidos, aguarde um pouco' });
-      return;
+      const message = 'Demasiados pedidos, aguarde um pouco';
+      client.emit('error', { message });
+      return { ok: false, message };
     }
-    const utilizadorAtual = await this.userRepository.findOne({
-      where: { id: user.id, isActive: true },
-    });
-    if (!utilizadorAtual) {
-      client.disconnect(true);
-      return;
-    }
-    client.data.user = { id: utilizadorAtual.id, role: utilizadorAtual.role };
-    if (utilizadorAtual.role !== 'superadmin') {
+    if (user.role !== 'superadmin') {
       const membership = await this.eventUserRepository.findOne({
-        where: { event: { id: eventId }, user: { id: utilizadorAtual.id } },
+        where: { event: { id: eventId }, user: { id: user.id } },
       });
       if (!membership) {
-        client.emit('error', { message: 'Não pertence a este evento' });
-        return;
+        const message = 'Não pertence a este evento';
+        client.emit('error', { message });
+        return { ok: false, message };
       }
     }
-    client.join(roomEvento(eventId));
+    await client.join(roomEvento(eventId));
+    return { ok: true };
   }
 
   /**
@@ -323,41 +332,44 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
    * cozinha) receberia metadados de planta que não pode obter por HTTP.
    */
   @SubscribeMessage(MENSAGENS_ENTRADA.planta)
-  async handleJoinEventPlanta(@ConnectedSocket() client: Socket, @MessageBody() eventId: string) {
-    const user = client.data?.user;
-    if (!user) {
-      client.emit('error', { message: 'Não autenticado' });
-      return;
+  async handleJoinEventPlanta(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() eventId: string,
+  ) {
+    let user: { id: string; role: string };
+    try {
+      user = await this.autenticarSocket(client);
+    } catch {
+      const message = 'Não autenticado';
+      client.emit('error', { message });
+      client.disconnect(true);
+      return { ok: false, message };
     }
     if (!eventId || typeof eventId !== 'string') {
       client.emit('error', { message: 'eventId inválido' });
-      return;
+      return { ok: false, message: 'eventId inválido' };
     }
-    const utilizadorAtual = await this.userRepository.findOne({
-      where: { id: user.id, isActive: true },
-    });
-    if (!utilizadorAtual) {
-      client.disconnect(true);
-      return;
-    }
-    client.data.user = { id: utilizadorAtual.id, role: utilizadorAtual.role };
 
     let role: string;
     try {
-      role = await this.membershipService.roleEfetiva(client.data.user, eventId);
+      role = await this.membershipService.roleEfetiva(user, eventId);
     } catch {
-      client.emit('error', { message: 'Não pertence a este evento' });
-      return;
+      const message = 'Não pertence a este evento';
+      client.emit('error', { message });
+      return { ok: false, message };
     }
     if (!MANAGEMENT_ROLES.includes(role)) {
-      client.emit('error', { message: 'Sem permissão para a planta deste evento' });
-      return;
+      const message = 'Sem permissão para a planta deste evento';
+      client.emit('error', { message });
+      return { ok: false, message };
     }
     if (!(await this.contarJoin(user.id))) {
-      client.emit('error', { message: 'Demasiados pedidos, aguarde um pouco' });
-      return;
+      const message = 'Demasiados pedidos, aguarde um pouco';
+      client.emit('error', { message });
+      return { ok: false, message };
     }
-    client.join(roomPlanta(eventId));
+    await client.join(roomPlanta(eventId));
+    return { ok: true };
   }
 
   /**
