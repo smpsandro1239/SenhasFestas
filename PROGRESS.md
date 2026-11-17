@@ -20,15 +20,17 @@
 
 **Objectivo**: impedir que o cron de arquivo grave estado desactualizado sobre saldos alterados em paralelo por extensões, estornos ou transferências.
 
-**Feito na branch `fix/balance-archive-transaction-lock-2026-11-v2`**
+**Integrado na `main` pela PR #166** (merge commit `2e62722577bbf133686291b8c4006273cf79f403`)
 - A consulta inicial recolhe apenas os IDs candidatos.
 - Cada saldo é relido dentro de uma transacção e bloqueado com `FOR UPDATE`, limitando o lock à tabela/alias `saldo` para não bloquear a relação opcional `event`.
 - A decisão final revalida o saldo actual, o prazo efectivo (incluindo `extendedUntil`), `archivedAt` e `deletedAt`.
-- Adicionados testes para lock, arquivamento, soft-delete e extensão concorrente após a descoberta do candidato.
+- Testes unitários cobrem o lock, o arquivamento, o soft-delete e uma extensão concorrente após a descoberta do candidato.
+- Teste E2E PostgreSQL executa o serviço real e valida o lock SQL e as duas transições.
 
 **Validação**
-- Pendente CI completa na PR #166.
-- Sem alteração de schema/migrations, valores contabilísticos ou dados de produção; sem deploy.
+- CI da PR #166 passou: backend lint, Vitest, build e PostgreSQL E2E; frontend lint, typecheck, Vitest e build; Browser E2E; documentação; Gitleaks; auditoria de dependências; regressão PWA; CodeQL.
+- Vercel não criou deployments devido ao limite diário `api-deployments-free-per-day`; sem deploy confirmado.
+- Sem alteração de schema/migrations ou dados de produção.
 
 ---
 
