@@ -71,7 +71,7 @@ export class BalanceService {
   private async lockOperationKey(
     manager: import('typeorm').EntityManager,
     actorId: string,
-    operation: 'load' | 'deduct',
+    operation: 'load' | 'deduct' | 'reverse' | 'transfer',
     idempotencyKey: string,
   ): Promise<void> {
     await manager.query(
