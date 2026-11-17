@@ -1,20 +1,20 @@
+export type OrderIdempotencyOutcome = 'success' | 'definitive-error' | 'ambiguous-error';
+
 export interface OrderIdempotencyContext {
   key: string;
   memoryKey: string;
   storageKey?: string;
+  inFlight: number;
+  successObserved: boolean;
+  ambiguousFailure: boolean;
 }
 
-interface InMemoryEntry {
-  promise: Promise<OrderIdempotencyContext>;
-  context?: OrderIdempotencyContext;
-}
-
-const inMemoryKeys = new Map<string, InMemoryEntry>();
+const inMemoryKeys = new Map<string, OrderIdempotencyContext | Promise<OrderIdempotencyContext>>();
 const STORAGE_PREFIX = 'senhasfestas:order-idempotency:';
 
 function createRandomKey(): string {
+  const cryptoApi = typeof window !== 'undefined' ? window.crypto : undefined;
   try {
-    const cryptoApi = typeof window !== 'undefined' ? window.crypto : undefined;
     if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
     if (cryptoApi?.getRandomValues) {
       const bytes = cryptoApi.getRandomValues(new Uint8Array(24));
@@ -26,70 +26,83 @@ function createRandomKey(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
-/**
- * Reutiliza uma chave entre retries do mesmo payload.
- * O payload só existe como chave de Map em memória; nunca é persistido no storage.
- *
- * A Promise é colocada no Map antes de iniciar WebCrypto/storage. Assim, dois
- * cliques concorrentes para o mesmo payload aguardam a mesma chave, em vez de
- * gerarem chaves diferentes enquanto o digest ainda está pendente.
- */
-export function getOrderIdempotencyContext(data: unknown): Promise<OrderIdempotencyContext> {
-  const serialized = JSON.stringify(data) ?? 'null';
-  const memoryKey = serialized;
-  const cached = inMemoryKeys.get(memoryKey);
-  if (cached) return cached.promise;
+async function criarContexto(serialized: string, memoryKey: string): Promise<OrderIdempotencyContext> {
+  let storageKey: string | undefined;
+  let key: string | undefined;
 
-  let entry: InMemoryEntry;
-  const promise = Promise.resolve().then(async () => {
-    let storageKey: string | undefined;
-    let key: string | undefined;
-
+  if (typeof window !== 'undefined' && window.crypto?.subtle?.digest) {
     try {
-      const cryptoApi = typeof window !== 'undefined' ? window.crypto : undefined;
-      if (cryptoApi?.subtle?.digest) {
-        const digest = await cryptoApi.subtle.digest(
-          'SHA-256',
-          new TextEncoder().encode(serialized),
-        );
-        const fingerprint = Array.from(new Uint8Array(digest))
-          .map((value) => value.toString(16).padStart(2, '0'))
-          .join('');
-        storageKey = `${STORAGE_PREFIX}${fingerprint}`;
-        key = window.sessionStorage.getItem(storageKey) ?? undefined;
-      }
+      const digest = await window.crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(serialized),
+      );
+      const fingerprint = Array.from(new Uint8Array(digest))
+        .map((value) => value.toString(16).padStart(2, '0'))
+        .join('');
+      storageKey = `${STORAGE_PREFIX}${fingerprint}`;
+      key = window.sessionStorage.getItem(storageKey) ?? undefined;
     } catch {
       /* WebCrypto ou sessionStorage indisponível: usar o fallback em memória. */
       storageKey = undefined;
-      key = undefined;
     }
+  }
 
-    if (!key) key = createRandomKey();
-    const context: OrderIdempotencyContext = { key, memoryKey, storageKey };
-    entry.context = context;
+  if (!key) key = createRandomKey();
+  const context: OrderIdempotencyContext = {
+    key,
+    memoryKey,
+    storageKey,
+    inFlight: 0,
+    successObserved: false,
+    ambiguousFailure: false,
+  };
 
-    if (storageKey && typeof window !== 'undefined') {
-      try {
-        window.sessionStorage.setItem(storageKey, key);
-      } catch {
-        /* A chave permanece em memória até o resultado do pedido ser conhecido. */
-      }
+  if (storageKey && typeof window !== 'undefined') {
+    try {
+      window.sessionStorage.setItem(storageKey, key);
+    } catch {
+      /* A chave permanece em memória até o resultado do pedido ser conhecido. */
     }
+  }
 
+  return context;
+}
+
+/**
+ * Reutiliza a mesma chave entre retries do mesmo payload, incluindo submissões
+ * concorrentes. O payload só existe como chave do Map em memória.
+ */
+export async function getOrderIdempotencyContext(data: unknown): Promise<OrderIdempotencyContext> {
+  const serialized = JSON.stringify(data) ?? 'null';
+  const memoryKey = serialized;
+  const cached = inMemoryKeys.get(memoryKey);
+  if (cached) {
+    const context = await cached;
+    context.inFlight += 1;
     return context;
+  }
+
+  const pending = criarContexto(serialized, memoryKey).then((context) => {
+    if (inMemoryKeys.get(memoryKey) === pending) {
+      inMemoryKeys.set(memoryKey, context);
+    }
+    return context;
+  }).catch((error) => {
+    if (inMemoryKeys.get(memoryKey) === pending) {
+      inMemoryKeys.delete(memoryKey);
+    }
+    throw error;
   });
 
-  entry = { promise };
-  inMemoryKeys.set(memoryKey, entry);
-  void promise.catch(() => {
-    if (inMemoryKeys.get(memoryKey) === entry) inMemoryKeys.delete(memoryKey);
-  });
-  return promise;
+  inMemoryKeys.set(memoryKey, pending);
+  const context = await pending;
+  context.inFlight += 1;
+  return context;
 }
 
 export function clearOrderIdempotencyContext(context: OrderIdempotencyContext): void {
   const current = inMemoryKeys.get(context.memoryKey);
-  if (current?.context?.key === context.key) inMemoryKeys.delete(context.memoryKey);
+  if (current === context) inMemoryKeys.delete(context.memoryKey);
 
   if (context.storageKey && typeof window !== 'undefined') {
     try {
@@ -99,5 +112,26 @@ export function clearOrderIdempotencyContext(context: OrderIdempotencyContext): 
     } catch {
       /* O storage é opcional; não pode impedir o tratamento da resposta da API. */
     }
+  }
+}
+
+/**
+ * Só limpa a chave quando todas as tentativas concorrentes terminaram.
+ * Um erro ambíguo mantém a chave disponível para retry, salvo se outra tentativa
+ * com a mesma chave já confirmou o pedido.
+ */
+export function releaseOrderIdempotencyContext(
+  context: OrderIdempotencyContext,
+  outcome: OrderIdempotencyOutcome,
+): void {
+  if (context.inFlight > 0) context.inFlight -= 1;
+  if (outcome === 'success') context.successObserved = true;
+  if (outcome === 'ambiguous-error') context.ambiguousFailure = true;
+
+  if (
+    context.inFlight === 0 &&
+    (context.successObserved || !context.ambiguousFailure)
+  ) {
+    clearOrderIdempotencyContext(context);
   }
 }
