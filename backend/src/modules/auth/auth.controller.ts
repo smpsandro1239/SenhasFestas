@@ -57,9 +57,10 @@ export class RegisterDto {
   @IsEmail()
   email: string;
 
-  // Segurança (A5/DoS): bcrypt processa apenas os primeiros 72 bytes.
+  // Passwords novas: mínimo 12 caracteres e máximo de 72 bytes/caracteres
+  // para respeitar o limite de bcrypt e evitar truncagem ambígua.
   @IsString()
-  @MinLength(6)
+  @MinLength(12, { message: 'A password deve ter pelo menos 12 caracteres' })
   @MaxLength(72)
   password: string;
 
