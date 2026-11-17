@@ -168,6 +168,11 @@ describe('usePlantaSocket (contrato do canal de planta)', () => {
     act(() => {
       disparar(socket, 'connect');
     });
+    expect(estados.at(-1)).toBe('reconnecting');
+    const ack = socket.emit.mock.calls[0][2];
+    act(() => {
+      ack({ ok: true });
+    });
     expect(estados.at(-1)).toBe('connected');
   });
 
