@@ -22,10 +22,14 @@ export async function reembolsarSaldoEmTransacao(
   const balance = await manager.findOne(BalanceEntity, {
     where: { id: order.balanceId },
     lock: { mode: 'pessimistic_write' },
+    withDeleted: true,
   });
   if (!balance) {
     return;
   }
+  // O reembolso não pode desaparecer por o saldo estar soft-deleted.
+  // Limpa apenas deletedAt; archivedAt mantém a regra de saldo expirado.
+  balance.deletedAt = null;
   balance.currentBalance = soma(Number(balance.currentBalance), centavos(Number(order.balanceUsed)));
   await manager.save(BalanceEntity, balance);
 
