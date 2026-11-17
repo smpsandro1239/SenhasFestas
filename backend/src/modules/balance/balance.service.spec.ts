@@ -522,9 +522,10 @@ describe('BalanceService — guard de janela operacional', () => {
         where: vi.fn().mockReturnThis(),
         setLock: vi.fn().mockReturnThis(),
         withDeleted: vi.fn().mockReturnThis(),
-        getOne: vi.fn().mockImplementation(async () => atuais.get(
-          (queryBuilder.where.mock.calls.at(-1)?.[1] as any)?.id,
-        )),
+        getOne: vi.fn()
+          .mockResolvedValueOnce(atuais.get('b1'))
+          .mockResolvedValueOnce(atuais.get('b2'))
+          .mockResolvedValueOnce(atuais.get('b3')),
       };
       const manager = {
         createQueryBuilder: vi.fn().mockReturnValue(queryBuilder),
