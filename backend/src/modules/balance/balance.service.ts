@@ -238,6 +238,16 @@ export class BalanceService {
           if (!saldoAnterior) {
             throw new NotFoundException('Saldo do estorno não encontrado');
           }
+          arquivar?.({
+            antes: { currentBalance: centavos(Number(saldoAnterior.currentBalance)) },
+            eventId: (movement.balance as any)?.event?.id as string | undefined,
+            entidadeId: saldoAnterior.id,
+            extras: {
+              movementId,
+              reversalAmount: centavos(Number(anterior.amount)),
+              idempotentReplay: true,
+            },
+          });
           return {
             balance: {
               id: saldoAnterior.id,
@@ -367,14 +377,8 @@ export class BalanceService {
               antes: { currentBalance: centavos(Number(anterior.balance.currentBalance)) },
               eventId: dto.eventId,
               entidadeId: anterior.balance.id,
-              extras: { idempotentReplay: true },
+              extras: { amount: centavos(dto.amount), idempotentReplay: true },
             });
-            arquivar?.({
-            antes: { currentBalance: centavos(Number(anterior.balance.currentBalance)) },
-            eventId: dto.eventId,
-            entidadeId: anterior.balance.id,
-            extras: { amount: centavos(dto.amount), idempotentReplay: true },
-          });
           return anterior.balance;
           }
           await this.eventService.assertEventOperavelById(dto.eventId);
