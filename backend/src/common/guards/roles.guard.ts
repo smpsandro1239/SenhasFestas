@@ -10,22 +10,21 @@ export class RolesGuard implements CanActivate {
     private readonly membershipService: MembershipService,
   ) {}
 
-  private eventIdDoRequest(request: any): string | undefined {
-    if (request.params?.eventId) {
-      return request.params.eventId;
-    }
-    if (request.query?.eventId) {
-      return request.query.eventId;
-    }
-    if (request.body && typeof request.body === 'object' && request.body.eventId) {
-      return request.body.eventId;
-    }
-    // Rotas de eventos usam :id para o eventId (ex.: /events/:id/members).
-    // Outras rotas com :id (orders/:id, users/:id) não são o evento.
-    if (request.route?.path?.startsWith('/events/') && request.params?.id) {
-      return request.params.id;
-    }
-    return undefined;
+  private eventIdsDoRequest(request: any): string[] {
+    const body = request.body && typeof request.body === 'object' ? request.body : {};
+    const candidatos = [
+      request.params?.eventId,
+      request.query?.eventId,
+      body.eventId,
+      body.fromEventId,
+      body.toEventId,
+      body.sourceEventId,
+      body.targetEventId,
+      // Rotas de eventos usam :id para o eventId; outras rotas com :id
+      // (orders/:id, products/:id, users/:id) não são o evento.
+      request.route?.path?.startsWith('/events/') ? request.params?.id : undefined,
+    ];
+    return [...new Set(candidatos.filter((id): id is string => typeof id === 'string' && id.length > 0))];
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -44,16 +43,16 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Não tem permissões para esta operação');
     }
 
-    // 2A: role efetiva = event-role dentro do evento; superadmin global imune.
-    // Consulta por request, sem cache. Freshness da membership > custo. Se um
-    // dia houver latência medida, o caminho é cache curto com invalidação no
-    // endpoint que altera a membership — não um TTL cego.
-    const roleEfetiva = await this.membershipService.roleEfetiva(
+    // Com evento(s) explícito(s), todas as memberships envolvidas têm de
+    // cumprir a role exigida. Em endpoints agregados, todas as memberships do
+    // utilizador são verificadas: uma role global não pode elevar uma role
+    // restrita noutro evento.
+    const rolesEfetivas = await this.membershipService.rolesEfetivas(
       user,
-      this.eventIdDoRequest(request),
+      this.eventIdsDoRequest(request),
     );
 
-    if (!requiredRoles.includes(roleEfetiva)) {
+    if (!rolesEfetivas.length || !rolesEfetivas.every((role) => requiredRoles.includes(role))) {
       throw new ForbiddenException('Não tem permissões para esta operação');
     }
 
