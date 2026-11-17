@@ -116,6 +116,9 @@ export class OrderService {
         if (trackedIds.length > 0) {
           const locked = await manager.find(ProductEntity, {
             where: { id: In(trackedIds) },
+            // Todas as transações bloqueiam produtos pela mesma ordem,
+            // independentemente da ordem dos artigos enviada pelo cliente.
+            order: { id: 'ASC' },
             lock: { mode: 'pessimistic_write' },
           });
           for (const product of locked) {
