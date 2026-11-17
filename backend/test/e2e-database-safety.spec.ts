@@ -1,5 +1,8 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { configuracaoBaseDadosE2e } from './e2e-database-safety';
+import { carregarAmbienteE2e, configuracaoBaseDadosE2e } from './e2e-database-safety';
 
 const optIn = { E2E_ALLOW_SCHEMA_RESET: 'true' };
 
@@ -21,6 +24,46 @@ describe('configuracaoBaseDadosE2e — barreira contra BD remota', () => {
       database: 'senhasfestas_test',
       ssl: undefined,
     });
+  });
+
+  it('detecta DATABASE_URL remota em .env.development antes do bootstrap Nest', () => {
+    const diretorio = mkdtempSync(join(tmpdir(), 'senhasfestas-e2e-env-'));
+    try {
+      writeFileSync(
+        join(diretorio, '.env.development'),
+        'DATABASE_URL=postgresql://user:pass@ep-remote.eu.neon.tech/senhasfestas_test?sslmode=require\\n',
+      );
+      writeFileSync(
+        join(diretorio, '.env'),
+        'DATABASE_URL=postgresql://user:pass@localhost/senhasfestas_test\\n',
+      );
+
+      const ambiente = carregarAmbienteE2e(diretorio, {});
+      expect(ambiente.DATABASE_URL).toContain('ep-remote.eu.neon.tech');
+      expect(() =>
+        configuracaoBaseDadosE2e({ ...ambiente, E2E_ALLOW_SCHEMA_RESET: 'true' }),
+      ).toThrow(/não é local/);
+    } finally {
+      rmSync(diretorio, { recursive: true, force: true });
+    }
+  });
+
+  it('variáveis exportadas no processo prevalecem sobre os ficheiros .env', () => {
+    const diretorio = mkdtempSync(join(tmpdir(), 'senhasfestas-e2e-env-'));
+    try {
+      writeFileSync(
+        join(diretorio, '.env.development'),
+        'DATABASE_URL=postgresql://user:pass@ep-remote.eu.neon.tech/senhasfestas_test\\n',
+      );
+      const ambiente = carregarAmbienteE2e(diretorio, {
+        DATABASE_URL: 'postgresql://user:pass@localhost/senhasfestas_test',
+        E2E_ALLOW_SCHEMA_RESET: 'true',
+      });
+      expect(ambiente.DATABASE_URL).toContain('@localhost');
+      expect(configuracaoBaseDadosE2e(ambiente).database).toBe('senhasfestas_test');
+    } finally {
+      rmSync(diretorio, { recursive: true, force: true });
+    }
   });
 
   it('rejeita Neon e qualquer outro host remoto antes de abrir ligação', () => {
