@@ -167,13 +167,13 @@ export class AuditInterceptor implements NestInterceptor {
           actorRole: ator.role,
           before: this.resumoResposta((req as any)[AUDIT_BEFORE]),
           after: this.resumoResposta(data),
-          details: {
+          details: this.sanitizarValor({
             method: metodo,
             url: this.caminho(req),
             statusCode: res.statusCode,
             params: req.params,
             ...this.detalhesExtras(req),
-          },
+          }) as Record<string, unknown>,
           ip: req.ip,
           userAgent: req.headers['user-agent'],
         })).pipe(map(() => data));
@@ -189,14 +189,14 @@ export class AuditInterceptor implements NestInterceptor {
           eventId,
           actorId: ator.id,
           actorRole: ator.role,
-          details: {
+          details: this.sanitizarValor({
             method: metodo,
             url: this.caminho(req),
             statusCode,
-            erro: (error as Error)?.message,
+            erro: (error as Error)?.name ?? 'Erro desconhecido',
             params: req.params,
             ...this.detalhesExtras(req),
-          },
+          }) as Record<string, unknown>,
           ip: req.ip,
           userAgent: req.headers['user-agent'],
         })).pipe(concatMap(() => throwError(() => error)));
@@ -273,16 +273,57 @@ export class AuditInterceptor implements NestInterceptor {
     return {};
   }
 
+  /**
+   * A auditoria nunca deve persistir credenciais, mesmo quando um endpoint
+   * devolve tokens no corpo (login/refresh) ou quando um snapshot inclui uma
+   * entidade com campos sensíveis. A sanitização é recursiva e não muta o
+   * objecto original devolvido ao cliente.
+   */
+  private sanitizarValor(valor: unknown, profundidade = 0, vistos = new WeakSet<object>()): unknown {
+    if (valor === null || valor === undefined) return valor;
+    if (typeof valor === 'bigint') return valor.toString();
+    if (typeof valor !== 'object') {
+      if (typeof valor === 'string') {
+        return valor
+          .replace(/Bearer\\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
+          .replace(/\\beyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\b/g, '[JWT REDACTED]');
+      }
+      return valor;
+    }
+    if (valor instanceof Date) return valor.toISOString();
+    if (profundidade >= 12) return '[profundidade limitada]';
+    if (vistos.has(valor)) return '[referência circular]';
+    vistos.add(valor);
+
+    if (Array.isArray(valor)) {
+      return valor.map((item) => this.sanitizarValor(item, profundidade + 1, vistos));
+    }
+
+    const resultado: Record<string, unknown> = {};
+    const camposSensíveis = /(password|passwd|token|secret|authorization|cookie|api[_-]?key|private[_-]?key|credential)/i;
+    for (const [chave, conteudo] of Object.entries(valor)) {
+      resultado[chave] = camposSensíveis.test(chave)
+        ? '[REDACTED]'
+        : this.sanitizarValor(conteudo, profundidade + 1, vistos);
+    }
+    return resultado;
+  }
+
   private resumoResposta(data: any): unknown {
     if (data === undefined || data === null) {
       return undefined;
     }
     try {
-      const texto = JSON.stringify(data);
+      const seguro = this.sanitizarValor(data);
+      const texto = JSON.stringify(seguro);
       if (texto.length > 8000) {
-        return { resumo: 'resposta extensa', total: data?.total, items: Array.isArray(data?.items) ? data.items.length : undefined };
+        return {
+          resumo: 'resposta extensa',
+          total: data?.total,
+          items: Array.isArray(data?.items) ? data.items.length : undefined,
+        };
       }
-      return data;
+      return seguro;
     } catch {
       return undefined;
     }
