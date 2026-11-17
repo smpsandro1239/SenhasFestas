@@ -5,7 +5,7 @@ import { Client } from 'pg';
 import request from 'supertest';
 import * as bcrypt from 'bcryptjs';
 import { criarAplicacao } from '../src/app.setup';
-import { UserEntity, ProductEntity, OrderEntity, OrderItemEntity, EventEntity, EventUserEntity } from '../src/entities';
+import { UserEntity, ProductEntity, OrderEntity, OrderItemEntity, EventEntity, EventUserEntity, BalanceEntity, BalanceMovementEntity, MovementType } from '../src/entities';
 import { CatalogService } from '../src/modules/catalog/catalog.service';
 import { OrderService } from '../src/modules/order/order.service';
 import { AuthService } from '../src/modules/auth/auth.service';
@@ -95,6 +95,46 @@ describe('App e2e (Postgres + Redis)', () => {
     const authService = app.get(AuthService);
     const { refreshToken } = await authService.login(email, password);
     return refreshToken;
+  }
+
+  async function criarCaixaComEvento(sufixo: string): Promise<{
+    user: UserEntity;
+    event: EventEntity;
+    token: string;
+  }> {
+    const dataSource = app.get(DataSource);
+    const password = 'password123';
+    const email = `cashier-${sufixo}-${randomUUID()}@example.com`;
+    const userRepository = dataSource.getRepository(UserEntity);
+    const user = await userRepository.save(
+      userRepository.create({
+        email,
+        password: await bcrypt.hash(password, 10),
+        name: 'Caixa E2E',
+        role: 'cashier',
+        accessCode: proximoAccessCode(),
+        isActive: true,
+      }),
+    );
+    const eventRepository = dataSource.getRepository(EventEntity);
+    const event = await eventRepository.save(
+      eventRepository.create({
+        name: `E2E Saldo ${sufixo}`,
+        shortCode: `BAL-${randomUUID().slice(0, 8)}`,
+        startDate: new Date(Date.now() - 60 * 60 * 1000),
+        endDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        status: 'active',
+      }),
+    );
+    await dataSource.getRepository(EventUserEntity).save(
+      dataSource.getRepository(EventUserEntity).create({
+        event,
+        user,
+        role: 'cashier',
+      }),
+    );
+    const { token } = await app.get(AuthService).login(email, password);
+    return { user, event, token };
   }
 
   it('deve responder na rota de liveness', async () => {
@@ -365,6 +405,101 @@ describe('App e2e (Postgres + Redis)', () => {
     ]);
     expect(Number(stockA.stock)).toBe(0);
     expect(Number(stockB.stock)).toBe(0);
+  });
+
+  it('não duplica carregamentos concorrentes com a mesma Idempotency-Key', async () => {
+    const dataSource = app.get(DataSource);
+    const caixa = await criarCaixaComEvento('load');
+    const { email } = await criarUtilizadorTeste(`balance-load-${randomUUID()}@example.com`);
+    const cliente = await dataSource.getRepository(UserEntity).findOneByOrFail({ email });
+    const key = randomUUID();
+    const endpoint = `/api/balances/${cliente.id}/load`;
+    const payload = { eventId: caixa.event.id, amount: 25, paymentMethod: 'cash' };
+
+    const enviar = (body = payload) =>
+      request(app.getHttpServer())
+        .post(endpoint)
+        .set('Authorization', `Bearer ${caixa.token}`)
+        .set('Idempotency-Key', key)
+        .send(body);
+
+    const [first, second] = await Promise.all([enviar(), enviar()]);
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+
+    const saldo = await dataSource.getRepository(BalanceEntity).findOne({
+      where: { user: { id: cliente.id }, event: { id: caixa.event.id } },
+    });
+    expect(saldo).not.toBeNull();
+    expect(Number(saldo!.currentBalance)).toBe(25);
+    expect(
+      await dataSource.getRepository(BalanceMovementEntity).count({
+        where: {
+          createdById: caixa.user.id,
+          idempotencyKey: key,
+          type: MovementType.LOAD,
+        },
+      }),
+    ).toBe(1);
+
+    const conflito = await enviar({ ...payload, amount: 30 });
+    expect(conflito.status).toBe(409);
+    const saldoDepoisDoConflito = await dataSource.getRepository(BalanceEntity).findOneByOrFail({
+      id: saldo!.id,
+    });
+    expect(Number(saldoDepoisDoConflito.currentBalance)).toBe(25);
+  });
+
+  it('não duplica descontos concorrentes nem volta a debitar saldo em retries', async () => {
+    const dataSource = app.get(DataSource);
+    const caixa = await criarCaixaComEvento('deduct');
+    const { email } = await criarUtilizadorTeste(`balance-deduct-${randomUUID()}@example.com`);
+    const cliente = await dataSource.getRepository(UserEntity).findOneByOrFail({ email });
+    const endpoint = `/api/balances/${cliente.id}`;
+    const chaveCarga = randomUUID();
+    const chaveDesconto = randomUUID();
+
+    await request(app.getHttpServer())
+      .post(`${endpoint}/load`)
+      .set('Authorization', `Bearer ${caixa.token}`)
+      .set('Idempotency-Key', chaveCarga)
+      .send({ eventId: caixa.event.id, amount: 50, paymentMethod: 'cash' })
+      .expect(201);
+
+    const enviarDesconto = () =>
+      request(app.getHttpServer())
+        .post(`${endpoint}/deduct`)
+        .set('Authorization', `Bearer ${caixa.token}`)
+        .set('Idempotency-Key', chaveDesconto)
+        .send({ eventId: caixa.event.id, amount: 10, description: 'Consumo E2E' });
+
+    const [first, second] = await Promise.all([enviarDesconto(), enviarDesconto()]);
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+
+    const saldo = await dataSource.getRepository(BalanceEntity).findOneByOrFail({
+      user: { id: cliente.id },
+      event: { id: caixa.event.id },
+    });
+    expect(Number(saldo.currentBalance)).toBe(40);
+    expect(
+      await dataSource.getRepository(BalanceMovementEntity).count({
+        where: {
+          createdById: caixa.user.id,
+          idempotencyKey: chaveCarga,
+          type: MovementType.LOAD,
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await dataSource.getRepository(BalanceMovementEntity).count({
+        where: {
+          createdById: caixa.user.id,
+          idempotencyKey: chaveDesconto,
+          type: MovementType.CONSUME,
+        },
+      }),
+    ).toBe(1);
   });
 
 });
