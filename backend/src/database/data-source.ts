@@ -1,22 +1,51 @@
 import 'dotenv/config';
 import 'reflect-metadata';
-import { DataSource } from 'typeorm';
+import { DataSource, type DataSourceOptions } from 'typeorm';
 
-export const AppDataSource = new DataSource({
-  type: 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432', 10),
-  username: process.env.DB_USERNAME || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
-  database: process.env.DB_NAME || 'senhasfestas',
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
-  entities: [__dirname + '/../entities/index.ts'],
-  // Só os ficheiros das migrations (`<timestamp>-<Nome>.ts`). Um glob `*.ts`
-  // apanhava também o `index.spec.ts` da pasta — o CLI do TypeORM carregava-o
-  // e o import de `vitest` rebentava em CommonJS ("Vitest cannot be imported
-  // in a CommonJS module"). O registo das migrations em runtime é o registry
-  // estático (`migrations/index.ts`), não este glob.
-  migrations: [__dirname + '/migrations/[0-9]*.ts'],
-  synchronize: false,
-  logging: false,
-});
+export function configuracaoDataSource(env: NodeJS.ProcessEnv = process.env): DataSourceOptions {
+  const databaseUrl = env.DATABASE_URL;
+  let host = env.DB_HOST || 'localhost';
+  let port = Number.parseInt(env.DB_PORT || '5432', 10);
+  let username = env.DB_USERNAME || 'postgres';
+  let password = env.DB_PASSWORD || 'postgres';
+  let database = env.DB_NAME || 'senhasfestas';
+  let sslMode: string | null = null;
+
+  if (databaseUrl) {
+    const url = new URL(databaseUrl);
+    host = url.hostname;
+    port = Number.parseInt(url.port || '5432', 10);
+    username = decodeURIComponent(url.username);
+    password = decodeURIComponent(url.password);
+    database = decodeURIComponent(url.pathname.replace(/^\\//, ''));
+    sslMode = url.searchParams.get('sslmode');
+  }
+
+  // O CLI do TypeORM (migrations) tem de aplicar a mesma política TLS da API.
+  // Nunca aceitar certificados arbitrários em ligações remotas.
+  const sslEnabled = env.DB_SSL === 'true' || (sslMode !== null && sslMode !== 'disable');
+  const ssl = sslEnabled
+    ? {
+        rejectUnauthorized: true,
+        ...(env.DB_SSL_CA ? { ca: env.DB_SSL_CA } : {}),
+      }
+    : undefined;
+
+  return {
+    type: 'postgres',
+    host,
+    port,
+    username,
+    password,
+    database,
+    ssl,
+    entities: [__dirname + '/../entities/index.ts'],
+    // Só os ficheiros das migrations (<timestamp>-<Nome>.ts). Um glob *.ts
+    // apanhava também o index.spec.ts e carregava Vitest em CommonJS.
+    migrations: [__dirname + '/migrations/[0-9]*.ts'],
+    synchronize: false,
+    logging: false,
+  };
+}
+
+export const AppDataSource = new DataSource(configuracaoDataSource());
