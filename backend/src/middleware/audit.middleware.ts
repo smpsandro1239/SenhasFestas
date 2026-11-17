@@ -157,7 +157,7 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
   }
 
   private async libertarReservaRedis(chave: string): Promise<void> {
-    await this.redisService.decrementStrict(`${RL_LOGIN_PREFIX}${chave}`);
+    await this.redisService.releaseCounterReservationStrict(`${RL_LOGIN_PREFIX}${chave}`);
   }
 
   private responderLimite(res: Response): void {
