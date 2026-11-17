@@ -45,6 +45,8 @@ export class LoginDto {
   @IsEmail()
   email: string;
 
+  // Mantém compatibilidade com contas antigas; a política mais forte aplica-se
+  // ao registo de novas contas. A migração de passwords existentes deve ser gradual.
   @IsString()
   @MinLength(6)
   password: string;
@@ -55,7 +57,7 @@ export class RegisterDto {
   email: string;
 
   @IsString()
-  @MinLength(6)
+  @MinLength(12, { message: 'A password deve ter pelo menos 12 caracteres' })
   password: string;
 
   @IsString()
