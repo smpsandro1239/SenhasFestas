@@ -5,7 +5,7 @@ import { Redis } from 'ioredis';
 import { HealthController } from './health.controller';
 import { REDIS_CLIENT } from '../common/redis/redis.service';
 
-function criarController(opcoes: { bdOk?: boolean; redisStatus?: string | null } = {}) {
+function criarController(opcoes: { bdOk?: boolean; redisStatus?: string | null; environment?: string } = {}) {
   const dataSource = {
     query: opcoes.bdOk === false
       ? vi.fn().mockRejectedValue(new Error('ligação recusada'))
@@ -16,7 +16,7 @@ function criarController(opcoes: { bdOk?: boolean; redisStatus?: string | null }
       ? null
       : ({ status: opcoes.redisStatus } as unknown as Redis);
   const controller = new HealthController(
-    { get: vi.fn().mockReturnValue('test') } as unknown as ConfigService,
+    { get: vi.fn().mockReturnValue(opcoes.environment ?? 'test') } as unknown as ConfigService,
     dataSource as unknown as DataSource,
     redisClient,
   );
@@ -38,6 +38,27 @@ describe('HealthController.ready', () => {
     expect(res.status).not.toHaveBeenCalled();
     expect(corpo.status).toBe('ready');
     expect(corpo.dependencies).toEqual({ database: 'healthy', redis: 'disabled' });
+  });
+
+  it('devolve 503 em produção quando o Redis não está configurado', async () => {
+    const { controller } = criarController({ redisStatus: null, environment: 'production' });
+    const res = respostaFalsa();
+
+    const corpo = await controller.ready(res as never);
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(corpo.status).toBe('unhealthy');
+    expect(corpo.dependencies).toEqual({ database: 'healthy', redis: 'disabled' });
+  });
+
+  it('mantém readiness em desenvolvimento quando Redis está desactivado', async () => {
+    const { controller } = criarController({ redisStatus: null, environment: 'development' });
+    const res = respostaFalsa();
+
+    const corpo = await controller.ready(res as never);
+
+    expect(res.status).not.toHaveBeenCalled();
+    expect(corpo.status).toBe('ready');
   });
 
   it('devolve 200 quando o Redis está configurado e pronto', async () => {
