@@ -5,6 +5,10 @@ import { resolve } from 'node:path';
 const serviceWorker = readFileSync(resolve(process.cwd(), 'public/sw.js'), 'utf8');
 
 describe('Service Worker — privacidade de páginas autenticadas', () => {
+  it('invalida a cache antiga que podia conter HTML privado', () => {
+    expect(serviceWorker).toContain("const CACHE_NAME = 'senhasfestas-v5'");
+  });
+
   it('não guarda respostas de navegação no Cache Storage', () => {
     const inicio = serviceWorker.indexOf('async function networkFirst');
     const fim = serviceWorker.indexOf("self.addEventListener('fetch'", inicio);
