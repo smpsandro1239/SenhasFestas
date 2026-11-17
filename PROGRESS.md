@@ -1,3 +1,29 @@
+## 2026-11-17 — T42: falha fechada do rate limit de login em produção
+
+**Feito directamente na `main`**
+- O middleware de login deixa de usar um contador em memória quando `NODE_ENV=production` e o Redis não está configurado.
+- Se o Redis estiver configurado mas falhar durante a reserva da tentativa, o endpoint de login responde `503 Service Unavailable`, com `Retry-After: 30`, sem chamar o controller.
+- Fora de produção mantém-se o fallback local para desenvolvimento e testes.
+- Os logs do caminho de falha deixam de incluir a mensagem arbitrária da excepção Redis.
+- Adicionados testes unitários para Redis não configurado e Redis indisponível em produção; o estado do mock é reposto entre testes.
+
+**Decisão**
+- O bloqueio é específico do login: falhar fechado em todo o middleware global poderia indisponibilizar a aplicação inteira numa falha Redis. O rate limit geral mantém o fallback local como protecção degradada, que não é global entre réplicas.
+- T42 continua em curso até validar os gates e decidir a política do rate limit global, métricas/alertas e comportamento de health/readiness.
+
+**Commits**
+- `07a060a` — exigir Redis disponível para rate limit de login em produção.
+- `eebca6f` — testes para falha fechada de login.
+- `a51da43` — isolamento do estado Redis entre testes.
+- Actualização do TODO em curso.
+
+**Validação**
+- Ainda pendente: CI automático da `main` após os commits.
+- Vercel pode continuar a reportar limite diário de deployments; isso não valida nem invalida os testes GitHub Actions.
+- Não foi executado deploy nem alterada a base de dados.
+
+---
+
 ## 2026-11-17 — Governação de segurança do repositório (T39)
 
 **Feito na branch `codex/autonomous-hardening-2026-11`**
