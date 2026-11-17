@@ -202,10 +202,13 @@ jobs:
 
       - name: Arrancar backend e frontend
         run: |
-          (cd backend && npm run start:prod > /tmp/backend.log 2>&1 &)
-          (cd frontend && npm run start > /tmp/frontend.log 2>&1 &)
+          # Iniciar os processos Node diretamente evita shells npm intermédios
+          # que podem deixar processos órfãos a ocupar as portas entre tentativas.
+          (cd backend && PORT=3000 nohup node dist/main > /tmp/backend.log 2>&1 < /dev/null & echo $! > /tmp/backend.pid)
+          (cd frontend && nohup node node_modules/next/dist/bin/next start -p 3001 > /tmp/frontend.log 2>&1 < /dev/null & echo $! > /tmp/frontend.pid)
           echo "à espera do backend (:3000) e frontend (:3001)…"
-          npx --yes wait-on@8 http-get://localhost:3000/api/health http-get://localhost:3001/auth/login --timeout 120000
+          npx --yes wait-on@8 http-get://localhost:3000/api/health/live http-get://localhost:3001/auth/login --timeout 120000
+          echo "backend e frontend disponíveis"
 
       - name: Testes browser (realtime da planta + cabeçalhos)
         working-directory: frontend
