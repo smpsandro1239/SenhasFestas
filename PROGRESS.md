@@ -1,3 +1,40 @@
+## 2026-11-17 — T44: primeira ronda de isolamento multi-evento
+
+**Riscos confirmados**
+- O guard usava a role global quando um pedido não tinha um único `eventId`. Com memberships diferentes, isso podia elevar permissões numa rota agregada.
+- Listagens de pedidos e catálogo usavam a role global do JWT para decidir o alcance, podendo expor pedidos ou produtos de eventos onde a pessoa só tinha role `client`.
+- A consulta de saldo a terceiros também decidia client/staff pela role global.
+- O cancelamento e alteração de estado de pedidos usavam a role global para decidir se o utilizador era cliente ou staff, incluindo a validação de reembolso.
+
+**Correcções directas na main**
+- Adicionado `MembershipService.rolesEfetivas`: em operações com eventos explícitos valida cada membership; em endpoints agregados devolve as roles de todas as memberships. Superadmin mantém a excepção global.
+- `RolesGuard` reconhece `eventId`, `fromEventId`, `toEventId`, `sourceEventId` e `targetEventId`; operações multi-evento exigem a role permitida em todos os eventos envolvidos. Rotas agregadas só passam se todas as event-roles satisfizerem a política.
+- Listagens agregadas de pedidos usam a união dos pedidos próprios nos eventos em que a pessoa é `client` e dos pedidos dos eventos em que é staff, sem misturar os âmbitos.
+- Cancelamento e transição de estado dos pedidos passam a usar a role da membership do evento do pedido; a role é revalidada dentro da transacção.
+- O consumo de saldo na criação do pedido usa a event-role obtida para o evento, não a role global.
+- Consultas de saldo a terceiros exigem evento explícito, membership e `FINANCE_ROLES` nesse evento; sem evento só é permitido consultar os próprios saldos.
+- Catálogo e categorias passam a filtrar pelos eventos onde o utilizador tem membership; `includeInactive` é decidido pela event-role ou por todas as roles no âmbito agregado.
+
+**Testes acrescentados/actualizados**
+- RolesGuard: memberships mistas, agregação segura, importação entre eventos e transferência origem/destino.
+- OrderService: pedidos de clientes e staff em eventos diferentes; bloqueio de cancelamento de pedidos de terceiros quando a event-role é `client`, apesar de role global `organizer`.
+- BalanceController: consultas de saldo com event-role diferente da role global e bloqueio de consulta a terceiros sem `eventId`.
+- CatalogService/Controller: filtros por eventos, categorias e acesso a inactivos pela event-role.
+
+**Commits principais**
+- `90c26fe`, `740b442`, `99840b6` — roles agregadas e guard multi-evento.
+- `7d845b3`, `aef4003`, `44a149d`, `824f8d1` — pedidos e consumo de saldo por event-role.
+- `cecc518`, `35e3d9e`, `a62fe05` — acesso a saldos.
+- `d2f9312`, `93c7a1f`, `1aa7bfd`, `6a2e929` — catálogo e categorias por evento.
+- Este registo e a actualização do TODO ficam no commit seguinte.
+
+**Validação**
+- Código e testes estão na `main`; a CI desta ronda ainda não terminou.
+- T44 permanece em curso: faltam revisão de todos os endpoints com IDs directos, WebSocket/gateways, operações administrativas restantes e testes de revogação concorrente de memberships.
+- Sem deploy, migrações ou alterações à base de dados.
+
+---
+
 ## 2026-11-17 — Validação concluída da auditoria bilateral
 
 **CI no commit `674651b`**
