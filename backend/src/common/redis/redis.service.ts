@@ -88,6 +88,14 @@ export class RedisService implements OnModuleDestroy {
     return (await this.client.eval(script, 1, key, ttlSeconds)) as number;
   }
 
+  /** Decremento estrito para libertar reservas de rate limit após logins válidos. */
+  async decrementStrict(key: string): Promise<number> {
+    if (!this.client) {
+      throw new Error('Redis não configurado');
+    }
+    return await this.client.decr(key);
+  }
+
   async incrementWithTtl(key: string, ttlSeconds: number): Promise<number | null> {
     try {
       return await this.incrementWithTtlStrict(key, ttlSeconds);
