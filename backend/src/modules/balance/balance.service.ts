@@ -197,7 +197,6 @@ export class BalanceService {
             createdById: actor.id,
             idempotencyKey,
             type: MovementType.CANCEL,
-            reversedOfId: movementId,
           },
           relations: { balance: true },
           withDeleted: true,
