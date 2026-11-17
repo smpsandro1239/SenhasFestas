@@ -90,4 +90,35 @@ describe('SecurityMiddleware — CSRF para sessões cookie', () => {
       else process.env.FRONTEND_URL = anterior;
     }
   });
+
+  it('não confia em X-Forwarded-Host para contornar a allowlist CSRF', () => {
+    const anterior = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.example.com';
+    try {
+      const middleware = new SecurityMiddleware();
+      const req = {
+        ...criarRequest('https://evil.example'),
+        headers: {
+          cookie: 'sf_token=abc',
+          origin: 'https://evil.example',
+          'x-forwarded-host': 'evil.example',
+          'x-forwarded-proto': 'https',
+        },
+        get: (name: string) => ({
+          'x-forwarded-host': 'evil.example',
+          'x-forwarded-proto': 'https',
+        } as Record<string, string>)[name],
+      } as any;
+      const res = criarResponse();
+      const next = vi.fn();
+
+      middleware.use(req, res, next);
+
+      expect(res.statusCode).toBe(403);
+      expect(next).not.toHaveBeenCalled();
+    } finally {
+      if (anterior === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = anterior;
+    }
+  });
 });
