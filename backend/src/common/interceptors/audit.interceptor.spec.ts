@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { of, lastValueFrom } from 'rxjs';
+import { of, lastValueFrom, throwError } from 'rxjs';
 import {
   AuditInterceptor,
   definirAuditBefore,
@@ -243,7 +243,7 @@ describe('AuditInterceptor — before/after', () => {
     const contexto = fazerContexto(req);
     const observable = interceptor.intercept(
       contexto,
-      { handle: () => { throw erro; } } as any,
+      { handle: () => throwError(() => erro) } as any,
     );
 
     await expect(lastValueFrom(observable)).rejects.toBe(erro);
