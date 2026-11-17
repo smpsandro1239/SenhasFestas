@@ -41,31 +41,43 @@ export class CatalogController {
     },
     @Request() req: any,
   ) {
-    if (req.user.role === 'client' && !query.eventId) {
-      return { items: [], total: 0, page: query.page, limit: query.limit };
+    let eventIds: string[] | undefined;
+    let roles: string[];
+    if (query.eventId) {
+      if (req.user.role === 'superadmin') {
+        roles = ['superadmin'];
+      } else {
+        await this.membershipService.assertMember(req.user, query.eventId);
+        roles = [await this.membershipService.roleEfetiva(req.user, query.eventId)];
+      }
+    } else if (req.user.role === 'superadmin') {
+      roles = ['superadmin'];
+    } else {
+      eventIds = (await this.membershipService.eventIdsFor(req.user)) ?? [];
+      roles = await this.membershipService.rolesEfetivas(req.user, eventIds);
     }
-    if (query.eventId && req.user.role !== 'superadmin') {
-      await this.membershipService.assertMember(req.user, query.eventId);
-    }
+
     // Query strings são sempre string: testar a truthiness de 'false' daria
-    // true e abriria os inativos a toda a gente.
+    // true e abriria os inativos a toda a gente. A role é a do evento (ou,
+    // numa listagem agregada, todas as event-roles), nunca a role global.
     const pediuInativos = query.includeInactive === 'true';
-    // Só quem tem POST/PATCH/DELETE em /products é que pode desativar um
-    // produto, logo só esses veem os inativos. Um cashier que peça
-    // includeInactive=true continua a ver só os ativos.
-    const includeInactive = pediuInativos && MANAGEMENT_ROLES.includes(req.user.role);
+    const includeInactive =
+      pediuInativos && roles.length > 0 && roles.every((role) => MANAGEMENT_ROLES.includes(role));
     return this.catalogService.findAll(query.eventId, query.page, query.limit, {
       q: query.q,
       categoryId: query.categoryId,
       availability: query.availability,
       includeInactive,
-    });
+    }, eventIds);
   }
 
   @Get('categories')
   @Roles(...MANAGEMENT_ROLES)
-  async findCategories() {
-    return this.catalogService.findCategories();
+  async findCategories(@Request() req: any) {
+    const eventIds = req.user.role === 'superadmin'
+      ? undefined
+      : (await this.membershipService.eventIdsFor(req.user)) ?? [];
+    return this.catalogService.findCategories(eventIds);
   }
 
   @Get(':id')
