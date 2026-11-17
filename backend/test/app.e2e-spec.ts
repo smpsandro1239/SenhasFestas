@@ -6,6 +6,7 @@ import * as bcrypt from 'bcryptjs';
 import { criarAplicacao } from '../src/app.setup';
 import { UserEntity } from '../src/entities';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { configuracaoBaseDadosE2e } from './e2e-database-safety';
 
 const PROBE_TIMEOUT_MS = 5000;
 
@@ -24,23 +25,22 @@ function proximoAccessCode(): string {
 }
 
 async function verificarBaseDadosDisponivel(): Promise<void> {
-  const url = process.env.DATABASE_URL;
-  const client = new Client({
-    connectionString: url || undefined,
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432', 10),
-    user: process.env.DB_USERNAME || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    database: process.env.DB_NAME || 'senhasfestas',
-    ssl: url ? { rejectUnauthorized: false } : undefined,
-  });
-  await Promise.race([
-    client.connect(),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`timeout após ${PROBE_TIMEOUT_MS}ms`)), PROBE_TIMEOUT_MS),
-    ),
-  ]);
-  await client.end();
+  const client = new Client(configuracaoBaseDadosE2e());
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      client.connect(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`timeout após ${PROBE_TIMEOUT_MS}ms`)),
+          PROBE_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    await client.end().catch(() => undefined);
+  }
 }
 
 describe('App e2e (Postgres + Redis)', () => {
