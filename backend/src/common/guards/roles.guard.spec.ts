@@ -187,6 +187,60 @@ describe('RolesGuard — 2A: event-role como role efetiva dentro do evento', () 
     await expect(guardOrg.canActivate(contextOrg as any)).resolves.toBe(true);
   });
 
+  it('6. rota agregada não usa organizer global para elevar uma membership bar', async () => {
+    adicionarMembro('u1', 'evtX', 'bar');
+    adicionarMembro('u1', 'evtY', 'organizer');
+    const { guard, context } = criarContexto(
+      { id: 'u1', role: 'organizer' },
+      FINANCE_ROLES,
+      { route: { path: '/reports/ordens' } },
+    );
+
+    await expect(guard.canActivate(context as any)).rejects.toThrow(ForbiddenException);
+  });
+
+  it('7. rota agregada permite roles diferentes quando todas pertencem ao conjunto exigido', async () => {
+    adicionarMembro('u1', 'evtX', 'cashier');
+    adicionarMembro('u1', 'evtY', 'treasurer');
+    const { guard, context } = criarContexto(
+      { id: 'u1', role: 'client' },
+      FINANCE_ROLES,
+      { route: { path: '/reports/ordens' } },
+    );
+
+    await expect(guard.canActivate(context as any)).resolves.toBe(true);
+  });
+
+  it('8. importação entre eventos exige MANAGEMENT_ROLES nos dois eventos', async () => {
+    adicionarMembro('u1', 'evtOrigem', 'organizer');
+    adicionarMembro('u1', 'evtDestino', 'cashier');
+    const { guard, context } = criarContexto(
+      { id: 'u1', role: 'organizer' },
+      MANAGEMENT_ROLES,
+      {
+        body: { sourceEventId: 'evtOrigem', targetEventId: 'evtDestino' },
+        route: { path: '/products/import' },
+      },
+    );
+
+    await expect(guard.canActivate(context as any)).rejects.toThrow(ForbiddenException);
+  });
+
+  it('9. transferência exige FINANCE_ROLES na origem e no destino', async () => {
+    adicionarMembro('u1', 'evtOrigem', 'cashier');
+    adicionarMembro('u1', 'evtDestino', 'kitchen');
+    const { guard, context } = criarContexto(
+      { id: 'u1', role: 'organizer' },
+      FINANCE_ROLES,
+      {
+        body: { fromEventId: 'evtOrigem', toEventId: 'evtDestino' },
+        route: { path: '/balances/:userId/transfer' },
+      },
+    );
+
+    await expect(guard.canActivate(context as any)).rejects.toThrow(ForbiddenException);
+  });
+
   it('sem eventId e sem memberships → usa a role global (comportamento atual)', async () => {
     const { guard, context } = criarContexto(
       { id: 'u1', role: 'client' },
