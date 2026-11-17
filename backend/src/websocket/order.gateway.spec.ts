@@ -51,7 +51,7 @@ function criarGateway(overrides: {
     ...overrides.config,
   };
   const jwtService = {
-    verify: vi.fn(),
+    verify: vi.fn().mockImplementation(() => ({ sub: 'u1', role: 'organizer', exp: Math.floor(Date.now() / 1000) + 900 })),
     ...overrides.jwt,
   };
   const eventUserRepository = {
@@ -82,6 +82,7 @@ function socketFalso(user?: { id: string; role: string }) {
     emit: vi.fn(),
     join: vi.fn(),
     disconnect: vi.fn(),
+    handshake: { auth: { token: 'bom' }, headers: {} },
   } as any;
 }
 
@@ -261,11 +262,13 @@ describe('OrderGateway — handleJoinEventPlanta', () => {
   it('rejeita não autenticado', async () => {
     const { gateway } = criarGateway();
     const client = socketFalso();
+    client.handshake = { auth: {}, headers: {} };
 
-    await gateway.handleJoinEventPlanta(client, 'evt1');
+    const resultado = await gateway.handleJoinEventPlanta(client, 'evt1');
 
     expect(client.emit).toHaveBeenCalledWith('error', { message: 'Não autenticado' });
     expect(client.join).not.toHaveBeenCalled();
+    expect(resultado).toEqual({ ok: false, message: 'Não autenticado' });
   });
 
   it('rejeita quem não pertence ao evento', async () => {
@@ -299,9 +302,11 @@ describe('OrderGateway — handleJoinEventPlanta', () => {
     const { gateway } = criarGateway({
       membership: { roleEfetiva: vi.fn().mockResolvedValue('organizer') },
     });
-    const client = socketFalso({ id: 'u1', role: 'organizer' });
+    // Simula a mensagem a chegar antes de handleConnection() terminar.
+    const client = socketFalso();
     const ack = await gateway.handleJoinEventPlanta(client, 'evt1');
 
+    expect(client.data.user).toEqual({ id: 'u1', role: 'organizer' });
     expect(client.join).toHaveBeenCalledWith('event:evt1:planta');
     expect(ack).toEqual({ ok: true });
     expect(client.emit).not.toHaveBeenCalled();
