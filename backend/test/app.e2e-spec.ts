@@ -160,6 +160,7 @@ describe('App e2e (Postgres + Redis)', () => {
       .set('Content-Type', 'application/json')
       .expect(401);
   });
+
   it('sugestões por coocorrência só contam artigos de pedidos com o produto alvo', async () => {
     const dataSource = app.get(DataSource);
     const products = dataSource.getRepository(ProductEntity);
@@ -229,5 +230,4 @@ describe('App e2e (Postgres + Redis)', () => {
       candidatoB.id,
     ]);
   });
-
 });
