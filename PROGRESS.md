@@ -1,3 +1,25 @@
+## 2026-11-17 — T42: correcção após falha real de teste
+
+**Falha detectada pela CI**
+- A primeira execução completa do backend encontrou um teste em que, após uma falha Redis em modo desenvolvimento, a contagem local ainda podia bloquear o pedido quando o processo passava para `NODE_ENV=production`.
+- A causa estava na verificação do limiar local, executada antes da decisão de usar Redis, tanto no middleware geral como no de login.
+
+**Correcção aplicada directamente na `main`**
+- As verificações de limiar em memória só são aplicadas fora de produção.
+- Em produção, os pedidos protegidos dependem exclusivamente do Redis; se não estiver configurado ou falhar, respondem 503.
+- O teste de regressão já existente cobre a transição de ambiente e exige que o Redis seja consultado.
+
+**Commit**
+- `521c714` — ignorar contadores locais no rate limit de produção.
+
+**Validação**
+- CI no commit anterior: backend lint passou, mas os testes unitários falharam exactamente no cenário descrito; build e E2E foram saltados por dependência desse job.
+- Documentação, frontend lint/typecheck/Vitest e CodeQL passaram; o build frontend ainda estava em execução.
+- A nova execução da CI foi iniciada com a correcção; aguardar os resultados antes de fechar T42.
+- Não foi feito deploy.
+
+---
+
 ## 2026-11-17 — T43: completar identificação e metadados das operações de saldo
 
 **Feito directamente na `main`**
