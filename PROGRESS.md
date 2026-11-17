@@ -1,3 +1,30 @@
+## 2026-11-17 — T43: enriquecer auditoria de cancelamentos de pedidos
+
+**Feito directamente na `main`**
+- Criado snapshot financeiro reutilizável do pedido com estado, total, saldo utilizado, método de pagamento e ID do saldo associado.
+- Cancelamento directo e transição para `cancelled` registam agora o snapshot anterior completo, o evento e metadados sobre a transição, processamento de reposição de stock e montante de reembolso previsto.
+- Os valores monetários são normalizados com `centavos()`.
+- Testes unitários de `OrderService` actualizados para provar o conteúdo dos snapshots.
+
+**Âmbito ainda por rever**
+- Confirmar os snapshots de carregamento, desconto, estorno parcial/total, transferência, extensão/arquivo de saldo e abertura/fecho de caixa.
+- Rever operações administrativas de evento, catálogo, utilizadores e memberships.
+- Confirmar actor, eventId e entityId em cada rota e garantir que falhas na persistência da auditoria são observáveis sem expor dados sensíveis.
+- Avaliar a necessidade de outbox transaccional para garantir audit trail financeiro mesmo em falha de persistência; não alterar sem desenhar e testar a atomicidade.
+
+**Commits**
+- `37c4b7b` — incluir impacto financeiro no cancelamento de pedidos.
+- `f6c1f00` — clarificar metadados de reposição de stock.
+- `c221718` — testes dos snapshots financeiros.
+- `8265f6f` — completar fixture do teste de cancelamento.
+
+**Validação**
+- Alterações e testes estão na `main`; execução automática ainda não confirmada.
+- Os estados dos checks visíveis continuam a reportar apenas falhas Vercel por limite diário de deployments; não há evidência de execução GitHub Actions para estes commits.
+- Não foi feito deploy nem alteração à base de dados.
+
+---
+
 ## 2026-11-17 — T42: rate limiting fail-closed em produção e health checks
 
 **Feito directamente na `main`**
