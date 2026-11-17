@@ -596,9 +596,6 @@ describe('OrderService — cancelamento repõe stock (B1c)', () => {
     await expect(svc.cancelOrder('o1', { id: 'u1', role: 'cashier' }))
       .rejects.toThrow('Não pertence a este evento');
     expect(manager.save).not.toHaveBeenCalled();
-    expect(balanceRepository.findOne).toHaveBeenCalledWith(expect.objectContaining({ withDeleted: true }));
-    const consultaSaldo = manager.findOne.mock.calls.find((call: any[]) => call[0] === BalanceEntity);
-    expect(consultaSaldo?.[1]).toEqual(expect.objectContaining({ withDeleted: true }));
   });
 
   it('revalida a titularidade do saldo do cliente dentro da transação', async () => {
@@ -633,6 +630,9 @@ describe('OrderService — cancelamento repõe stock (B1c)', () => {
     await expect(svc.cancelOrder('o1', { id: 'u1', role: 'client' }))
       .rejects.toThrow('Não pode cancelar o pedido de outro utilizador');
     expect(manager.save).not.toHaveBeenCalled();
+    expect(balanceRepository.findOne).toHaveBeenCalledWith(expect.objectContaining({ withDeleted: true }));
+    const consultaSaldo = manager.findOne.mock.calls.find((call: any[]) => call[0] === BalanceEntity);
+    expect(consultaSaldo?.[1]).toEqual(expect.objectContaining({ withDeleted: true }));
   });
 
   it('não permite cancelar um pedido que já chegou a pronto', async () => {
