@@ -19,6 +19,21 @@ export async function reembolsarSaldoEmTransacao(
   if (!temSaldoParaReembolsar(order)) {
     return;
   }
+
+  // O estado terminal da encomenda já serializa os caminhos de cancelamento.
+  // Este lock adicional torna o helper idempotente mesmo que outro fluxo passe
+  // a chamar o reembolso sem adquirir primeiro o lock da encomenda.
+  await manager.query(
+    'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+    ['order-refund', order.id],
+  );
+  const reembolsoExistente = await manager.findOne(BalanceMovementEntity, {
+    where: { orderId: order.id, type: MovementType.REFUND },
+  });
+  if (reembolsoExistente) {
+    return;
+  }
+
   const balance = await manager.findOne(BalanceEntity, {
     where: { id: order.balanceId },
     lock: { mode: 'pessimistic_write' },
