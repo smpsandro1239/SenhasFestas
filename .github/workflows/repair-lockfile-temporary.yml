@@ -1,0 +1,35 @@
+name: Temporary lockfile repair
+
+on:
+  push:
+    branches:
+      - fix/ci-lockfile-dependency-integrity
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lockfile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Regenerar lockfile a partir dos manifests
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund --prefer-online
+      - name: Guardar lockfile corrigido na branch
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "O lockfile já está sincronizado."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "fix(deps): regenerar lockfile consistente"
+          git push origin "HEAD:${{ github.ref_name }}"
