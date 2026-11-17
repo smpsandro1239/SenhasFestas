@@ -41,7 +41,7 @@ describe('Input — acessibilidade', () => {
     const hint = screen.getByText('Usa o código recebido no talão.');
 
     expect(field.getAttribute('aria-describedby')).toBe(hint.id);
-    expect(field.getAttribute('aria-invalid')).toBe('false');
+    expect(field.getAttribute('aria-invalid')).toBeNull();
   });
 
   it('preserva aria-describedby fornecido pelo consumidor', () => {
