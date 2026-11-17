@@ -42,6 +42,9 @@ const CAMPOS_SENSIVEIS = new Set([
   'nif',
   'taxid',
   'address',
+  'erro',
+  'error',
+  'stack',
 ]);
 
 export function snapshot(value: unknown, profundidade = 4): unknown {

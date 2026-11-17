@@ -11,6 +11,10 @@ const mockRepository = {
   update: vi.fn(),
 };
 
+const mockDataSource = {
+  transaction: vi.fn(async (callback: any) => callback({ getRepository: () => mockRepository })),
+};
+
 const mockJwtService = {
   sign: vi.fn().mockReturnValue('signed-token'),
 };
@@ -31,6 +35,7 @@ describe('AuthService', () => {
       mockRepository as any,
       mockJwtService as any,
       mockEventService as any,
+      mockDataSource as any,
     );
   });
 
@@ -209,7 +214,7 @@ describe('AuthService', () => {
       expect(result.user).not.toHaveProperty('password');
     });
 
-    it('returns Username when presented an already-used token with no successor', async () => {
+    it('revoga todas as sessões quando um refresh token usado é reutilizado', async () => {
       const usedToken = {
         id: 'rt1',
         userId: 'u1',
@@ -219,18 +224,19 @@ describe('AuthService', () => {
         isUsed: true,
       };
       mockRepository.findOne.mockResolvedValue(usedToken);
-      let calls = 0;
-      mockRepository.findOne.mockImplementation(() => {
-        calls += 1;
-        if (calls === 1) return usedToken;
-        return null;
-      });
+      mockRepository.update.mockResolvedValue({ affected: 2 });
 
-      await expect(service.refresh('raw-token')).rejects.toThrow(UnauthorizedException);
+      await expect(service.refresh('raw-token')).rejects.toThrow(/reutilizado/);
+
+      expect(mockRepository.update).toHaveBeenCalledWith(
+        { userId: 'u1', revokedAt: IsNull() },
+        { revokedAt: expect.any(Date), isUsed: true },
+      );
+      expect(mockRepository.save).not.toHaveBeenCalled();
     });
 
-    it('follows the rotation chain when the presented token was already replaced', async () => {
-      const usedToken = {
+    it('não permite que um token antigo avance para um sucessor ativo', async () => {
+      const oldToken = {
         id: 'rt1',
         userId: 'u1',
         tokenHash: 'old-hash',
@@ -238,34 +244,16 @@ describe('AuthService', () => {
         revokedAt: new Date(),
         isUsed: true,
       };
-      const successor = {
-        id: 'rt2',
-        userId: 'u1',
-        tokenHash: 'new-hash',
-        expiresAt: new Date(Date.now() + 60_000),
-        revokedAt: undefined,
-        isUsed: false,
-        replacedByTokenId: 'rt1',
-      };
+      mockRepository.findOne.mockResolvedValue(oldToken);
       mockRepository.update.mockResolvedValue({ affected: 1 });
-      mockRepository.create.mockImplementation((data: any) => data);
-      mockRepository.save.mockImplementation(async (data: any) => ({ id: 'rt3', ...data }));
-      let calls = 0;
-      mockRepository.findOne.mockImplementation(() => {
-        calls += 1;
-        if (calls === 1) return usedToken;
-        if (calls === 2) return successor;
-        return activeUser;
-      });
 
-      const result = await service.refresh('raw-token');
+      await expect(service.refresh('old-raw-token')).rejects.toThrow(UnauthorizedException);
 
+      expect(mockRepository.findOne).toHaveBeenCalledOnce();
       expect(mockRepository.update).toHaveBeenCalledWith(
-        { id: 'rt2', revokedAt: IsNull(), isUsed: false },
+        { userId: 'u1', revokedAt: IsNull() },
         { revokedAt: expect.any(Date), isUsed: true },
       );
-      expect(result.token).toBe('signed-token');
-      expect(result.user.role).toBe('client');
     });
   });
 
