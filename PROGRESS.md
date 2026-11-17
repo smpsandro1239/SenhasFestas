@@ -9,7 +9,8 @@
 - Actualizado `AUDIT.md`, `PLAN.md` e `TODO.md`.
 
 **Validação**
-- Ainda não há execução CodeQL/Dependabot confirmada. O CI do commit de documentação e os workflows recém-adicionados têm de ser observados no HEAD final.
+- CodeQL, Gitleaks e auditoria de dependências passaram no CI da PR #167.
+- A política de divulgação, permissões mínimas CI e workflow CodeQL estão presentes em `main`; Dependabot está configurado para execução semanal. A primeira execução automática do Dependabot depende do agendamento.
 - Os comandos documentados para E2E mantêm a barreira `E2E_ALLOW_SCHEMA_RESET=true`, host loopback e sufixo de BD descartável.
 
 ---
@@ -79,14 +80,11 @@
 - Os specs `app.e2e-spec.ts` e `rate-limit.e2e-spec.ts` validam o destino antes de inicializar a aplicação; o CI declara explicitamente o opt-in nos jobs E2E.
 - Adicionados testes unitários para indisponibilidade Redis, fallback local e bloqueio de destinos E2E remotos/não descartáveis.
 
-**Gates e limitações**
-- **Ainda não executados**: `tsc`, Vitest, build e lint do backend; gates do frontend.
-- O ambiente desta sessão não tem checkout local nem conectividade de rede para clonar o repositório. As alterações estão na branch remota; a validação completa terá de ser feita pelo CI da pull request antes de qualquer merge.
-- Não foi executado qualquer E2E contra a BD configurada. A nova barreira foi desenhada para bloquear hosts remotos e exige opt-in explícito.
-
-**Pendente**
-- Abrir/validar PR draft e analisar os resultados do CI.
-- Corrigir eventuais falhas de typecheck/testes reveladas pelo CI antes de considerar T36/T37 concluídos.
+**Validação**
+- CI da PR #167 passou: lint, Vitest, build e PostgreSQL E2E do backend; lint, typecheck, Vitest e build do frontend; Browser E2E; documentação; Gitleaks; auditoria de dependências; regressão PWA e CodeQL.
+- O job PostgreSQL E2E executou com Postgres/Redis de serviço e o helper manteve a barreira de host loopback, nome descartável e opt-in.
+- T36/T37 ficam concluídas. Limitação conhecida: o fallback local de rate limit é por processo; Redis continua necessário para limite global em múltiplas réplicas.
+- Sem testes destrutivos contra bases de dados remotas.
 
 ---
 
@@ -103,10 +101,11 @@
 - CI: o job frontend passa a executar `npm test` entre typecheck e build; anteriormente o workflow não executava a suite Vitest do frontend.
 - T38/D19 registado no plano e TODO.
 
-**Gates**
-- O CI do commit anterior reportou 498/500 testes backend: dois testes recém-adicionados falharam por ambiente DB_SSL herdado e por o teste não validar correctamente a transição do fallback local. A branch foi corrigida; o teste SSL passa explicitamente `DB_SSL=false` no cenário local. Foi ainda fechado o caso mais perigoso: URL remota escondida em `.env.development`/`.env`, carregando os mesmos ficheiros antes do bootstrap Nest.
-- O run do commit com o isolamento SSL foi colocado em fila. As alterações PWA e a auditoria geraram novos commits depois desse SHA; o CI do HEAD mais recente ainda tem de ser confirmado.
-- Não foi executado teste browser local nem operação contra BD de produção.
+**Validação**
+- A regressão `service-worker-cache.test.ts` passou no workflow Security; a suite Vitest do frontend passou no job frontend da PR #167.
+- Backend, Browser E2E, Security e CodeQL também passaram na validação do HEAD.
+- Não foi executado teste destrutivo contra BD de produção.
+- A fila offline transaccional continua fora do âmbito e não deve ser anunciada como funcional.
 
 **Decisão**
 - Não implementar ainda fila offline de pedidos/pagamentos: falta idempotência de servidor e reconciliação. Repetir POST de dinheiro/stock sem estas garantias pode duplicar movimentos.
