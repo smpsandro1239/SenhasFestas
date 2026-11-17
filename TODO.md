@@ -51,6 +51,8 @@ mesmo item — daí o prefixo.)
 | `[~]` | T38 o Service Worker podia guardar HTML/RSC autenticado e a UI prometia sincronização offline inexistente | pwa/segurança | alta | D19 | Cache de navegações e RSC removido; cache v5 elimina cache v4 potencialmente privado; cache limitado a assets estáticos; página offline corrigida; teste `service-worker-cache.test.ts`; gates pendentes. Fila offline transaccional continua por implementar e não deve ser anunciada como disponível |
 | `[~]` | Integrar suite Vitest do frontend no GitHub Actions | ci/testes | média | — | Job frontend executa `npm test` depois de lint/typecheck; passa a cobrir também `service-worker-cache.test.ts`; aguarda CI verde |
 
+| `[~]` | T39 governação de segurança do repositório: política de divulgação, Dependabot, CodeQL e permissões CI | segurança/ci/docs | média | D20 | `SECURITY.md`, `.github/dependabot.yml`, `.github/workflows/codeql.yml`, permissões mínimas CI e CONTRIBUTING actualizado; workflows ainda por validar no CI |
+
 Nota (Vercel de 2026-10-21): o push `fedc1fb` disparou os dois deployments da
 integração Vercel (frontend e API) e ambos acabaram `success` — a produção está
 com o código novo **antes** de o `deploy` do CI (que é o backend no VPS) correr.
