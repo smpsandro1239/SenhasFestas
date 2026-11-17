@@ -190,17 +190,32 @@ export class FloorPlanService {
       eventId,
     });
     const construido = this.construirDocumento(dto, atual);
-    linha.documento = construido.documento;
-    linha.version = linha.version + 1;
-    await this.floorPlanRepository.save(linha);
-    this.orderGateway.emitPlantaUpdate(eventId, linha.id, linha.version, 'guardada');
+    const gravou = await this.gravarDocumentoComVersao(
+      eventId,
+      linha.id,
+      dto.version,
+      construido.documento,
+    );
+    if (!gravou) {
+      const estadoAtual = await this.floorPlanRepository.findOne({
+        where: { id: linha.id, event: { id: eventId } },
+      });
+      if (!estadoAtual) throw new NotFoundException('Planta não encontrada');
+      throw this.conflito(
+        lerFloorPlan(estadoAtual.documento),
+        estadoAtual.version,
+        { id: estadoAtual.id, nome: estadoAtual.nome },
+      );
+    }
+    const novaVersao = dto.version + 1;
+    this.orderGateway.emitPlantaUpdate(eventId, linha.id, novaVersao, 'guardada');
     return {
       id: linha.id,
       nome: linha.nome,
       mesas: construido.documento.mesas,
       zonas: construido.documento.zonas,
       ...(construido.dimensoes ? { dimensoes: construido.dimensoes } : {}),
-      version: linha.version,
+      version: novaVersao,
     };
   }
 
@@ -319,18 +334,32 @@ export class FloorPlanService {
         documento: construido.documento,
         version: 1,
       });
-    } else {
-      linha.documento = construido.documento;
-      linha.version = versionAtual + 1;
-    }
-    try {
-      linha = await this.floorPlanRepository.save(linha);
-    } catch (err) {
-      if (ehViolacaoUnica(err)) {
-        const estado = await this.buscarPrincipal(eventId);
-        throw this.conflito(lerFloorPlan(estado?.documento), estado?.version ?? 0);
+      try {
+        linha = await this.floorPlanRepository.save(linha);
+      } catch (err) {
+        if (ehViolacaoUnica(err)) {
+          const estado = await this.buscarPrincipal(eventId);
+          throw this.conflito(lerFloorPlan(estado?.documento), estado?.version ?? 0);
+        }
+        throw err;
       }
-      throw err;
+    } else {
+      const gravou = await this.gravarDocumentoComVersao(
+        eventId,
+        linha.id,
+        versionAtual,
+        construido.documento,
+      );
+      if (!gravou) {
+        const estado = await this.buscarPrincipal(eventId);
+        if (!estado) throw new NotFoundException('Planta não encontrada');
+        throw this.conflito(
+          lerFloorPlan(estado.documento),
+          estado.version,
+          { id: estado.id, nome: estado.nome },
+        );
+      }
+      linha.version = versionAtual + 1;
     }
     this.orderGateway.emitPlantaUpdate(eventId, linha.id, linha.version, 'guardada');
     return {
@@ -339,6 +368,30 @@ export class FloorPlanService {
       ...(construido.dimensoes ? { dimensoes: construido.dimensoes } : {}),
       version: linha.version,
     };
+  }
+
+  private async gravarDocumentoComVersao(
+    eventId: string,
+    plantaId: string,
+    versaoEsperada: number,
+    documento: { mesas: any[]; zonas: ZonaPlantaDoc[]; dimensoes?: DimensoesPlantaDoc },
+  ): Promise<boolean> {
+    // Compare-and-swap na própria base de dados: duas gravações concorrentes
+    // com a mesma versão não podem sobrescrever-se (a leitura prévia, por si só,
+    // não protege contra a corrida entre SELECT e UPDATE).
+    const resultado = await this.floorPlanRepository
+      .createQueryBuilder()
+      .update(FloorPlanEntity)
+      .set({
+        documento,
+        version: () => '"version" + 1',
+      })
+      .where('"id" = :id', { id: plantaId })
+      .andWhere('"eventId" = :eventId', { eventId })
+      .andWhere('"version" = :version', { version: versaoEsperada })
+      .execute();
+
+    return resultado.affected === 1;
   }
 
   private async buscar(
