@@ -69,10 +69,9 @@ function criarGateway(overrides: {
     configService as any,
     redisService as any,
     membershipService as any,
-    eventUserRepository as any,
     userRepository as any,
   );
-  return { gateway, redisService, membershipService, configService, jwtService, eventUserRepository, userRepository };
+  return { gateway, redisService, membershipService, configService, jwtService, userRepository };
 }
 
 function socketFalso(user?: { id: string; role: string }) {
@@ -401,22 +400,43 @@ describe('OrderGateway — wiring subscriberAtivo via Redis', () => {
 
 
 describe('OrderGateway — confirmação de entrada na room de pedidos', () => {
-  it('confirma a room apenas depois de validar a membership e entrar', async () => {
-    const { gateway, eventUserRepository } = criarGateway();
-    eventUserRepository.findOne.mockResolvedValue({ id: 'membership-1' });
+  it('confirma a room apenas depois de validar a event-role staff', async () => {
+    const { gateway, membershipService } = criarGateway({
+      membership: { roleEfetiva: vi.fn().mockResolvedValue('organizer') },
+    });
     const client = socketFalso({ id: 'u1', role: 'organizer' });
     const ack = await gateway.handleJoinEvent(client, 'evt1');
 
+    expect(membershipService.roleEfetiva).toHaveBeenCalledWith(client.data.user, 'evt1');
     expect(client.join).toHaveBeenCalledWith('event:evt1');
     expect(ack).toEqual({ ok: true });
   });
 
   it('devolve erro de confirmação quando a membership não existe', async () => {
-    const { gateway } = criarGateway();
+    const { gateway } = criarGateway({
+      membership: { roleEfetiva: vi.fn().mockRejectedValue(new Error('Não pertence a este evento')) },
+    });
     const client = socketFalso({ id: 'u1', role: 'organizer' });
     const ack = await gateway.handleJoinEvent(client, 'evt1');
 
     expect(client.join).not.toHaveBeenCalled();
     expect(ack).toEqual({ ok: false, message: 'Não pertence a este evento' });
+  });
+
+  it('impede clientes de receber actualizações de todos os pedidos do evento', async () => {
+    const { gateway } = criarGateway({
+      membership: { roleEfetiva: vi.fn().mockResolvedValue('client') },
+    });
+    const client = socketFalso({ id: 'u1', role: 'organizer' });
+    const ack = await gateway.handleJoinEvent(client, 'evt1');
+
+    expect(client.join).not.toHaveBeenCalled();
+    expect(client.emit).toHaveBeenCalledWith('error', {
+      message: 'Sem permissão para actualizações de pedidos deste evento',
+    });
+    expect(ack).toEqual({
+      ok: false,
+      message: 'Sem permissão para actualizações de pedidos deste evento',
+    });
   });
 });
