@@ -13,7 +13,7 @@ mesmo item — daí o prefixo.)
 | Estado | Item | Área | Prioridade | Depende de | Notas / prova |
 |---|---|---|---|---|---|
 | `[x]` | T40 redacção de segredos nos logs de auditoria (`before`/`after`/`details`) | segurança/auditoria | alta | — | PR #163 integrada; JWT/Bearer corrigido. CI backend, frontend, Browser E2E, docs, Security e CodeQL passou na validação da PR #164; deploy Vercel continua limitado por quota diária |
-| `[~]` | T41 serializar arquivo automático de saldos com lock por linha e revalidação transaccional | financeiro/concorrência | alta | — | PR #166: candidatos por ID; `FOR UPDATE` apenas na linha do saldo; revalida prazo/extensão/soft-delete antes de gravar; CI pendente |
+| `[x]` | T41 serializar arquivo automático de saldos com lock por linha e revalidação transaccional | financeiro/concorrência | alta | — | PR #166 integrada (`2e62722`); CI backend unit/build/Postgres E2E, frontend, Browser E2E, docs, Security e CodeQL passou; Vercel bloqueada por quota diária |
 | `[x]` | #11 multi-planta | planta | alta | — | commits `19b0349`…`4b2ee92`; E2E Playwright 9/9; vitest FE 278/278 |
 | `[x]` | #12-backend `plantaUpdated` + fallback Redis | realtime | alta | — | commits `ec1c2eb` + `2d6df0d`; E2E socket.io com Redis parado |
 | `[x]` | T1 contrato `tipo` + room `event:<id>:planta` restrita a `MANAGEMENT_ROLES` | realtime | alta | — | commit `13d0ca4`; boot `:3011` com DI resolvida; vitest 482/482 |
