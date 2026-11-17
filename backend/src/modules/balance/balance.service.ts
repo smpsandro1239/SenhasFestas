@@ -819,6 +819,9 @@ export class BalanceService {
         }
       }
 
+      if (fromEvent.deletedAt) {
+        throw new NotFoundException('Evento de origem não encontrado');
+      }
       const eventoDestinoOperavel = await this.eventService.assertEventOperavelById(dto.toEventId);
 
       // Todas as transferências bloqueiam os saldos pela mesma ordem de evento.
