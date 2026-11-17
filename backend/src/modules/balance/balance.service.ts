@@ -767,7 +767,7 @@ export class BalanceService {
         const anteriorOrigem = await manager.findOne(BalanceMovementEntity, {
           where: {
             createdById: actor.id,
-            idempotencyKey,
+            idempotencyKey: storedIdempotencyKey,
             type: MovementType.CANCEL,
           },
           relations: { balance: true },
@@ -776,7 +776,7 @@ export class BalanceService {
         const anteriorDestino = await manager.findOne(BalanceMovementEntity, {
           where: {
             createdById: actor.id,
-            idempotencyKey,
+            idempotencyKey: storedIdempotencyKey,
             type: MovementType.LOAD,
           },
           relations: { balance: true },
@@ -891,7 +891,7 @@ export class BalanceService {
         amount: montante,
         description: `Transferência de ${fromEvent.name}`,
         createdById: actor?.id,
-        idempotencyKey,
+        idempotencyKey: storedIdempotencyKey,
         requestHash,
       });
       await manager.save(BalanceMovementEntity, movDestino);
