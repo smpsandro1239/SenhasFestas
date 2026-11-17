@@ -93,7 +93,7 @@ describe('usePlantaSocket (contrato do canal de planta)', () => {
     render(<SocketHost eventId="evt1" onPlantaUpdated={vi.fn()} />);
     disparar(socket, 'reconnect');
 
-    expect(socket.emit).toHaveBeenCalledWith('joinEventPlanta', 'evt1');
+    expect(socket.emit).toHaveBeenCalledWith('joinEventPlanta', 'evt1', expect.any(Function));
   });
 
   it('reemite plantaUpdated válido para o callback', () => {
