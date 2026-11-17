@@ -17,6 +17,12 @@
 - Ao entrar em salas de evento e planta, o estado ativo e a role são novamente consultados na base de dados.
 - Foram acrescentados testes para role Superadmin antiga no JWT e contas desativadas.
 
+### Sessões e refresh tokens
+- A rotação de refresh tokens é executada numa transação PostgreSQL com lock pessimista sobre o token apresentado.
+- Cada refresh token é de utilização única; não se segue uma cadeia de tokens antigos.
+- A reutilização de um token revogado provoca a revogação de todas as sessões ainda ativas do utilizador.
+- A API devolve um erro de autenticação após detetar replay, obrigando a novo login.
+
 ### Passwords
 - O registo de novas contas exige pelo menos 12 caracteres.
 - O login mantém temporariamente o mínimo de 6 caracteres para não bloquear contas existentes. A migração das contas antigas deve ser acompanhada por um processo de alteração de password e MFA para perfis privilegiados.
@@ -35,6 +41,10 @@
 - `DB_SSL=true` e `sslmode=require` passam a exigir validação do certificado (`rejectUnauthorized: true`).
 - É possível fornecer uma CA privada através de `DB_SSL_CA` em formato PEM.
 - Foram acrescentados testes à configuração.
+
+### CSRF e dados pessoais nos logs
+- Pedidos mutáveis autenticados por cookie exigem um cabeçalho `Origin` correspondente à origem do frontend ou à origem efetiva do pedido.
+- Snapshots de auditoria removem credenciais, tokens, email, telefone, códigos de acesso e outros identificadores pessoais, independentemente da capitalização da chave.
 
 ### CI
 - Foi criada uma pipeline de segurança com auditoria de dependências de produção (`npm audit --omit=dev --audit-level=high`).
@@ -68,6 +78,7 @@ A pipeline GitHub Actions é a fonte de validação integrada. Uma alteração s
 1. A auditoria genérica via interceptor continua assíncrona e não é atomicamente ligada às transações financeiras. O próximo passo é introduzir uma outbox transacional nas operações de saldo, estornos, pedidos e fecho de caixa.
 2. A política de passwords de contas antigas ainda não é migrada. Manter o login compatível é intencional; privilegiar MFA e rotação de passwords para contas staff.
 3. A CSP ainda necessita de uma implementação nonce compatível com a renderização Next.js; remover simplesmente `unsafe-inline` pode quebrar a hidratação.
+4. A rotação estrita pode terminar sessões em clientes com pedidos de refresh concorrentes; o frontend deve manter a renovação single-flight por separador e, no futuro, coordená-la entre separadores com Web Locks ou BroadcastChannel.
 4. É necessária uma revisão integral de todos os controllers, DTOs, serviços e migrations, seguida de testes de IDOR, concorrência e isolamento multi-evento.
 5. Não foram realizados testes de penetração nem auditoria de produção.
 
