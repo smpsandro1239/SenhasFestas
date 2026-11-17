@@ -28,6 +28,12 @@ function chaveSaldoArmazenada(operation: 'reverse-load' | 'transfer', key: strin
     .digest('hex');
 }
 
+function chaveSaldoArmazenada(operation: 'reverse-load' | 'transfer', key: string): string {
+  return createHash('sha256')
+    .update(`senhasfestas:${operation}:${key}`)
+    .digest('hex');
+}
+
 function proximoAccessCode(): string {
   contadorAccessCode += 1;
   return String(contadorAccessCode);
