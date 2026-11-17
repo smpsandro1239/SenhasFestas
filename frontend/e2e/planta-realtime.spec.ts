@@ -88,9 +88,11 @@ async function entrar(
   await page.fill('input[type="email"]', email);
   await page.fill('input[type="password"]', password);
   await page.getByRole('button', { name: /Entrar/i }).click();
-  await page.waitForURL((u) => !u.pathname.startsWith('/auth/login'), { timeout: 20_000 });
-
-  await page.goto(`${baseURL}/admin`, { waitUntil: 'networkidle' });
+  // O login já redirecciona por SPA para /admin. Não fazer page.goto()
+  // aqui: isso reinicia o estado em memória do access token e transforma
+  // este teste de realtime num teste implícito de refresh-cookie.
+  await page.waitForURL((u) => u.pathname === '/admin', { timeout: 20_000 });
+  await expect(page.locator('#tab-planta')).toBeVisible({ timeout: 10_000 });
   await page.click('#tab-planta');
   await page.waitForTimeout(500);
   const selects = page.locator('select');
