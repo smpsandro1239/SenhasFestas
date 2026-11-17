@@ -54,6 +54,8 @@ describe('CronController — gating do CRON_SECRET (partilhado)', () => {
 
     await expect(controller.cleanupTokens('Bearer errado')).rejects.toThrow(ForbiddenException);
     await expect(controller.cleanupTokens(undefined, 'errado')).rejects.toThrow(ForbiddenException);
+    await expect(controller.cleanupTokens('Bearer curto')).rejects.toThrow(ForbiddenException);
+    await expect(controller.cleanupTokens('Bearer segredo-muito-mais-longo-que-o-esperado')).rejects.toThrow(ForbiddenException);
   });
 
   it('aceita Authorization: Bearer <secret> (formato do Vercel)', async () => {
