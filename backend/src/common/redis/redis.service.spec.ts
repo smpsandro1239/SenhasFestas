@@ -41,6 +41,31 @@ describe('RedisService — incrementWithTtl (A3: INCR+EXPIRE atómico)', () => {
     );
   });
 
+  it('liberta reservas com DECR e apaga atomicamente o contador quando chega a zero', async () => {
+    client.eval.mockResolvedValue(0);
+
+    const result = await service.releaseCounterReservationStrict('rl:login:x');
+
+    expect(result).toBe(0);
+    expect(client.eval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('DECR'"),
+      1,
+      'rl:login:x',
+    );
+    expect(client.eval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('DEL'"),
+      1,
+      'rl:login:x',
+    );
+  });
+
+  it('o release estrito propaga indisponibilidade Redis', async () => {
+    const disabled = new RedisService(null);
+
+    await expect(disabled.releaseCounterReservationStrict('rl:login:x'))
+      .rejects.toThrow('Redis não configurado');
+  });
+
   it('devolve null quando o cliente está indisponível no método tolerante', async () => {
     const disabled = new RedisService(null);
 

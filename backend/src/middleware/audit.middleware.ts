@@ -37,57 +37,61 @@ export class RateLimitMiddleware implements NestMiddleware {
 
   constructor(private readonly redisService: RedisService) {}
 
-  private verificarLimiteLocal(ip: string): boolean {
+  private obterPedidosLocais(ip: string): number[] {
     const recentes = nunca(this.local.get(ip) || [], this.windowMs, Date.now());
-    if (recentes.length > 0) {
-      this.local.set(ip, recentes);
-    } else {
-      this.local.delete(ip);
-    }
-    return recentes.length >= this.maxRequests;
+    if (recentes.length > 0) this.local.set(ip, recentes);
+    else this.local.delete(ip);
+    return recentes;
   }
 
-  private registarPedidoLocal(ip: string): void {
-    const recentes = nunca(this.local.get(ip) || [], this.windowMs, Date.now());
+  private reservarPedidoLocal(ip: string): boolean {
+    // Reavaliar o contador no momento da reserva: várias chamadas podem ter
+    // aguardado Redis em paralelo e chegar aqui com uma leitura inicial obsoleta.
+    const recentes = this.obterPedidosLocais(ip);
+    if (recentes.length >= this.maxRequests) return false;
+
     recentes.push(Date.now());
     this.local.set(ip, recentes);
-
-    const timer = setTimeout(() => {
-      const atualizadas = nunca(this.local.get(ip) || [], this.windowMs, Date.now());
-      if (atualizadas.length > 0) {
-        this.local.set(ip, atualizadas);
-      } else {
-        this.local.delete(ip);
-      }
-    }, this.windowMs);
+    const timer = setTimeout(() => this.obterPedidosLocais(ip), this.windowMs);
     timer.unref?.();
+    return true;
+  }
+
+  private responderLimite(res: Response): void {
+    res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+      statusCode: HttpStatus.TOO_MANY_REQUESTS,
+      message: 'Muitas requisições. Tente novamente mais tarde.',
+    });
   }
 
   async use(req: Request, res: Response, next: NextFunction) {
     const ip = req.ip || 'unknown';
+    const locais = this.obterPedidosLocais(ip);
 
-    // Contagens locais feitas durante uma falha Redis mantêm-se activas
-    // durante toda a janela, mesmo quando o Redis recupera entretanto.
-    if (this.verificarLimiteLocal(ip)) {
-      res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-        statusCode: HttpStatus.TOO_MANY_REQUESTS,
-        message: 'Muitas requisições. Tente novamente mais tarde.',
-      });
+    if (locais.length >= this.maxRequests) {
+      this.responderLimite(res);
+      return;
+    }
+
+    // Depois de um fallback, a memória continua a ser a fonte única até
+    // terminar a janela. Não somar uma nova janela Redis ao orçamento local.
+    if (locais.length > 0 || !this.redisService.isEnabled) {
+      if (!this.reservarPedidoLocal(ip)) {
+        this.responderLimite(res);
+        return;
+      }
+      next();
       return;
     }
 
     if (this.redisService.isEnabled) {
-      const key = `${RL_IP_PREFIX}${ip}`;
       try {
         const count = await this.redisService.incrementWithTtlStrict(
-          key,
+          `${RL_IP_PREFIX}${ip}`,
           Math.ceil(this.windowMs / 1000),
         );
         if (count > this.maxRequests) {
-          res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-            statusCode: HttpStatus.TOO_MANY_REQUESTS,
-            message: 'Muitas requisições. Tente novamente mais tarde.',
-          });
+          this.responderLimite(res);
           return;
         }
         next();
@@ -97,7 +101,10 @@ export class RateLimitMiddleware implements NestMiddleware {
       }
     }
 
-    this.registarPedidoLocal(ip);
+    if (!this.reservarPedidoLocal(ip)) {
+      this.responderLimite(res);
+      return;
+    }
     next();
   }
 }
@@ -117,87 +124,116 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
     return `${ip}:${emailHash}`;
   }
 
-  private verificarLimiteLocal(chave: string): boolean {
+  private obterFalhasLocais(chave: string): number[] {
     const recentes = nunca(this.local.get(chave) || [], this.windowMs, Date.now());
     if (recentes.length > 0) {
       this.local.set(chave, recentes);
     } else {
       this.local.delete(chave);
     }
-    return recentes.length >= this.maxAttempts;
+    return recentes;
   }
 
-  private registarFalhaLocal(chave: string): void {
-    const falhas = nunca(this.local.get(chave) || [], this.windowMs, Date.now());
-    falhas.push(Date.now());
+  private reservarFalhaLocal(chave: string): number | null {
+    // A reserva local também tem de ser atómica ao nível do event loop.
+    // Não reutilizar o tamanho calculado antes de um await ao Redis.
+    const falhas = this.obterFalhasLocais(chave);
+    if (falhas.length >= this.maxAttempts) return null;
+
+    const timestamp = Date.now();
+    falhas.push(timestamp);
     this.local.set(chave, falhas);
-
-    const timer = setTimeout(() => {
-      const atualizadas = nunca(this.local.get(chave) || [], this.windowMs, Date.now());
-      if (atualizadas.length > 0) {
-        this.local.set(chave, atualizadas);
-      } else {
-        this.local.delete(chave);
-      }
-    }, this.windowMs);
+    const timer = setTimeout(() => this.obterFalhasLocais(chave), this.windowMs);
     timer.unref?.();
+    return timestamp;
   }
 
-  private async registarFalhaRedis(chave: string): Promise<void> {
-    try {
-      await this.redisService.incrementWithTtlStrict(
-        `${RL_LOGIN_PREFIX}${chave}`,
-        Math.ceil(this.windowMs / 1000),
-      );
-    } catch (error) {
-      Logger.warn(`Falha ao registar tentativa de login no Redis; a usar contador local: ${(error as Error).message}`);
-      this.registarFalhaLocal(chave);
-    }
+  private removerReservaLocal(chave: string, timestamp: number): void {
+    const falhas = this.obterFalhasLocais(chave);
+    const indice = falhas.indexOf(timestamp);
+    if (indice >= 0) falhas.splice(indice, 1);
+    if (falhas.length > 0) this.local.set(chave, falhas);
+    else this.local.delete(chave);
+  }
+
+  private async reservarNoRedis(chave: string): Promise<number> {
+    return this.redisService.incrementWithTtlStrict(
+      `${RL_LOGIN_PREFIX}${chave}`,
+      Math.ceil(this.windowMs / 1000),
+    );
+  }
+
+  private async libertarReservaRedis(chave: string): Promise<void> {
+    await this.redisService.releaseCounterReservationStrict(`${RL_LOGIN_PREFIX}${chave}`);
+  }
+
+  private responderLimite(res: Response): void {
+    res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+      statusCode: HttpStatus.TOO_MANY_REQUESTS,
+      message: 'Demasiadas tentativas de login. Tente novamente mais tarde.',
+    });
   }
 
   async use(req: Request, res: Response, next: NextFunction) {
     const chave = this.chaveDoPedido(req);
+    const locais = this.obterFalhasLocais(chave);
 
-    // Contagens locais criadas durante uma falha do Redis continuam activas
-    // depois da recuperação, evitando uma janela sem protecção na transição.
-    if (this.verificarLimiteLocal(chave)) {
-      res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-        statusCode: HttpStatus.TOO_MANY_REQUESTS,
-        message: 'Demasiadas tentativas de login. Tente novamente mais tarde.',
-      });
+    if (locais.length >= this.maxAttempts) {
+      this.responderLimite(res);
       return;
     }
 
-    if (this.redisService.isEnabled) {
-      try {
-        const atual = await this.redisService.getStrict(`${RL_LOGIN_PREFIX}${chave}`);
-        if (atual !== null && parseInt(atual, 10) >= this.maxAttempts) {
-          res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-            statusCode: HttpStatus.TOO_MANY_REQUESTS,
-            message: 'Demasiadas tentativas de login. Tente novamente mais tarde.',
-          });
-          return;
-        }
-        res.on('finish', () => {
-          if (res.statusCode === HttpStatus.UNAUTHORIZED) {
-            void this.registarFalhaRedis(chave);
-          }
-        });
-        next();
+    // Se já houve fallback local nesta janela, manter a mesma fonte de contagem
+    // até expirar. Misturar Redis e memória ao recuperar cria orçamento duplo.
+    if (locais.length > 0 || !this.redisService.isEnabled) {
+      const timestamp = this.reservarFalhaLocal(chave);
+      if (timestamp === null) {
+        this.responderLimite(res);
         return;
-      } catch (error) {
-        // Redis indisponível não equivale a chave vazia: usar o limite local.
-        Logger.warn(`Falha no rate limit de login via Redis (contagem local): ${(error as Error).message}`);
       }
+      res.on('finish', () => {
+        if (res.statusCode !== HttpStatus.UNAUTHORIZED) {
+          this.removerReservaLocal(chave, timestamp);
+        }
+      });
+      next();
+      return;
     }
 
-    // Só tentativas falhadas contam; os logins bem-sucedidos não consomem o limite.
-    res.on('finish', () => {
-      if (res.statusCode === HttpStatus.UNAUTHORIZED) {
-        this.registarFalhaLocal(chave);
+    try {
+      const count = await this.reservarNoRedis(chave);
+      if (count > this.maxAttempts) {
+        // Não libertar a reserva dentro deste try: uma falha no DECR não pode
+        // cair no fallback e autorizar precisamente o pedido que foi bloqueado.
+        this.responderLimite(res);
+        return;
       }
-    });
 
-    next();
+      // A reserva é feita antes de avançar para o controller. Assim, pedidos
+      // concorrentes não conseguem todos observar o mesmo contador antigo.
+      // Apenas respostas 401 consomem tentativa; respostas bem-sucedidas ou
+      // erros de validação libertam a reserva.
+      res.on('finish', () => {
+        if (res.statusCode !== HttpStatus.UNAUTHORIZED) {
+          void this.libertarReservaRedis(chave).catch((error) => {
+            Logger.warn(`Falha ao libertar reserva de login no Redis: ${(error as Error).message}`);
+          });
+        }
+      });
+      next();
+    } catch (error) {
+      Logger.warn(`Falha no rate limit de login via Redis (contagem local): ${(error as Error).message}`);
+      const timestamp = this.reservarFalhaLocal(chave);
+      if (timestamp === null) {
+        this.responderLimite(res);
+        return;
+      }
+      res.on('finish', () => {
+        if (res.statusCode !== HttpStatus.UNAUTHORIZED) {
+          this.removerReservaLocal(chave, timestamp);
+        }
+      });
+      next();
+    }
   }
 }

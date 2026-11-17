@@ -88,6 +88,26 @@ export class RedisService implements OnModuleDestroy {
     return (await this.client.eval(script, 1, key, ttlSeconds)) as number;
   }
 
+  /**
+   * Liberta uma reserva e apaga a chave quando chega a zero. O script é
+   * atómico para não deixar TTLs iniciados por logins bem-sucedidos a reduzir
+   * a janela de contabilização das falhas seguintes.
+   */
+  async releaseCounterReservationStrict(key: string): Promise<number> {
+    if (!this.client) {
+      throw new Error('Redis não configurado');
+    }
+    const script = `
+      local v = redis.call('DECR', KEYS[1])
+      if v <= 0 then
+        redis.call('DEL', KEYS[1])
+        return 0
+      end
+      return v
+    `;
+    return (await this.client.eval(script, 1, key)) as number;
+  }
+
   async incrementWithTtl(key: string, ttlSeconds: number): Promise<number | null> {
     try {
       return await this.incrementWithTtlStrict(key, ttlSeconds);

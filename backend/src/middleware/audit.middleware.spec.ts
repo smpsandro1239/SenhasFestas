@@ -64,6 +64,22 @@ describe('RateLimitMiddleware — fallback local quando Redis falha', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it('não duplica o orçamento IP quando Redis recupera com a janela local ainda ativa', async () => {
+    redisService.incrementWithTtlStrict.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    const next = vi.fn();
+
+    await middleware.use(fakeReq(), fakeRes(), next);
+    redisService.incrementWithTtlStrict.mockResolvedValue(1);
+
+    await middleware.use(fakeReq(), fakeRes(), next);
+    const bloqueado = fakeRes();
+    await middleware.use(fakeReq(), bloqueado, next);
+
+    expect(redisService.incrementWithTtlStrict).toHaveBeenCalledTimes(1);
+    expect(bloqueado.status).toHaveBeenCalledWith(429);
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
   it('usa contador local se Redis devolver indisponibilidade por excepção', async () => {
     redisService.incrementWithTtlStrict.mockRejectedValue(new Error('ECONNREFUSED'));
     const next = vi.fn();
@@ -82,10 +98,11 @@ describe('RateLimitMiddleware — fallback local quando Redis falha', () => {
   });
 });
 
-describe('LoginRateLimitMiddleware — fallback local quando Redis falha', () => {
+describe('LoginRateLimitMiddleware — reservas concorrentes e fallback local', () => {
   const redisService = {
     isEnabled: true,
     incrementWithTtlStrict: vi.fn(),
+    releaseCounterReservationStrict: vi.fn(),
     incrementWithTtl: vi.fn(),
     incr: vi.fn(),
     expire: vi.fn(),
@@ -99,6 +116,7 @@ describe('LoginRateLimitMiddleware — fallback local quando Redis falha', () =>
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.LOGIN_RATE_LIMIT_MAX = '1';
+    redisService.releaseCounterReservationStrict.mockResolvedValue(0);
     middleware = new LoginRateLimitMiddleware(redisService as any);
   });
 
@@ -107,37 +125,79 @@ describe('LoginRateLimitMiddleware — fallback local quando Redis falha', () =>
     else process.env.LOGIN_RATE_LIMIT_MAX = limiteOriginal;
   });
 
-  it('não expõe o email em claro na chave de rate limit Redis', async () => {
-    redisService.getStrict.mockResolvedValue(null);
-    const middleware = new LoginRateLimitMiddleware(redisService as any);
+  it('não expõe o email em claro na chave Redis', async () => {
+    redisService.incrementWithTtlStrict.mockResolvedValue(1);
     await middleware.use(fakeReq('1.2.3.4', 'Pessoa@Exemplo.pt'), fakeRes(), vi.fn());
 
-    const chamadas = redisService.getStrict.mock.calls;
-    const chave = chamadas[chamadas.length - 1]?.[0] as string;
+    const chave = redisService.incrementWithTtlStrict.mock.calls[0]?.[0] as string;
     expect(chave).toMatch(/^rl:login:1\.2\.3\.4:[a-f0-9]{64}$/);
     expect(chave).not.toContain('Pessoa@Exemplo.pt');
     expect(chave).not.toContain('pessoa@exemplo.pt');
   });
 
-  it('usa leitura estrita e incremento atómico para falhas de login', async () => {
-    redisService.getStrict.mockResolvedValue(null);
+  it('reserva a tentativa atomicamente antes de chamar o controller', async () => {
+    redisService.incrementWithTtlStrict.mockResolvedValue(1);
+    const next = vi.fn();
+    const res = fakeRes();
+
+    await middleware.use(fakeReq('1.2.3.4', 'a@b.com'), res, next);
+
+    expect(redisService.incrementWithTtlStrict).toHaveBeenCalledWith(
+      expect.stringMatching(/^rl:login:/),
+      900,
+    );
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('bloqueia pedidos concorrentes acima do limite antes de autenticar', async () => {
+    redisService.incrementWithTtlStrict
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(2);
+    const next = vi.fn();
+    const primeira = fakeRes();
+    const segunda = fakeRes();
+
+    await Promise.all([
+      middleware.use(fakeReq('1.2.3.4', 'a@b.com'), primeira, next),
+      middleware.use(fakeReq('1.2.3.4', 'a@b.com'), segunda, next),
+    ]);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect([primeira.statusCode, segunda.statusCode]).toContain(429);
+    expect(redisService.releaseCounterReservationStrict).not.toHaveBeenCalled();
+  });
+
+  it('liberta a reserva de um login bem-sucedido', async () => {
     redisService.incrementWithTtlStrict.mockResolvedValue(1);
     const res = fakeRes();
-    res.statusCode = 401;
 
     await middleware.use(fakeReq('1.2.3.4', 'a@b.com'), res, vi.fn());
     const finishCb = res.on.mock.calls.find(([event]: [string]) => event === 'finish')?.[1];
     expect(finishCb).toBeTypeOf('function');
     await finishCb();
 
-    expect(redisService.getStrict).toHaveBeenCalled();
-    expect(redisService.incrementWithTtlStrict).toHaveBeenCalled();
-    expect(redisService.get).not.toHaveBeenCalled();
-    expect(redisService.incrementWithTtl).not.toHaveBeenCalled();
+    expect(redisService.releaseCounterReservationStrict).toHaveBeenCalledWith(
+      expect.stringMatching(/^rl:login:/),
+    );
   });
 
-  it('conta localmente quando a leitura Redis falha e bloqueia a tentativa seguinte', async () => {
-    redisService.getStrict.mockRejectedValue(new Error('ECONNREFUSED'));
+  it('não ultrapassa o limite local quando várias reservas falham no Redis em simultâneo', async () => {
+    redisService.incrementWithTtlStrict.mockRejectedValue(new Error('ECONNREFUSED'));
+    const next = vi.fn();
+    const primeira = fakeRes();
+    const segunda = fakeRes();
+
+    await Promise.all([
+      middleware.use(fakeReq('1.2.3.4', 'concorrente@b.com'), primeira, next),
+      middleware.use(fakeReq('1.2.3.4', 'concorrente@b.com'), segunda, next),
+    ]);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect([primeira.statusCode, segunda.statusCode]).toContain(429);
+  });
+
+  it('mantém a tentativa 401 e bloqueia a seguinte', async () => {
+    redisService.incrementWithTtlStrict.mockRejectedValue(new Error('ECONNREFUSED'));
     const primeira = fakeRes();
     primeira.statusCode = 401;
     const next = vi.fn();
@@ -146,7 +206,6 @@ describe('LoginRateLimitMiddleware — fallback local quando Redis falha', () =>
     const finishCb = primeira.on.mock.calls.find(([event]: [string]) => event === 'finish')?.[1];
     await finishCb();
 
-    redisService.getStrict.mockResolvedValue(null);
     const segunda = fakeRes();
     await middleware.use(fakeReq('1.2.3.4', 'a@b.com'), segunda, next);
 
@@ -154,11 +213,9 @@ describe('LoginRateLimitMiddleware — fallback local quando Redis falha', () =>
     expect(next).toHaveBeenCalledTimes(1);
   });
 
-  it('usa contador local se Redis cair ao registar uma falha', async () => {
-    redisService.getStrict.mockResolvedValue(null);
+  it('liberta a reserva local para respostas que não são 401', async () => {
     redisService.incrementWithTtlStrict.mockRejectedValue(new Error('ECONNREFUSED'));
     const primeira = fakeRes();
-    primeira.statusCode = 401;
     const next = vi.fn();
 
     await middleware.use(fakeReq('1.2.3.4', 'b@b.com'), primeira, next);
@@ -168,7 +225,31 @@ describe('LoginRateLimitMiddleware — fallback local quando Redis falha', () =>
     const segunda = fakeRes();
     await middleware.use(fakeReq('1.2.3.4', 'b@b.com'), segunda, next);
 
-    expect(segunda.status).toHaveBeenCalledWith(429);
+    expect(segunda.status).not.toHaveBeenCalledWith(429);
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  it('não duplica o orçamento ao recuperar Redis durante uma janela local', async () => {
+    process.env.LOGIN_RATE_LIMIT_MAX = '2';
+    const middlewareComLimiteDois = new LoginRateLimitMiddleware(redisService as any);
+    redisService.incrementWithTtlStrict.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    const next = vi.fn();
+
+    const primeira = fakeRes();
+    primeira.statusCode = 401;
+    await middlewareComLimiteDois.use(fakeReq('1.2.3.4', 'c@b.com'), primeira, next);
+    const finishCb = primeira.on.mock.calls.find(([event]: [string]) => event === 'finish')?.[1];
+    await finishCb();
+
+    redisService.incrementWithTtlStrict.mockResolvedValue(1);
+    const segunda = fakeRes();
+    await middlewareComLimiteDois.use(fakeReq('1.2.3.4', 'c@b.com'), segunda, next);
+    const terceira = fakeRes();
+    await middlewareComLimiteDois.use(fakeReq('1.2.3.4', 'c@b.com'), terceira, next);
+
+    expect(redisService.incrementWithTtlStrict).toHaveBeenCalledTimes(1);
+    expect(terceira.status).toHaveBeenCalledWith(429);
+    expect(next).toHaveBeenCalledTimes(2);
   });
 });
 
