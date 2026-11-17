@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenException, ConflictException } from '@nestjs/common';
 import { BalanceService } from './balance.service';
 import { EventService } from '../event/event.service';
-import { MovementType, BalanceMovementEntity } from '../../entities';
+import { MovementType, BalanceMovementEntity, BalanceEntity } from '../../entities';
 
 describe('BalanceService — guard de janela operacional', () => {
   const eventService = {
@@ -486,7 +486,8 @@ describe('BalanceService — guard de janela operacional', () => {
       expect(resultado.balance.currentBalance).toBe(90);
     });
 
-    it('archiveExpiredBalances arquiva vencidos, ignora os vigentes e soft-deleta os arquivados há 30+ dias', async () => {
+    it('archiveExpiredBalances bloqueia e revalida cada saldo antes de arquivar/soft-delete', async () => {
+      const now = new Date('2026-11-17T12:00:00.000Z');
       const vencido = {
         id: 'b1',
         currentBalance: 10,
@@ -508,19 +509,97 @@ describe('BalanceService — guard de janela operacional', () => {
         deletedAt: null,
         event: eventoExpirado,
       };
+      const atuais = new Map([
+        ['b1', { ...vencido }],
+        ['b2', { ...vigente }],
+        ['b3', { ...antigo }],
+      ]);
       const balanceRepository = {
         find: vi.fn().mockResolvedValue([vencido, vigente, antigo]),
-        save: vi.fn().mockImplementation((entity: any) => Promise.resolve(entity)),
       };
-      const service = serviceCom(balanceRepository);
+      const queryBuilder = {
+        leftJoinAndSelect: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        setLock: vi.fn().mockReturnThis(),
+        withDeleted: vi.fn().mockReturnThis(),
+        getOne: vi.fn()
+          .mockResolvedValueOnce(atuais.get('b1'))
+          .mockResolvedValueOnce(atuais.get('b2'))
+          .mockResolvedValueOnce(atuais.get('b3')),
+      };
+      const manager = {
+        createQueryBuilder: vi.fn().mockReturnValue(queryBuilder),
+        save: vi.fn().mockImplementation(async (_entity: any, entity: any) => entity),
+      };
+      const dataSource = {
+        transaction: vi.fn().mockImplementation(async (callback: any) => callback(manager)),
+      };
+      const service = new BalanceService(
+        balanceRepository as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        dataSource as any,
+        eventService,
+      );
 
-      const resultado = await service.archiveExpiredBalances();
+      const resultado = await service.archiveExpiredBalances(now);
 
       expect(resultado).toEqual({ arquivados: 1, removidos: 1 });
-      const guardados = balanceRepository.save.mock.calls.map((c: any[]) => c[0]);
-      expect(guardados.map((b: any) => b.id)).toEqual(['b1', 'b3']);
-      expect(guardados[0].archivedAt).toBeInstanceOf(Date);
-      expect(guardados[1].deletedAt).toBeInstanceOf(Date);
+      expect(balanceRepository.find).toHaveBeenCalledWith(expect.objectContaining({ select: { id: true } }));
+      expect(dataSource.transaction).toHaveBeenCalledTimes(3);
+      expect(manager.createQueryBuilder).toHaveBeenCalledWith(BalanceEntity, 'saldo');
+      expect(queryBuilder.setLock).toHaveBeenCalledWith('pessimistic_write', undefined, ['saldo']);
+      expect(queryBuilder.withDeleted).toHaveBeenCalledTimes(3);
+      const guardados = manager.save.mock.calls.map((call: any[]) => call[1]);
+      expect(guardados.map((balance: any) => balance.id)).toEqual(['b1', 'b3']);
+      expect(guardados[0].archivedAt).toEqual(now);
+      expect(guardados[1].deletedAt).toEqual(now);
+    });
+
+    it('archiveExpiredBalances não arquiva um saldo entretanto estendido', async () => {
+      const now = new Date('2026-11-17T12:00:00.000Z');
+      const candidatoDesactualizado = {
+        id: 'b1',
+        currentBalance: 10,
+        archivedAt: null,
+        deletedAt: null,
+        event: eventoExpirado,
+      };
+      const saldoActual = {
+        ...candidatoDesactualizado,
+        extendedUntil: new Date('2099-01-01T00:00:00.000Z'),
+      };
+      const balanceRepository = { find: vi.fn().mockResolvedValue([candidatoDesactualizado]) };
+      const queryBuilder = {
+        leftJoinAndSelect: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        setLock: vi.fn().mockReturnThis(),
+        withDeleted: vi.fn().mockReturnThis(),
+        getOne: vi.fn().mockResolvedValue(saldoActual),
+      };
+      const manager = {
+        createQueryBuilder: vi.fn().mockReturnValue(queryBuilder),
+        save: vi.fn(),
+      };
+      const dataSource = {
+        transaction: vi.fn().mockImplementation(async (callback: any) => callback(manager)),
+      };
+      const service = new BalanceService(
+        balanceRepository as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        dataSource as any,
+        eventService,
+      );
+
+      const resultado = await service.archiveExpiredBalances(now);
+
+      expect(resultado).toEqual({ arquivados: 0, removidos: 0 });
+      expect(manager.save).not.toHaveBeenCalled();
     });
   });
 
