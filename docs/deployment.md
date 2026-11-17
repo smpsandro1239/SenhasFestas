@@ -30,6 +30,7 @@ LOGIN_RATE_LIMIT_MAX=10
 TRUST_PROXY=1
 ```
 
+- `DB_SSL=true` ativa TLS com validação do certificado do servidor. Se o fornecedor usar uma CA privada, define `DB_SSL_CA` com o certificado CA em formato PEM.
 - `REDIS_URL` é opcional; sem Redis, cache e pub/sub ficam desativados (modo degradado).
 - `RATE_LIMIT_MAX` controla o limite por IP/minuto (100 por omissão).
 - `TRUST_PROXY` é o número de proxies de confiança à frente do backend (1 em produção
