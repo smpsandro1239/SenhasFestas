@@ -1,3 +1,24 @@
+## 2026-11-17 — recuperação da CI e autorização por evento
+
+**Falhas reproduzidas na CI**
+- O build NestJS falhava em `backend/src/websocket/order.gateway.ts:322`: `STAFF_ROLES.includes(role)` exigia o tipo literal derivado de `ROLES`, enquanto `MembershipService.roleEfetiva` devolve `string`.
+- O Browser E2E não chegava a arrancar o backend porque dependia do build anterior.
+- A auditoria de produção continua a encontrar quatro ocorrências do advisory ReDoS de `picomatch` transitivo via TypeORM; o npm propõe downgrade major, que não é uma correcção segura automática.
+
+**Correcções**
+- A verificação de role no gateway usa agora comparação por `some`, mantendo a validação em runtime sem forçar casts.
+- `RolesGuard` reconhece também `params.eventoId`, usado pela rota `/cash-closure/event/:eventoId`.
+- Testes positivos e negativos cobrem memberships mistas nessa rota, garantindo que a role do evento indicado é a única usada para a autorização.
+
+**Validação**
+- A CI do commit anterior confirmou frontend lint/build e testes unitários backend, mas backend build e Browser E2E falharam devido ao erro de tipo acima.
+- Esta correcção foi integrada na `main`; aguardar a nova CI para confirmar typecheck, testes, builds e Browser E2E.
+- A auditoria de dependências permanece bloqueada por advisory sem versão corrigida; não foi aplicado downgrade major nem override especulativo.
+- Gitleaks, PWA private-cache e CodeQL passaram na execução anterior.
+- Sem alterações à base de dados, migrations ou deploy.
+
+---
+
 ## 2026-11-17 — T44: lookup de produto e rooms WebSocket
 
 **Novos riscos corrigidos**

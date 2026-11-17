@@ -14,6 +14,7 @@ export class RolesGuard implements CanActivate {
     const body = request.body && typeof request.body === 'object' ? request.body : {};
     const candidatos = [
       request.params?.eventId,
+      request.params?.eventoId,
       request.query?.eventId,
       body.eventId,
       body.fromEventId,

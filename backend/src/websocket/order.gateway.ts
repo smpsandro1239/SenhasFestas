@@ -319,7 +319,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     }
     // A room contém todos os pedidos do evento. Clientes só podem consultar
     // os seus próprios pedidos por HTTP e não podem subscrever o fluxo global.
-    if (!STAFF_ROLES.includes(role)) {
+    if (!STAFF_ROLES.some((staffRole) => staffRole === role)) {
       const message = 'Sem permissão para actualizações de pedidos deste evento';
       client.emit('error', { message });
       return { ok: false, message };

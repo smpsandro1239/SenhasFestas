@@ -241,6 +241,30 @@ describe('RolesGuard — 2A: event-role como role efetiva dentro do evento', () 
     await expect(guard.canActivate(context as any)).rejects.toThrow(ForbiddenException);
   });
 
+  it('usa :eventoId para validar a event-role da rota de fecho de caixa', async () => {
+    adicionarMembro('u1', 'evtCaixa', 'cashier');
+    adicionarMembro('u1', 'evtOutro', 'client');
+    const { guard, context } = criarContexto(
+      { id: 'u1', role: 'organizer' },
+      FINANCE_ROLES,
+      { params: { eventoId: 'evtCaixa' }, route: { path: '/cash-closure/event/:eventoId' } },
+    );
+
+    await expect(guard.canActivate(context as any)).resolves.toBe(true);
+  });
+
+  it('rejeita :eventoId quando a event-role no evento indicado não é financeira', async () => {
+    adicionarMembro('u1', 'evtCaixa', 'cashier');
+    adicionarMembro('u1', 'evtOutro', 'client');
+    const { guard, context } = criarContexto(
+      { id: 'u1', role: 'organizer' },
+      FINANCE_ROLES,
+      { params: { eventoId: 'evtOutro' }, route: { path: '/cash-closure/event/:eventoId' } },
+    );
+
+    await expect(guard.canActivate(context as any)).rejects.toThrow(ForbiddenException);
+  });
+
   it('sem eventId e sem memberships → usa a role global (comportamento atual)', async () => {
     const { guard, context } = criarContexto(
       { id: 'u1', role: 'client' },
