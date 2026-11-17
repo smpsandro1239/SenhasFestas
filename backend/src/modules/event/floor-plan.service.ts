@@ -383,7 +383,9 @@ export class FloorPlanService {
       .createQueryBuilder()
       .update(FloorPlanEntity)
       .set({
-        documento,
+        // O documento é JSONB; o tipo recursivo do QueryBuilder não aceita
+        // interfaces aninhadas sem index signature.
+        documento: documento as any,
         version: () => '"version" + 1',
       })
       .where('"id" = :id', { id: plantaId })
