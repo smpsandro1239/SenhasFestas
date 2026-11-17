@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
-    "eslint": "^8.57.1",
+    "eslint": "^9.39.2",
     "ts-node": "~10.9.2",
     "typescript": "~6.0.3"
   },
