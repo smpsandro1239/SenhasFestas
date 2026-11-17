@@ -343,6 +343,7 @@ export class OrderService {
       const balance = await this.balanceRepository.findOne({
         where: { id: order.balanceId },
         relations: { user: true },
+        withDeleted: true,
       });
       if (!balance || balance.user?.id !== user.id) {
         throw new ForbiddenException('Não pode cancelar o pedido de outro utilizador');
@@ -377,6 +378,7 @@ export class OrderService {
           ? await manager.findOne(BalanceEntity, {
               where: { id: currentOrder.balanceId, user: { id: user.id } },
               lock: { mode: 'pessimistic_write' },
+              withDeleted: true,
             })
           : null;
         if (!balance || balance.user?.id !== user.id) {
