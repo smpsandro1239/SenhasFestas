@@ -20,16 +20,18 @@
 
 **Objectivo**: impedir que respostas de autenticação ou snapshots administrativos persistam credenciais no histórico de auditoria.
 
-**Feito na branch `fix/audit-redact-auth-secrets-2026-11`**
+**Integrado na `main` pela PR #163** (`1319615e848c6e153282f7912d883f2a28a1cc5d`; correcção JWT/Bearer em `c45aa02648b1e976aa40af3d82416bcd1a29e829`)
 - Sanitização recursiva, sem mutação da resposta HTTP, aplicada aos snapshots `before` e `after` e aos `details`.
 - Campos com nomes relacionados com password, token, secret, authorization, cookie, API key, private key e credential são substituídos por `[REDACTED]`.
 - Strings Bearer e JWT em campos textuais são mascaradas.
 - Mensagens brutas de erro deixam de ser persistidas; mantém-se apenas o nome da classe de erro.
 - Testes de regressão para login, refresh, segredos aninhados, JWT/Bearer e erros com credenciais.
 
-**Gates**
-- Ainda por executar no GitHub Actions: backend lint, typecheck, Vitest, build, E2E, frontend e Browser E2E.
-- Não foi executado qualquer deploy nem alterada a base de dados.
+**Validação**
+- A execução CI anterior à correcção passou 578/579 testes backend; o único teste falhou porque a expressão Bearer mascarava o JWT antes do padrão específico. A ordem foi corrigida no commit `c45aa02` e integrada na `main`.
+- Não foram encontrados workflow runs CI associados ao merge commit `1319615`; a validação pós-merge continua pendente.
+- Vercel reportou bloqueio de quota diária (`api-deployments-free-per-day`); não há confirmação de deploy.
+- Sem alterações à base de dados ou migrations.
 
 ---
 
