@@ -297,8 +297,10 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     try {
       user = await this.autenticarSocket(client);
     } catch {
+      const message = 'Não autenticado';
+      client.emit('error', { message });
       client.disconnect(true);
-      return { ok: false, message: 'Não autenticado' };
+      return { ok: false, message };
     }
     if (!eventId || typeof eventId !== 'string') {
       client.emit('error', { message: 'eventId inválido' });
@@ -338,8 +340,10 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     try {
       user = await this.autenticarSocket(client);
     } catch {
+      const message = 'Não autenticado';
+      client.emit('error', { message });
       client.disconnect(true);
-      return { ok: false, message: 'Não autenticado' };
+      return { ok: false, message };
     }
     if (!eventId || typeof eventId !== 'string') {
       client.emit('error', { message: 'eventId inválido' });
