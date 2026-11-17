@@ -596,6 +596,9 @@ describe('OrderService — cancelamento repõe stock (B1c)', () => {
     await expect(svc.cancelOrder('o1', { id: 'u1', role: 'cashier' }))
       .rejects.toThrow('Não pertence a este evento');
     expect(manager.save).not.toHaveBeenCalled();
+    expect(balanceRepository.findOne).toHaveBeenCalledWith(expect.objectContaining({ withDeleted: true }));
+    const consultaSaldo = manager.findOne.mock.calls.find((call: any[]) => call[0] === BalanceEntity);
+    expect(consultaSaldo?.[1]).toEqual(expect.objectContaining({ withDeleted: true }));
   });
 
   it('revalida a titularidade do saldo do cliente dentro da transação', async () => {
@@ -608,13 +611,13 @@ describe('OrderService — cancelamento repõe stock (B1c)', () => {
     };
     const orderRepository = { findOne: vi.fn().mockResolvedValue(order) };
     const balanceRepository = {
-      findOne: vi.fn().mockResolvedValue({ id: 'b1', user: { id: 'u1' } }),
+      findOne: vi.fn().mockResolvedValue({ id: 'b1', user: { id: 'u1' }, deletedAt: new Date('2026-02-01') }),
     };
     const manager = {
       find: vi.fn().mockResolvedValue([]),
       findOne: vi.fn().mockImplementation((entity: any) =>
         entity === OrderEntity ? Promise.resolve(order) :
-        entity === BalanceEntity ? Promise.resolve({ id: 'b1', user: { id: 'u2' } }) :
+        entity === BalanceEntity ? Promise.resolve({ id: 'b1', user: { id: 'u2' }, deletedAt: new Date('2026-02-01') }) :
         Promise.resolve(null),
       ),
       save: vi.fn().mockImplementation((_e: any, d: any) => Promise.resolve(d)),
