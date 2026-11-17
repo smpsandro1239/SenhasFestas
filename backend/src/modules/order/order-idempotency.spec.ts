@@ -96,8 +96,6 @@ describe('OrderService — idempotência na criação', () => {
   });
 
   it('rejeita a reutilização da mesma chave com payload diferente', async () => {
-    const seed = criarServico();
-    const requestHash = (seed.service as any).hashPedido(USER.id, DTO);
     const { service, dataSource } = criarServico([
       { id: 'order-1', status: 'received', requestHash: 'different-payload-hash' },
     ]);
