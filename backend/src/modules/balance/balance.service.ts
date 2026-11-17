@@ -377,6 +377,7 @@ export class BalanceService {
         const anterior = await manager.findOne(BalanceMovementEntity, {
           where: { createdById: actor.id, idempotencyKey, type: MovementType.CONSUME },
           relations: { balance: true },
+          withDeleted: true,
         });
         if (anterior) {
           this.assertHashOperacao(anterior, requestHash!);
