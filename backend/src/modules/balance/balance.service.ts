@@ -753,26 +753,24 @@ export class BalanceService {
     const resultado = await this.dataSource.transaction(async (manager) => {
       if (idempotencyKey) {
         await this.lockOperationKey(manager, actor.id, 'transfer', idempotencyKey);
-        const [anteriorOrigem, anteriorDestino] = await Promise.all([
-          manager.findOne(BalanceMovementEntity, {
-            where: {
-              createdById: actor.id,
-              idempotencyKey,
-              type: MovementType.CANCEL,
-            },
-            relations: { balance: true },
-            withDeleted: true,
-          }),
-          manager.findOne(BalanceMovementEntity, {
-            where: {
-              createdById: actor.id,
-              idempotencyKey,
-              type: MovementType.LOAD,
-            },
-            relations: { balance: true },
-            withDeleted: true,
-          }),
-        ]);
+        const anteriorOrigem = await manager.findOne(BalanceMovementEntity, {
+          where: {
+            createdById: actor.id,
+            idempotencyKey,
+            type: MovementType.CANCEL,
+          },
+          relations: { balance: true },
+          withDeleted: true,
+        });
+        const anteriorDestino = await manager.findOne(BalanceMovementEntity, {
+          where: {
+            createdById: actor.id,
+            idempotencyKey,
+            type: MovementType.LOAD,
+          },
+          relations: { balance: true },
+          withDeleted: true,
+        });
 
         if (anteriorOrigem || anteriorDestino) {
           if (!anteriorOrigem || !anteriorDestino) {
@@ -780,16 +778,14 @@ export class BalanceService {
           }
           this.assertHashOperacao(anteriorOrigem, requestHash!);
           this.assertHashOperacao(anteriorDestino, requestHash!);
-          const [saldoOrigem, saldoDestino] = await Promise.all([
-            manager.findOne(BalanceEntity, {
-              where: { id: anteriorOrigem.balance.id },
-              withDeleted: true,
-            }),
-            manager.findOne(BalanceEntity, {
-              where: { id: anteriorDestino.balance.id },
-              withDeleted: true,
-            }),
-          ]);
+          const saldoOrigem = await manager.findOne(BalanceEntity, {
+            where: { id: anteriorOrigem.balance.id },
+            withDeleted: true,
+          });
+          const saldoDestino = await manager.findOne(BalanceEntity, {
+            where: { id: anteriorDestino.balance.id },
+            withDeleted: true,
+          });
           if (!saldoOrigem || !saldoDestino) {
             throw new NotFoundException('Saldos da transferência não encontrados');
           }
