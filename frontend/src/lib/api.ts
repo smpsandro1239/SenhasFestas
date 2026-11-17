@@ -243,17 +243,26 @@ export async function getOrdersByEvent(eventId: string): Promise<any> {
 export async function createOrder(data: any, idempotencyKey?: string): Promise<any> {
   // Mantém a mesma chave em retries após timeout/erro de rede. Depois de uma
   // resposta bem-sucedida, remove-a para permitir pedidos legítimos idênticos.
-  const fingerprint = JSON.stringify(data);
-  const storageKey = `senhasfestas:order-idempotency:${fingerprint}`;
+  let storageKey: string | undefined;
   let key = idempotencyKey;
   if (!key && typeof window !== 'undefined') {
     try {
+      // O fingerprint é SHA-256: não guardar o conteúdo do pedido (notas,
+      // quantidades ou dados do cliente) no nome de uma chave de storage.
+      const bytes = new TextEncoder().encode(JSON.stringify(data));
+      const digest = await window.crypto.subtle.digest('SHA-256', bytes);
+      const fingerprint = Array.from(new Uint8Array(digest))
+        .map((value) => value.toString(16).padStart(2, '0'))
+        .join('');
+      storageKey = `senhasfestas:order-idempotency:${fingerprint}`;
       key = window.sessionStorage.getItem(storageKey) ?? undefined;
       if (!key) {
-        key = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        key = window.crypto.randomUUID();
         window.sessionStorage.setItem(storageKey, key);
       }
     } catch {
+      // Sem WebCrypto/storage, a chamada continua protegida no servidor para
+      // retries que reutilizem explicitamente a chave.
       key = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     }
   }
@@ -264,14 +273,14 @@ export async function createOrder(data: any, idempotencyKey?: string): Promise<a
       headers: key ? { 'Idempotency-Key': key } : undefined,
       body: JSON.stringify(data),
     });
-    if (!idempotencyKey && typeof window !== 'undefined') {
+    if (!idempotencyKey && storageKey && typeof window !== 'undefined') {
       try { window.sessionStorage.removeItem(storageKey); } catch { /* storage opcional */ }
     }
     return result;
   } catch (error) {
     // 4xx definitivos não precisam de reutilizar a chave; 0/5xx podem ter
     // ocorrido depois do commit e mantêm-na para uma repetição segura.
-    if (!idempotencyKey && typeof window !== 'undefined' && error instanceof ApiError &&
+    if (!idempotencyKey && storageKey && typeof window !== 'undefined' && error instanceof ApiError &&
         error.status >= 400 && error.status < 500 && error.status !== 409) {
       try { window.sessionStorage.removeItem(storageKey); } catch { /* storage opcional */ }
     }
