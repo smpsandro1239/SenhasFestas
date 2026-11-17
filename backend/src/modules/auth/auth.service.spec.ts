@@ -15,7 +15,11 @@ const mockJwtService = {
   sign: vi.fn().mockReturnValue('signed-token'),
 };
 
-const mockDataSource = {\n  transaction: vi.fn(async (callback: any) => callback({ getRepository: () => mockRepository })),\n};\n\nconst mockEventService = {
+const mockDataSource = {
+  transaction: vi.fn(async (callback: any) => callback({ getRepository: () => mockRepository })),
+};
+
+const mockEventService = {
   findByCode: vi.fn(),
   vincularCliente: vi.fn().mockResolvedValue(undefined),
   entrar: vi.fn(),
