@@ -117,87 +117,112 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
     return `${ip}:${emailHash}`;
   }
 
-  private verificarLimiteLocal(chave: string): boolean {
+  private obterFalhasLocais(chave: string): number[] {
     const recentes = nunca(this.local.get(chave) || [], this.windowMs, Date.now());
     if (recentes.length > 0) {
       this.local.set(chave, recentes);
     } else {
       this.local.delete(chave);
     }
-    return recentes.length >= this.maxAttempts;
+    return recentes;
   }
 
-  private registarFalhaLocal(chave: string): void {
-    const falhas = nunca(this.local.get(chave) || [], this.windowMs, Date.now());
-    falhas.push(Date.now());
+  private registarFalhaLocal(chave: string): number {
+    const falhas = this.obterFalhasLocais(chave);
+    const timestamp = Date.now();
+    falhas.push(timestamp);
     this.local.set(chave, falhas);
 
     const timer = setTimeout(() => {
-      const atualizadas = nunca(this.local.get(chave) || [], this.windowMs, Date.now());
-      if (atualizadas.length > 0) {
-        this.local.set(chave, atualizadas);
-      } else {
-        this.local.delete(chave);
-      }
+      const atualizadas = this.obterFalhasLocais(chave);
+      if (atualizadas.length === 0) this.local.delete(chave);
     }, this.windowMs);
     timer.unref?.();
+    return timestamp;
   }
 
-  private async registarFalhaRedis(chave: string): Promise<void> {
-    try {
-      await this.redisService.incrementWithTtlStrict(
-        `${RL_LOGIN_PREFIX}${chave}`,
-        Math.ceil(this.windowMs / 1000),
-      );
-    } catch (error) {
-      Logger.warn(`Falha ao registar tentativa de login no Redis; a usar contador local: ${(error as Error).message}`);
-      this.registarFalhaLocal(chave);
-    }
+  private removerReservaLocal(chave: string, timestamp: number): void {
+    const falhas = this.obterFalhasLocais(chave);
+    const indice = falhas.indexOf(timestamp);
+    if (indice >= 0) falhas.splice(indice, 1);
+    if (falhas.length > 0) this.local.set(chave, falhas);
+    else this.local.delete(chave);
+  }
+
+  private async reservarNoRedis(chave: string): Promise<number> {
+    return this.redisService.incrementWithTtlStrict(
+      `${RL_LOGIN_PREFIX}${chave}`,
+      Math.ceil(this.windowMs / 1000),
+    );
+  }
+
+  private async libertarReservaRedis(chave: string): Promise<void> {
+    await this.redisService.decrementStrict(`${RL_LOGIN_PREFIX}${chave}`);
+  }
+
+  private responderLimite(res: Response): void {
+    res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+      statusCode: HttpStatus.TOO_MANY_REQUESTS,
+      message: 'Demasiadas tentativas de login. Tente novamente mais tarde.',
+    });
   }
 
   async use(req: Request, res: Response, next: NextFunction) {
     const chave = this.chaveDoPedido(req);
+    const locais = this.obterFalhasLocais(chave);
 
-    // Contagens locais criadas durante uma falha do Redis continuam activas
-    // depois da recuperação, evitando uma janela sem protecção na transição.
-    if (this.verificarLimiteLocal(chave)) {
-      res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-        statusCode: HttpStatus.TOO_MANY_REQUESTS,
-        message: 'Demasiadas tentativas de login. Tente novamente mais tarde.',
-      });
+    if (locais.length >= this.maxAttempts) {
+      this.responderLimite(res);
       return;
     }
 
-    if (this.redisService.isEnabled) {
-      try {
-        const atual = await this.redisService.getStrict(`${RL_LOGIN_PREFIX}${chave}`);
-        if (atual !== null && parseInt(atual, 10) >= this.maxAttempts) {
-          res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-            statusCode: HttpStatus.TOO_MANY_REQUESTS,
-            message: 'Demasiadas tentativas de login. Tente novamente mais tarde.',
-          });
-          return;
-        }
-        res.on('finish', () => {
-          if (res.statusCode === HttpStatus.UNAUTHORIZED) {
-            void this.registarFalhaRedis(chave);
-          }
-        });
-        next();
+    // Se já houve fallback local nesta janela, manter a mesma fonte de contagem
+    // até expirar. Misturar Redis e memória ao recuperar cria orçamento duplo.
+    if (locais.length > 0 || !this.redisService.isEnabled) {
+      const timestamp = this.registarFalhaLocal(chave);
+      if (locais.length >= this.maxAttempts) {
+        this.removerReservaLocal(chave, timestamp);
+        this.responderLimite(res);
         return;
-      } catch (error) {
-        // Redis indisponível não equivale a chave vazia: usar o limite local.
-        Logger.warn(`Falha no rate limit de login via Redis (contagem local): ${(error as Error).message}`);
       }
+      res.on('finish', () => {
+        if (res.statusCode !== HttpStatus.UNAUTHORIZED) {
+          this.removerReservaLocal(chave, timestamp);
+        }
+      });
+      next();
+      return;
     }
 
-    // Só tentativas falhadas contam; os logins bem-sucedidos não consomem o limite.
-    res.on('finish', () => {
-      if (res.statusCode === HttpStatus.UNAUTHORIZED) {
-        this.registarFalhaLocal(chave);
+    try {
+      const count = await this.reservarNoRedis(chave);
+      if (count > this.maxAttempts) {
+        await this.libertarReservaRedis(chave);
+        this.responderLimite(res);
+        return;
       }
-    });
 
-    next();
+      // A reserva é feita antes de avançar para o controller. Assim, pedidos
+      // concorrentes não conseguem todos observar o mesmo contador antigo.
+      // Apenas respostas 401 consomem tentativa; respostas bem-sucedidas ou
+      // erros de validação libertam a reserva.
+      res.on('finish', () => {
+        if (res.statusCode !== HttpStatus.UNAUTHORIZED) {
+          void this.libertarReservaRedis(chave).catch((error) => {
+            Logger.warn(`Falha ao libertar reserva de login no Redis: ${(error as Error).message}`);
+          });
+        }
+      });
+      next();
+    } catch (error) {
+      Logger.warn(`Falha no rate limit de login via Redis (contagem local): ${(error as Error).message}`);
+      const timestamp = this.registarFalhaLocal(chave);
+      res.on('finish', () => {
+        if (res.statusCode !== HttpStatus.UNAUTHORIZED) {
+          this.removerReservaLocal(chave, timestamp);
+        }
+      });
+      next();
+    }
   }
 }
