@@ -10,9 +10,10 @@
 // decimal (milesimos), não na segunda — 10.005 → 10.01, 1.004 → 1.00 — e é
 // idempotente, por isso aninhar `centavos(centavos(x))` é seguro.
 //
-// Isto NÃO corrige o armazenamento: a base de dados guarda floats. O que
-// remove de vez a propagação de erro são colunas inteiras em cêntimos ou
-// Decimal.js, e está por fazer.
+// O PostgreSQL guarda os montantes em colunas NUMERIC(10,2), não em FLOAT,
+// pelo que o armazenamento decimal é exato. A conversão para number em
+// JavaScript continua sujeita a IEEE-754; estas funções mantêm as operações
+// monetárias em cêntimos inteiros e devolvem euros normalizados.
 
 /** Converte para cêntimos inteiros. Interno — nunca usar directamente. */
 function centimosDe(value: number): number {

@@ -59,6 +59,17 @@ describe('DTOs de Autenticação — Validação de Password (Proteção DoS Bcr
       expect(erroPassword?.constraints).toHaveProperty('minLength');
     });
 
+    it('rejeita passwords UTF-8 acima dos 72 bytes aceites pelo bcrypt', async () => {
+      const dto = new RegisterDto();
+      dto.email = 'novo@exemplo.pt';
+      dto.password = '🔐'.repeat(19);
+      dto.name = 'Novo Utilizador';
+
+      const erros = await validate(dto);
+      const erroPassword = erros.find((e) => e.property === 'password');
+      expect(erroPassword?.constraints).toHaveProperty('isByteLength');
+    });
+
     it('rejeita password com mais de 72 caracteres no registo', async () => {
       const dto = new RegisterDto();
       dto.email = 'novo@exemplo.pt';

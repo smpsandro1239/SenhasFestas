@@ -149,17 +149,11 @@ describe('middleware — com JWT_SECRET configurado (comportamento actual)', () 
   });
 });
 
-// Os testes acima chamam `middleware()` directamente, logo não exercitam o
-// `matcher` — que é o que decide se a função chega a ser invocada. Uma
-// exclusa incorrecta no matcher tornaria /qr-order ou /offline públicos sem
-// que nenhum teste acima falhasse.
-//
-// Reproduz a semântica do Next: o matcher é `/((?!X|Y).*)` e o lookahead é
-// avaliado sobre o pathname SEM a barra inicial. Replica o original para que
-// `sincronizado` falhe se alguém mexer no middleware sem actualizar o teste.
+// O matcher inclui páginas públicas para lhes aplicar o CSP nonce. Só a API
+// e os recursos estáticos são excluídos. Reproduz a semântica do Next para
+// detectar regressões que deixem páginas sem a política CSP.
 const LOOKAHEAD =
-  '_next/static|_next/image|favicon.ico|auth(?:/|$)|publico(?:/|$)|api(?:/|$)|' +
-  'entrar(?:/|$)|mesa(?:/|$)|' +
+  '_next/static|_next/image|favicon.ico|api(?:/|$)|' +
   '.*\\.(?:png|jpg|jpeg|svg|webp|gif|ico|css|js|txt|xml|woff2?|map|json|webmanifest)$';
 
 const PADRAO_NEXT = new RegExp(`^/((?!${LOOKAHEAD}).*)$`);
@@ -169,14 +163,19 @@ const invocado = (pathname: string) => PADRAO_NEXT.test(pathname);
 
 describe('matcher — exclusão de rotas', () => {
   it('a cópia local do lookahead está sincronizada com src/middleware.ts', () => {
-    // Se alguém mudar o matcher sem actualizar a cópia, este teste falha.
     expect(config.matcher).toHaveLength(1);
     expect(config.matcher[0]).toBe(`/((?!${LOOKAHEAD}).*)`);
   });
 
-  it('não invoca o middleware nas rotas públicas', () => {
-    for (const rota of ['/auth/login', '/auth/register', '/publico', '/publico/abc', '/api/health', '/entrar/magusto-2026', '/mesa/magusto-2026/12', '/mesa/magusto-2026']) {
-      expect(invocado(rota), `middleware ainda corre em ${rota}`).toBe(false);
+  it('exclui API e assets estáticos do middleware de páginas', () => {
+    for (const rota of ['/api/health', '/_next/static/chunk.js', '/icon-192.png', '/manifest.webmanifest']) {
+      expect(invocado(rota), `middleware correu em ${rota}`).toBe(false);
+    }
+  });
+
+  it('invoca o middleware em páginas públicas para aplicar CSP nonce', () => {
+    for (const rota of ['/auth/login', '/auth/register', '/publico', '/publico/abc', '/entrar/magusto-2026', '/mesa/magusto-2026/12']) {
+      expect(invocado(rota), `CSP nonce não será aplicado em ${rota}`).toBe(true);
     }
   });
 
@@ -190,9 +189,6 @@ describe('matcher — exclusão de rotas', () => {
   });
 
   it('não confunde prefixos com palavras que começam igual', () => {
-    // "administrador", "autenticado", "publico-alfa" e "apidocs" não são as
-    // rotas públicas: a exclusa tem de respeitar o separador `/` ou o fim.
-    // "/mesada" e "/mesas" também não: só `/mesa/...` e `/mesa` o são.
     for (const rota of ['/administrador', '/autenticado', '/publico-alfa', '/apidocs', '/autenticacao', '/entrada', '/mesada', '/mesas']) {
       expect(invocado(rota), `${rota} foi excluída como se fosse rota pública`).toBe(true);
     }

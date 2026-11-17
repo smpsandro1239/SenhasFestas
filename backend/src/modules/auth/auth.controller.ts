@@ -1,7 +1,7 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
-import { IsString, IsEmail, MinLength, MaxLength, IsOptional, IsIn, IsBoolean } from 'class-validator';
+import { IsString, IsEmail, MinLength, MaxLength, IsByteLength, IsOptional, IsIn, IsBoolean } from 'class-validator';
 import { Request, Response } from 'express';
 
 export const TOKEN_COOKIE = 'sf_token';
@@ -50,6 +50,7 @@ export class LoginDto {
   @IsString()
   @MinLength(6)
   @MaxLength(72)
+  @IsByteLength(1, 72)
   password: string;
 }
 
@@ -62,6 +63,7 @@ export class RegisterDto {
   @IsString()
   @MinLength(12, { message: 'A password deve ter pelo menos 12 caracteres' })
   @MaxLength(72)
+  @IsByteLength(1, 72)
   password: string;
 
   @IsString()

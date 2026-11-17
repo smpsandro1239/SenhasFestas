@@ -165,4 +165,26 @@ describe('AuditInterceptor — before/after', () => {
     expect(record.mock.calls[0][0].entityId).toBe(PLANTA_ID);
     expect(record.mock.calls[0][0].eventId).toBe(EVENT_ID);
   });
+  it('aguarda a persistência da auditoria antes de emitir a resposta HTTP', async () => {
+    let concluir!: () => void;
+    record.mockImplementation(() => new Promise<void>((resolve) => { concluir = resolve; }));
+    const req = fazerReq('POST', '/api/orders');
+    let respostaEmitida = false;
+
+    const resposta = lastValueFrom(
+      interceptor.intercept(fazerContexto(req), { handle: () => of({ id: 'order-1' }) } as any),
+    ).then((valor) => {
+      respostaEmitida = true;
+      return valor;
+    });
+
+    await Promise.resolve();
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(respostaEmitida).toBe(false);
+
+    concluir();
+    await expect(resposta).resolves.toEqual({ id: 'order-1' });
+    expect(respostaEmitida).toBe(true);
+  });
+
 });

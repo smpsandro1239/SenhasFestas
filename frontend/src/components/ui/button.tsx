@@ -2,7 +2,7 @@ import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
 type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success';
-type ButtonSize = 'sm' | 'md' | 'lg';
+type ButtonSize = 'sm' | 'md' | 'lg' | 'touch';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -14,7 +14,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    'gradient-brand text-zinc-950 font-semibold hover:brightness-110 active:brightness-95 shadow-lg shadow-pink-500/20 hover:shadow-pink-500/35',
+    'gradient-brand text-white font-semibold hover:brightness-110 active:brightness-95 shadow-lg shadow-brand/20 hover:shadow-brand/35',
   outline:
     'border border-border bg-transparent text-zinc-100 hover:bg-surface-hover hover:border-border-hover active:bg-surface-active',
   secondary:
@@ -28,9 +28,10 @@ const variantStyles: Record<ButtonVariant, string> = {
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-sm rounded-lg gap-1.5',
-  md: 'px-4 py-2.5 text-sm rounded-xl gap-2',
-  lg: 'px-6 py-3 text-base rounded-xl gap-2.5',
+  sm: 'min-h-9 px-3 py-1.5 text-sm rounded-lg gap-1.5',
+  md: 'min-h-11 px-4 py-2.5 text-sm rounded-xl gap-2',
+  lg: 'min-h-12 px-6 py-3 text-base rounded-xl gap-2.5',
+  touch: 'min-h-12 px-5 py-3 text-base rounded-xl gap-2.5',
 };
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -48,15 +49,16 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           className,
         )}
         disabled={disabled || loading}
+        aria-busy={loading || undefined}
         {...props}
       >
         {loading ? (
-          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+          <svg aria-hidden="true" className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
         ) : icon ? (
-          <span className="shrink-0">{icon}</span>
+          <span className="shrink-0" aria-hidden="true">{icon}</span>
         ) : null}
         {children}
       </button>

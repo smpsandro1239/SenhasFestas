@@ -31,14 +31,10 @@ const mockEventRepository = {
   find: vi.fn(),
 };
 
-const mockOrderRepository = {
-  find: vi.fn(),
-  findOne: vi.fn(),
-};
-
 const mockOrderItemRepository = {
   find: vi.fn(),
   findOne: vi.fn(),
+  createQueryBuilder: vi.fn(),
 };
 
 const mockMembershipService = {
@@ -47,6 +43,7 @@ const mockMembershipService = {
 
 describe('CatalogService', () => {
   let service: CatalogService;
+  let mockCooccurrenceQueryBuilder: any;
 
   const MEMBRO = { id: 'membro', role: 'organizer' } as any;
 
@@ -63,11 +60,23 @@ describe('CatalogService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockMembershipService.assertMember.mockResolvedValue(undefined);
+    mockCooccurrenceQueryBuilder = {
+      innerJoin: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      addSelect: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      groupBy: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      addOrderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      getRawMany: vi.fn().mockResolvedValue([]),
+    };
+    mockOrderItemRepository.createQueryBuilder.mockReturnValue(mockCooccurrenceQueryBuilder);
     service = new CatalogService(
       mockProductRepository as any,
       mockCategoryRepository as any,
       mockEventRepository as any,
-      mockOrderRepository as any,
       mockOrderItemRepository as any,
       mockMembershipService as any,
     );
@@ -628,46 +637,44 @@ describe('CatalogService', () => {
   });
 
   describe('findSuggestions', () => {
-    it('returns co-occurring products ranked by frequency', async () => {
+    it('agrega coocorrências em SQL e preserva a ordem do ranking', async () => {
       const target = { id: 'p1', category: { id: 'c1' }, event: { id: 'e1' } };
       mockProductRepository.findOne.mockResolvedValue(target);
-      const orders = [
-        {
-          id: 'o1',
-          items: [
-            { product: { id: 'p1', isActive: true }, quantity: 4 },
-            { product: { id: 'p2', isActive: true }, quantity: 5 },
-            { product: { id: 'p3', isActive: true }, quantity: 2 },
-          ],
-        },
-      ];
-      mockOrderRepository.find.mockResolvedValue(orders);
-      mockProductRepository.find.mockResolvedValue([
-        { id: 'p2' },
-        { id: 'p3' },
+      mockCooccurrenceQueryBuilder.getRawMany.mockResolvedValue([
+        { productId: 'p2', totalQuantity: '5' },
+        { productId: 'p3', totalQuantity: '2' },
       ]);
+      mockProductRepository.find.mockResolvedValue([{ id: 'p3' }, { id: 'p2' }]);
 
       const result: any = await service.findSuggestions(MEMBRO, 'e1', 'p1', 4);
 
       expect(result.source).toBe('cooccurrence');
       expect(result.items).toEqual([{ id: 'p2' }, { id: 'p3' }]);
-      expect(mockOrderRepository.find).toHaveBeenCalledWith({
-        where: {
-          status: In(['received', 'preparing', 'ready', 'delivered']),
-          event: { id: 'e1' },
-        },
-        relations: { items: { product: true } },
-      });
+      expect(mockOrderItemRepository.createQueryBuilder).toHaveBeenCalledWith('item');
+      expect(mockCooccurrenceQueryBuilder.innerJoin).toHaveBeenNthCalledWith(1, 'item.order', 'purchase');
+      expect(mockCooccurrenceQueryBuilder.innerJoin).toHaveBeenNthCalledWith(2, 'item.product', 'product');
+      expect(mockCooccurrenceQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'purchase.id IN (SELECT target_item."orderId" FROM order_items target_item WHERE target_item."productId" = :targetProductId)',
+        { targetProductId: 'p1' },
+      );
+      expect(mockCooccurrenceQueryBuilder.where).toHaveBeenCalledWith(
+        'purchase.status IN (:...statuses)',
+        { statuses: ['received', 'preparing', 'ready', 'delivered'] },
+      );
+      expect(mockCooccurrenceQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'purchase.eventId = :eventId',
+        { eventId: 'e1' },
+      );
+      expect(mockCooccurrenceQueryBuilder.groupBy).toHaveBeenCalledWith('product.id');
+      expect(mockCooccurrenceQueryBuilder.orderBy).toHaveBeenCalledWith('SUM(item.quantity)', 'DESC');
+      expect(mockCooccurrenceQueryBuilder.limit).toHaveBeenCalledWith(4);
     });
 
     it('falls back to same-category products when no co-occurrence', async () => {
       const target = { id: 'p1', category: { id: 'c1' }, event: null };
       mockProductRepository.findOne.mockResolvedValue(target);
-      mockOrderRepository.find.mockResolvedValue([]);
-      mockProductRepository.find.mockResolvedValue([
-        { id: 'p2', name: 'Bifana XL' },
-        { id: 'p1' },
-      ]);
+      mockCooccurrenceQueryBuilder.getRawMany.mockResolvedValue([]);
+      mockProductRepository.find.mockResolvedValue([{ id: 'p2', name: 'Bifana XL' }, { id: 'p1' }]);
 
       const result: any = await service.findSuggestions(MEMBRO, 'e1', 'p1', 4);
 
@@ -684,11 +691,8 @@ describe('CatalogService', () => {
     it('falls back to popular products when no category', async () => {
       const target = { id: 'p1', category: null, event: null };
       mockProductRepository.findOne.mockResolvedValue(target);
-      mockOrderRepository.find.mockResolvedValue([]);
-      mockProductRepository.find.mockResolvedValue([
-        { id: 'p2', stock: 50 },
-        { id: 'p1' },
-      ]);
+      mockCooccurrenceQueryBuilder.getRawMany.mockResolvedValue([]);
+      mockProductRepository.find.mockResolvedValue([{ id: 'p2', stock: 50 }, { id: 'p1' }]);
 
       const result: any = await service.findSuggestions(MEMBRO, undefined, 'p1', 4);
 
@@ -752,7 +756,7 @@ describe('CatalogService', () => {
         category: { id: 'catA' },
         event: { id: 'eventoX' },
       });
-      mockOrderRepository.find.mockResolvedValue([]);
+      mockCooccurrenceQueryBuilder.getRawMany.mockResolvedValue([]);
       mockProductRepository.find.mockResolvedValueOnce([
         { id: 'mesmaCategoria', category: { id: 'catA' }, event: { id: 'eventoY' } },
       ]);
@@ -775,7 +779,7 @@ describe('CatalogService', () => {
         category: { id: 'catA' },
         event: { id: 'eventoX' },
       });
-      mockOrderRepository.find.mockResolvedValue([]);
+      mockCooccurrenceQueryBuilder.getRawMany.mockResolvedValue([]);
       mockProductRepository.find.mockResolvedValueOnce([]);
       mockProductRepository.find.mockResolvedValueOnce([
         { id: 'outroProduto', name: 'P', price: '1', stock: 1 },

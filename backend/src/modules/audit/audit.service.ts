@@ -65,7 +65,7 @@ export class AuditService {
         eventId: input.eventId ?? undefined,
         before: input.before === undefined ? undefined : (snapshot(input.before) as Record<string, any>),
         after: input.after === undefined ? undefined : (snapshot(input.after) as Record<string, any>),
-        details: input.details,
+        details: input.details === undefined ? undefined : (snapshot(input.details) as Record<string, unknown>),
         ip: input.ip,
         userAgent: input.userAgent,
       });

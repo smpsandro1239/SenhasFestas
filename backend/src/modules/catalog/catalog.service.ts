@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ProductEntity, CategoryEntity, UserEntity, EventEntity, OrderEntity, OrderItemEntity } from '../../entities';
+import { ProductEntity, CategoryEntity, UserEntity, EventEntity, OrderItemEntity } from '../../entities';
 import { In, ILike } from 'typeorm';
 import { CreateProductDto, UpdateProductDto, AdjustStockDto } from './dto';
 import { MembershipService } from '../../common/membership.service';
@@ -16,8 +16,6 @@ export class CatalogService {
     private readonly categoryRepository: Repository<CategoryEntity>,
     @InjectRepository(EventEntity)
     private readonly eventRepository: Repository<EventEntity>,
-    @InjectRepository(OrderEntity)
-    private readonly orderRepository: Repository<OrderEntity>,
     @InjectRepository(OrderItemEntity)
     private readonly orderItemRepository: Repository<OrderItemEntity>,
     private readonly membershipService: MembershipService,
@@ -81,33 +79,38 @@ export class CatalogService {
       await this.membershipService.assertMember(user, escopoEvento);
     }
 
-    // 1. Data-driven: co-occurrence from real orders (non-cancelled) of the same event.
-    // Products that appear in the same order as the target product, ranked by frequency.
-    const whereOrder: Record<string, unknown> = { status: In(['received', 'preparing', 'ready', 'delivered']) };
+    // 1. Data-driven: aggregate co-occurrence in PostgreSQL.
+    // Avoid loading every order and every related product into Node.js memory.
+    const query = this.orderItemRepository
+      .createQueryBuilder('item')
+      .innerJoin('item.order', 'purchase')
+      .innerJoin('item.product', 'product')
+      .select('product.id', 'productId')
+      .addSelect('SUM(item.quantity)', 'totalQuantity')
+      .where('purchase.status IN (:...statuses)', {
+        statuses: ['received', 'preparing', 'ready', 'delivered'],
+      })
+      .andWhere(
+        'purchase.id IN (SELECT target_item."orderId" FROM order_items target_item WHERE target_item."productId" = :targetProductId)',
+        { targetProductId: productId },
+      )
+      .andWhere('product.id <> :productId', { productId })
+      .andWhere('product.isActive = :isActive', { isActive: true })
+      .andWhere('product.deletedAt IS NULL');
+
     if (escopoEvento) {
-      whereOrder.event = { id: escopoEvento };
-    }
-    const orders = await this.orderRepository.find({
-      where: whereOrder,
-      relations: { items: { product: true } },
-    });
-
-    const targetOrderIds = new Set(
-      orders.filter((o) => o.items?.some((i) => i.product?.id === productId)).map((o) => o.id),
-    );
-
-    const cooccurrence = new Map<string, number>();
-    for (const order of orders) {
-      if (!targetOrderIds.has(order.id)) continue;
-      for (const item of order.items ?? []) {
-        const pid = item.product?.id;
-        if (!pid || pid === productId || !item.product.isActive) continue;
-        cooccurrence.set(pid, (cooccurrence.get(pid) ?? 0) + item.quantity);
-      }
+      query.andWhere('purchase.eventId = :eventId', { eventId: escopoEvento });
     }
 
-    if (cooccurrence.size > 0) {
-      const rankedIds = [...cooccurrence.entries()].sort((a, b) => b[1] - a[1]).map(([pid]) => pid).slice(0, limit);
+    const cooccurrence = await query
+      .groupBy('product.id')
+      .orderBy('SUM(item.quantity)', 'DESC')
+      .addOrderBy('product.id', 'ASC')
+      .limit(Math.max(0, limit))
+      .getRawMany<{ productId: string; totalQuantity: string }>();
+
+    if (cooccurrence.length > 0) {
+      const rankedIds = cooccurrence.map((row) => row.productId);
       const items = await this.fetchByIds(rankedIds);
       if (items.length > 0) {
         return { items, source: 'cooccurrence' };
@@ -149,10 +152,13 @@ export class CatalogService {
 
   private async fetchByIds(ids: string[]): Promise<ProductEntity[]> {
     if (ids.length === 0) return [];
-    return this.productRepository.find({
+    const products = await this.productRepository.find({
       where: { id: In(ids), isActive: true },
       relations: { category: true },
     });
+    // SQL order is the recommendation score order; IN() does not preserve it.
+    const byId = new Map(products.map((product) => [product.id, product]));
+    return ids.map((id) => byId.get(id)).filter((product): product is ProductEntity => !!product);
   }
 
   async findOne(id: string, _user: UserEntity): Promise<ProductEntity> {

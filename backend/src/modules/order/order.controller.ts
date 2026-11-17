@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request, ParseUUIDPipe, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Headers, UseGuards, Request, ParseUUIDPipe, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { OrderService } from './order.service';
 import { CreateOrderDto, UpdateOrderStatusDto } from './dto';
@@ -15,8 +15,12 @@ export class OrderController {
 
   @Post()
   @Roles(...ORDER_CREATOR_ROLES)
-  async create(@Request() req: any, @Body() dto: CreateOrderDto) {
-    return this.orderService.create(req.user, dto);
+  async create(
+    @Request() req: any,
+    @Body() dto: CreateOrderDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.orderService.create(req.user, dto, idempotencyKey);
   }
 
   @Patch(':id/status')

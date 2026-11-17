@@ -383,7 +383,9 @@ export class FloorPlanService {
       .createQueryBuilder()
       .update(FloorPlanEntity)
       .set({
-        documento,
+        // O TypeORM modela JSONB recursivamente, mas a entidade declara este
+        // documento dinâmico como `any`; o cast mantém a validação no boundary.
+        documento: documento as any,
         version: () => '"version" + 1',
       })
       .where('"id" = :id', { id: plantaId })

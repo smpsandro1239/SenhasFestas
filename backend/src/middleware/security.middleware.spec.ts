@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { hostConfiavel } from './security.middleware';
+import { describe, it, expect, vi } from 'vitest';
+import { hostConfiavel, SecurityMiddleware } from './security.middleware';
 
 describe('hostConfiavel (A6: open redirect via Host header)', () => {
   const confiaveis = new Set([
@@ -23,12 +23,111 @@ describe('hostConfiavel (A6: open redirect via Host header)', () => {
     expect(hostConfiavel('localhost:3001', confiaveis)).toBe(true);
   });
 
-  it('aceita previews *.vercel.app (fluxo de desenvolvimento não parte)', () => {
-    expect(hostConfiavel('senhasfestas-api-abc123-user.vercel.app', confiaveis)).toBe(true);
+  it('recusa previews Vercel que não estejam explicitamente configurados', () => {
+    expect(hostConfiavel('senhasfestas-api-abc123-user.vercel.app', confiaveis)).toBe(false);
+  });
+
+  it('recusa portas arbitrárias num hostname que de outra forma seria confiável', () => {
+    expect(hostConfiavel('senhasfestas.vercel.app:8443', confiaveis)).toBe(false);
+  });
+
+  it('aceita apenas o hostname Vercel exacto quando configurado', () => {
+    const confiaveisPreview = new Set([...confiaveis, 'senhasfestas-api-abc123-user.vercel.app']);
+    expect(hostConfiavel('senhasfestas-api-abc123-user.vercel.app', confiaveisPreview)).toBe(true);
   });
 
   it('recusa host em falta', () => {
     expect(hostConfiavel('', confiaveis)).toBe(false);
     expect(hostConfiavel(undefined as unknown as string, confiaveis)).toBe(false);
+  });
+});
+
+describe('SecurityMiddleware — CSRF para sessões cookie', () => {
+  function criarRequest(origin?: string) {
+    return {
+      method: 'POST',
+      protocol: 'https',
+      headers: { cookie: 'sf_token=abc', origin },
+      get: (name: string) => name === 'x-forwarded-proto' ? 'https' : undefined,
+    } as any;
+  }
+
+  function criarResponse() {
+    const response: any = {
+      setHeader: () => response,
+      statusCode: 200,
+      status: (statusCode: number) => {
+        response.statusCode = statusCode;
+        return response;
+      },
+      json: (body: unknown) => {
+        response.body = body;
+        return response;
+      },
+    };
+    return response;
+  }
+
+  it('rejeita mutações autenticadas por cookie sem Origin', () => {
+    const middleware = new SecurityMiddleware();
+    const req = criarRequest();
+    const res = criarResponse();
+    const next = vi.fn();
+
+    middleware.use(req, res, next);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual(expect.objectContaining({ message: expect.stringContaining('Origem obrigatória') }));
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('aceita mutações autenticadas por cookie com origem explicitamente permitida', () => {
+    const anterior = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.example.com';
+    try {
+      const middleware = new SecurityMiddleware();
+      const req = criarRequest('https://app.example.com');
+      const res = criarResponse();
+      const next = vi.fn();
+
+      middleware.use(req, res, next);
+
+      expect(next).toHaveBeenCalledOnce();
+      expect(res.statusCode).toBe(200);
+    } finally {
+      if (anterior === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = anterior;
+    }
+  });
+
+  it('não confia em X-Forwarded-Host para contornar a allowlist CSRF', () => {
+    const anterior = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.example.com';
+    try {
+      const middleware = new SecurityMiddleware();
+      const req = {
+        ...criarRequest('https://evil.example'),
+        headers: {
+          cookie: 'sf_token=abc',
+          origin: 'https://evil.example',
+          'x-forwarded-host': 'evil.example',
+          'x-forwarded-proto': 'https',
+        },
+        get: (name: string) => ({
+          'x-forwarded-host': 'evil.example',
+          'x-forwarded-proto': 'https',
+        } as Record<string, string>)[name],
+      } as any;
+      const res = criarResponse();
+      const next = vi.fn();
+
+      middleware.use(req, res, next);
+
+      expect(res.statusCode).toBe(403);
+      expect(next).not.toHaveBeenCalled();
+    } finally {
+      if (anterior === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = anterior;
+    }
   });
 });

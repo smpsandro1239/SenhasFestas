@@ -1,10 +1,15 @@
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
 import ServiceWorkerRegister from './sw-register';
 import OnlineIndicator from './online-indicator';
 import { ThemeProvider } from './theme-provider';
+
+// CSP com nonce por pedido exige rendering dinâmico: páginas pré-renderizadas
+// em build não recebem o nonce injectado pelo middleware.
+export const dynamic = 'force-dynamic';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains' });
@@ -48,18 +53,19 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0f172a',
+  themeColor: '#090a0f',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
   return (
     <html lang="pt-PT" suppressHydrationWarning>
       <body className={`${inter.variable} ${jetbrains.variable} font-sans antialiased`}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} nonce={nonce}>
           <AuthProvider>{children}</AuthProvider>
         </ThemeProvider>
         <OnlineIndicator />

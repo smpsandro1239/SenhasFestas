@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { RateLimitMiddleware, LoginRateLimitMiddleware } from './audit.middleware';
+import { Logger } from '@nestjs/common';
+import { RateLimitMiddleware, LoginRateLimitMiddleware, RequestLogMiddleware } from './audit.middleware';
 
 function fakeReq(ip = '1.2.3.4', email?: string) {
   return { ip, body: email ? { email } : {} } as any;
@@ -106,6 +107,18 @@ describe('LoginRateLimitMiddleware — fallback local quando Redis falha', () =>
     else process.env.LOGIN_RATE_LIMIT_MAX = limiteOriginal;
   });
 
+  it('não expõe o email em claro na chave de rate limit Redis', async () => {
+    redisService.getStrict.mockResolvedValue(null);
+    const middleware = new LoginRateLimitMiddleware(redisService as any);
+    await middleware.use(fakeReq('1.2.3.4', 'Pessoa@Exemplo.pt'), fakeRes(), vi.fn());
+
+    const chamadas = redisService.getStrict.mock.calls;
+    const chave = chamadas[chamadas.length - 1]?.[0] as string;
+    expect(chave).toMatch(/^rl:login:1\.2\.3\.4:[a-f0-9]{64}$/);
+    expect(chave).not.toContain('Pessoa@Exemplo.pt');
+    expect(chave).not.toContain('pessoa@exemplo.pt');
+  });
+
   it('usa leitura estrita e incremento atómico para falhas de login', async () => {
     redisService.getStrict.mockResolvedValue(null);
     redisService.incrementWithTtlStrict.mockResolvedValue(1);
@@ -156,5 +169,34 @@ describe('LoginRateLimitMiddleware — fallback local quando Redis falha', () =>
     await middleware.use(fakeReq('1.2.3.4', 'b@b.com'), segunda, next);
 
     expect(segunda.status).toHaveBeenCalledWith(429);
+  });
+});
+
+
+describe('RequestLogMiddleware — minimização de dados', () => {
+  it('regista apenas o path e nunca query strings potencialmente sensíveis', () => {
+    const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const middleware = new RequestLogMiddleware();
+    let finish: (() => void) | undefined;
+    const req = {
+      method: 'POST',
+      path: '/auth/login',
+      originalUrl: '/auth/login?email=privado@example.com&token=segredo',
+    } as any;
+    const res = {
+      statusCode: 401,
+      on: vi.fn((event: string, callback: () => void) => {
+        if (event === 'finish') finish = callback;
+        return res;
+      }),
+    } as any;
+
+    middleware.use(req, res, vi.fn());
+    finish?.();
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('POST /auth/login'));
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('privado@example.com'));
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('token=segredo'));
+    warn.mockRestore();
   });
 });
