@@ -41,7 +41,7 @@ describe('BalanceService — idempotência de operações financeiras', () => {
     };
     const manager = {
       query: vi.fn().mockResolvedValue(undefined),
-      findOne: vi.fn().mockImplementation((entity: any, options: any) => {
+      findOne: vi.fn().mockImplementation((entity: any) => {
         if (entity === EventEntity) return Promise.resolve({ id: 'evt1', status: 'active' });
         if (entity === BalanceMovementEntity) return Promise.resolve(movement);
         return Promise.resolve(null);
