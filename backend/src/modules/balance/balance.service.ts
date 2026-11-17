@@ -46,7 +46,7 @@ export class BalanceService {
     if (!actor?.id) {
       throw new BadRequestException('Idempotency-Key requer um utilizador autenticado');
     }
-    if (key.length < 8 || key.length > 128 || !/^[\\x21-\\x7E]+$/.test(key)) {
+    if (key.length < 8 || key.length > 128 || !/^[\x21-\x7E]+$/.test(key)) {
       throw new BadRequestException('Idempotency-Key inválida (8 a 128 caracteres ASCII visíveis)');
     }
     return key;
@@ -72,7 +72,7 @@ export class BalanceService {
   ): Promise<void> {
     await manager.query(
       'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
-      [`${actorId}:${operation}`, idempotencyKey],
+      [actorId, idempotencyKey],
     );
   }
 
@@ -273,7 +273,8 @@ export class BalanceService {
           await this.lockOperationKey(manager, actor.id, 'load', idempotencyKey);
           const anterior = await manager.findOne(BalanceMovementEntity, {
             where: { createdById: actor.id, idempotencyKey },
-            relations: { balance: true },
+            relations: { balance: { event: true, user: true } },
+            withDeleted: true,
           });
           if (anterior) {
             this.assertHashOperacao(anterior, requestHash!);
