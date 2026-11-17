@@ -208,10 +208,21 @@ jobs:
 
       - name: Arrancar backend e frontend
         run: |
-          (cd backend && npm run start:prod > /tmp/backend.log 2>&1 &)
-          (cd frontend && PORT=3001 npm run start > /tmp/frontend.log 2>&1 &)
-          echo "à espera do backend (:3000) e frontend (:3001)…"
-          npx --yes wait-on@8 http-get://localhost:3000/api/health http-get://localhost:3001/auth/login --timeout 120000
+          # Arranque desacoplado e portas explícitas para evitar shells npm
+          # intermédios e colisões entre Next.js e a API.
+          (cd backend && PORT=3000 nohup node dist/main > /tmp/backend.log 2>&1 < /dev/null & echo $! > /tmp/backend.pid)
+          (cd frontend && PORT=3001 nohup node node_modules/next/dist/bin/next start -p 3001 > /tmp/frontend.log 2>&1 < /dev/null & echo $! > /tmp/frontend.pid)
+          for tentativa in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/api/health >/dev/null && curl -fsS http://localhost:3001/auth/login >/dev/null; then
+              echo "backend e frontend disponíveis"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Timeout ao arrancar os serviços"
+          echo "===== backend ====="; tail -n 120 /tmp/backend.log || true
+          echo "===== frontend ====="; tail -n 120 /tmp/frontend.log || true
+          exit 1
 
       - name: Testes browser (realtime da planta + cabeçalhos)
         working-directory: frontend
