@@ -210,7 +210,7 @@ jobs:
 
       - name: Testes browser (realtime da planta + cabeçalhos)
         working-directory: frontend
-        run: npx playwright test e2e/planta-realtime.spec.ts e2e/security-headers.spec.ts
+        run: npx playwright test e2e/planta-realtime.spec.ts e2e/security-headers.spec.ts e2e/design-system.spec.ts
 
       - name: Logs em falha
         if: failure()
