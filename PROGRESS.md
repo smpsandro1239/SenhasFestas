@@ -1,3 +1,30 @@
+## 2026-11-17 — Validação concluída da auditoria bilateral
+
+**CI no commit `674651b`**
+- Frontend lint/build: sucesso.
+- Backend lint, testes unitários, build e E2E com PostgreSQL/Redis: sucesso.
+- Browser E2E (realtime da planta e cabeçalhos): sucesso.
+- Verificação documental: sucesso.
+- CodeQL: sucesso.
+- Job `Deploy produção`: conclusão `success`, mas os passos `Correr migrações de base de dados` e `Deploy via SSH` ficaram `skipped`; não houve migração nem publicação confirmada.
+
+**Resultado T43**
+- A auditoria bilateral de transferências passou na CI, incluindo os testes do interceptor e do serviço de saldo.
+- Cada transferência gera um registo associado ao saldo e evento de origem e outro ao saldo e evento de destino; pares repetidos são deduplicados.
+- T43 continua em curso: ainda falta cobrir de forma sistemática os restantes domínios administrativos e desenhar uma estratégia transaccional/outbox para que falhas na persistência da auditoria não deixem operações financeiras sem trilho durável.
+
+**Segurança**
+- Gitleaks e regressão PWA passaram.
+- O job de dependências continua a falhar exclusivamente na política de vulnerabilidades de produção: `picomatch <=4.0.7` via TypeORM 1.1.3/tinyglobby/fdir. O advisory não publica versão corrigida; não foi aplicado downgrade major automático.
+- CodeQL passou.
+
+**Estado operacional**
+- Sem deploy confirmado, sem migrações executadas e sem alteração à base de dados.
+- T42 continua em curso pela falta de observabilidade e validação de Redis num ambiente real.
+- T64 continua em curso até existir correcção upstream ou mitigação compatível e testada.
+
+---
+
 ## 2026-11-17 — T43: auditoria bilateral de transferências entre eventos
 
 **Problema identificado**
