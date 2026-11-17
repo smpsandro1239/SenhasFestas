@@ -36,6 +36,28 @@
 
 ---
 
+## 2026-11-17 — Auditoria técnica e hardening PWA (T38)
+
+**Objectivo**: concluir a revisão estática das 10 áreas pedidas e corrigir um risco de privacidade no Service Worker, além de alinhar a documentação com o comportamento real.
+
+**Feito na branch `codex/autonomous-hardening-2026-11`**
+- Criado `AUDIT.md` com arquitectura, segurança, dados, testes, performance, CI/CD, documentação, PWA e roadmap priorizado.
+- Corrigido README: Next.js 15 e descrição honesta do modo offline (fallback PWA/cache estático; não há fila transaccional).
+- Service Worker: deixa de persistir respostas de navegação autenticada e deixa de interceptar RSC/HTML dinâmico. Mantém cache de assets estáticos explicitamente permitidos e página offline precacheada.
+- Página `/offline`: deixa claro que pedidos/pagamentos/alterações não são enfileirados nem sincronizados automaticamente; recomenda verificar o estado antes de repetir uma operação.
+- Adicionado teste de regressão `frontend/src/lib/service-worker-cache.test.ts`.
+- T38/D19 registado no plano e TODO.
+
+**Gates**
+- O CI do commit anterior reportou 498/500 testes backend: dois testes recém-adicionados falharam por ambiente DB_SSL herdado e por o teste não validar correctamente a transição do fallback local. A branch foi corrigida; o teste SSL passa explicitamente `DB_SSL=false` no cenário local.
+- O run do commit com o isolamento SSL foi colocado em fila. As alterações PWA e a auditoria geraram novos commits depois desse SHA; o CI do HEAD mais recente ainda tem de ser confirmado.
+- Não foi executado teste browser local nem operação contra BD de produção.
+
+**Decisão**
+- Não implementar ainda fila offline de pedidos/pagamentos: falta idempotência de servidor e reconciliação. Repetir POST de dinheiro/stock sem estas garantias pode duplicar movimentos.
+
+---
+
 ## 2026-10-22 — Corrigir o que o CI real revelou (T31/T32/T33)
 
 **Objectivo**: corrigir as três causas que o primeiro CI real deixou veridas
