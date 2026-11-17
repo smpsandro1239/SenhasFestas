@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
+import * as migrations from './migrations';
 
 export function configuracaoDataSource(env: NodeJS.ProcessEnv = process.env): DataSourceOptions {
   const databaseUrl = env.DATABASE_URL;
@@ -41,9 +42,9 @@ export function configuracaoDataSource(env: NodeJS.ProcessEnv = process.env): Da
     database,
     ssl,
     entities: [__dirname + '/../entities/index.ts'],
-    // Só os ficheiros das migrations (<timestamp>-<Nome>.ts). Um glob *.ts
-    // apanhava também o index.spec.ts e carregava Vitest em CommonJS.
-    migrations: [__dirname + '/migrations/[0-9]*.ts'],
+    // Registry estática: evita que o CLI carregue ficheiros *.spec.ts como
+    // migrations e mantém o conjunto igual ao usado pelo arranque da API.
+    migrations: Object.values(migrations).filter((v) => typeof v === 'function'),
     synchronize: false,
     logging: false,
   };
