@@ -95,9 +95,11 @@ async function entrar(
   await page.waitForTimeout(500);
   const selects = page.locator('select');
   await selects.nth(0).selectOption(eventoCriado.id);
-  await page.waitForTimeout(1500);
+  // O badge só fica "Realtime ligado" depois do ACK do servidor a confirmar
+  // que este browser entrou efectivamente na room da planta.
+  await expect(page.getByText('Realtime ligado', { exact: true })).toBeVisible({ timeout: 15_000 });
   await selects.nth(1).selectOption(eventoCriado.plantaId).catch(() => {});
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(500);
   return { page, fechar: () => context.close() };
 }
 

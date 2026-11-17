@@ -89,17 +89,20 @@ describe('criarSocketAutenticado (A10: WS re-autentica e expõe erros)', () => {
     expect(onStatus).toHaveBeenCalledWith('offline');
   });
 
-  it('marca connected no connect e re-entra no evento', () => {
+  it('só marca connected depois do servidor confirmar a entrada na room', async () => {
     const socket = novoFakeSocket();
     (io as any).mockReturnValue(socket);
     (getAccessToken as any).mockReturnValue('token');
     const onStatus = vi.fn();
 
     criarSocketAutenticado({ url: 'ws://x', eventId: 'e1', onStatus, onMessage: vi.fn() });
-    disparar(socket, 'connect');
+    await disparar(socket, 'connect');
 
-    expect(onStatus).toHaveBeenCalledWith('connected');
-    expect(socket.emit).toHaveBeenCalledWith('joinEvent', 'e1');
+    expect(onStatus).toHaveBeenCalledWith('reconnecting');
+    expect(socket.emit).toHaveBeenCalledWith('joinEvent', 'e1', expect.any(Function));
+    const ack = socket.emit.mock.calls[0][2];
+    ack({ ok: true });
+    expect(onStatus).toHaveBeenLastCalledWith('connected');
   });
 
   it('trata error pós-conexão: expõe reconnecting (não volta a engolir erros)', async () => {

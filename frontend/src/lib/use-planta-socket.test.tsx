@@ -83,7 +83,7 @@ describe('usePlantaSocket (contrato do canal de planta)', () => {
       expect.objectContaining({ auth: { token: 'token-abc' }, transports: ['websocket'] }),
     );
     disparar(socket, 'connect');
-    expect(socket.emit).toHaveBeenCalledWith('joinEventPlanta', 'evt1');
+    expect(socket.emit).toHaveBeenCalledWith('joinEventPlanta', 'evt1', expect.any(Function));
   });
 
   it('re-entra na planta no reconnect (não fica fora após blip)', () => {
@@ -93,7 +93,7 @@ describe('usePlantaSocket (contrato do canal de planta)', () => {
     render(<SocketHost eventId="evt1" onPlantaUpdated={vi.fn()} />);
     disparar(socket, 'reconnect');
 
-    expect(socket.emit).toHaveBeenCalledWith('joinEventPlanta', 'evt1');
+    expect(socket.emit).toHaveBeenCalledWith('joinEventPlanta', 'evt1', expect.any(Function));
   });
 
   it('reemite plantaUpdated válido para o callback', () => {
@@ -167,6 +167,11 @@ describe('usePlantaSocket (contrato do canal de planta)', () => {
 
     act(() => {
       disparar(socket, 'connect');
+    });
+    expect(estados.at(-1)).toBe('reconnecting');
+    const ack = socket.emit.mock.calls[0][2];
+    act(() => {
+      ack({ ok: true });
     });
     expect(estados.at(-1)).toBe('connected');
   });
