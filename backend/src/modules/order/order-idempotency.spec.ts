@@ -75,6 +75,8 @@ describe('OrderService — idempotência na criação', () => {
   it('grava a chave e o hash na criação original e só emite os efeitos uma vez', async () => {
     const { service, dataSource, orderGateway, notificationService } = criarServico();
     const manager = {
+      query: vi.fn().mockResolvedValue([]),
+      findOne: vi.fn().mockResolvedValue(null),
       find: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockImplementation((_entity: any, data: any) => data),
       save: vi.fn().mockImplementation(async (_entity: any, data: any) => ({ ...data, id: 'order-1' })),
@@ -104,6 +106,47 @@ describe('OrderService — idempotência na criação', () => {
       ConflictException,
     );
     expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+
+  it('revalida a chave sob advisory lock antes de validar stock ou debitar saldo', async () => {
+    const seed = criarServico();
+    const requestHash = (seed.service as any).hashPedido(USER.id, DTO);
+    const existing = { id: 'order-1', status: 'received', requestHash };
+    const { service, orderRepository, dataSource, orderGateway, notificationService } = criarServico();
+    orderRepository.findOne.mockResolvedValueOnce(null);
+
+    const manager = {
+      query: vi.fn().mockResolvedValue([]),
+      findOne: vi.fn().mockResolvedValue(existing),
+      find: vi.fn(),
+      create: vi.fn(),
+      save: vi.fn(),
+    };
+    dataSource.transaction.mockImplementation(async (fn: any) => fn(manager));
+
+    const result = await service.create(USER, DTO as any, 'order-test-key-0001');
+
+    expect(result.id).toBe('order-1');
+    expect(manager.query).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      ['event-1:user-1', 'order-test-key-0001'],
+    );
+    expect(manager.findOne).toHaveBeenCalledWith(
+      OrderEntity,
+      expect.objectContaining({
+        where: {
+          event: { id: 'event-1' },
+          createdById: USER.id,
+          idempotencyKey: 'order-test-key-0001',
+        },
+      }),
+    );
+    expect(manager.find).not.toHaveBeenCalled();
+    expect(manager.create).not.toHaveBeenCalled();
+    expect(manager.save).not.toHaveBeenCalled();
+    expect(orderGateway.emitOrderUpdate).toHaveBeenCalledWith('order-1', 'received', 'event-1');
+    expect(notificationService.notifyNewOrder).not.toHaveBeenCalled();
   });
 
   it('recupera o pedido vencedor quando duas transações competem pela mesma chave', async () => {
