@@ -47,6 +47,7 @@ export class BalanceController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @Param('movementId', ParseUUIDPipe) movementId: string,
     @Request() req: any,
+    @Headers('idempotency-key') idempotencyKey?: string,
     @Query('eventId', new ParseUUIDPipe({ optional: true })) eventId?: string,
     @Body() dto?: ReverseLoadDto,
   ) {
@@ -54,7 +55,7 @@ export class BalanceController {
     if (eventId && req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, eventId);
     }
-    return this.balanceService.reverseLoad(userId, movementId, req.user, dto, arquivarAuditoria(req));
+    return this.balanceService.reverseLoad(userId, movementId, req.user, dto, arquivarAuditoria(req), idempotencyKey);
   }
 
   @Post(':userId/deduct')
@@ -101,12 +102,13 @@ export class BalanceController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() dto: TransferBalanceDto,
     @Request() req: any,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     this.assertStaffEventScope(req.user, dto.toEventId);
     if (req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, dto.toEventId);
     }
-    return this.balanceService.transferBalance(userId, dto, req.user, arquivarAuditoria(req));
+    return this.balanceService.transferBalance(userId, dto, req.user, arquivarAuditoria(req), idempotencyKey);
   }
 
   @Post(':userId/extend')
