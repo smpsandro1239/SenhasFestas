@@ -17,7 +17,7 @@ export function configuracaoDataSource(env: NodeJS.ProcessEnv = process.env): Da
     port = Number.parseInt(url.port || '5432', 10);
     username = decodeURIComponent(url.username);
     password = decodeURIComponent(url.password);
-    database = decodeURIComponent(url.pathname.replace(/^\\//, ''));
+    database = decodeURIComponent(url.pathname.replace(/^\//, ''));
     sslMode = url.searchParams.get('sslmode');
   }
 
