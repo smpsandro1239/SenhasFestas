@@ -1,6 +1,7 @@
 import {
   IsString,
   IsUUID,
+  Length,
   IsInt,
   IsNumber,
   Min,
@@ -32,8 +33,11 @@ export class CreateOrderDto {
   @IsUUID()
   eventId: string;
 
-  @IsUUID()
+  // A chave pode vir no header Idempotency-Key ou, por compatibilidade, no body.
+  // A validação ASCII final é feita pelo serviço.
+  @IsString()
   @IsOptional()
+  @Length(8, 128)
   idempotencyKey?: string;
 
   @IsEnum(['qr', 'pos'])
