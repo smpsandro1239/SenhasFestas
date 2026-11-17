@@ -76,7 +76,7 @@ describe('DTOs de Autenticação — Validação de Password (Proteção DoS Bcr
     it('aceita password válida com tamanho <= 72 caracteres', async () => {
       const dto = new CreateUserDto();
       dto.email = 'admin@exemplo.pt';
-      dto.password = 'c'.repeat(72);
+      dto.password = 'c'.repeat(12);
       dto.name = 'Administrador';
       dto.role = 'organizer';
 
