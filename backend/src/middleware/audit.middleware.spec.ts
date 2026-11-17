@@ -13,6 +13,7 @@ function fakeRes() {
     return res;
   });
   res.json = vi.fn(() => res);
+  res.setHeader = vi.fn(() => res);
   res.on = vi.fn(() => res);
   return res;
 }
@@ -112,6 +113,7 @@ describe('LoginRateLimitMiddleware — reservas concorrentes e fallback local', 
 
   let middleware: LoginRateLimitMiddleware;
   const limiteOriginal = process.env.LOGIN_RATE_LIMIT_MAX;
+  const nodeEnvOriginal = process.env.NODE_ENV;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -123,6 +125,39 @@ describe('LoginRateLimitMiddleware — reservas concorrentes e fallback local', 
   afterEach(() => {
     if (limiteOriginal === undefined) delete process.env.LOGIN_RATE_LIMIT_MAX;
     else process.env.LOGIN_RATE_LIMIT_MAX = limiteOriginal;
+    if (nodeEnvOriginal === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = nodeEnvOriginal;
+  });
+
+  it('falha fechado em produção quando o Redis está configurado mas indisponível', async () => {
+    process.env.NODE_ENV = 'production';
+    redisService.incrementWithTtlStrict.mockRejectedValue(new Error('ECONNREFUSED'));
+    const res = fakeRes();
+    const next = vi.fn();
+
+    await middleware.use(fakeReq('1.2.3.4', 'a@b.com'), res, next);
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '30');
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 503,
+    }));
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('recusa autenticação em produção quando Redis não está configurado', async () => {
+    process.env.NODE_ENV = 'production';
+    redisService.isEnabled = false;
+    const res = fakeRes();
+    const next = vi.fn();
+
+    await middleware.use(fakeReq('1.2.3.4', 'a@b.com'), res, next);
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '30');
+    expect(redisService.incrementWithTtlStrict).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+    redisService.isEnabled = true;
   });
 
   it('não expõe o email em claro na chave Redis', async () => {
