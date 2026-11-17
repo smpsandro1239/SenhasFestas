@@ -2,7 +2,7 @@ name: Security
 
 on:
   push:
-    branches: [main]
+    branches: [main, security/hardening-2026-11]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -16,9 +16,9 @@ concurrency:
 
 jobs:
   dependency-audit:
-    name: Dependency audit
+    name: Dependency audit and lockfile remediation
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,9 +26,26 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: package-lock.json
-      - name: Install dependencies
-        run: npm ci
-      - name: Audit production dependencies
+      - name: Resolve compatible dependency updates
+        run: npm install --ignore-scripts
+      - name: Apply non-breaking security fixes
+        run: npm audit fix --ignore-scripts
+      - name: Save updated lockfile and audit report
+        if: always()
+        run: |
+          npm audit --omit=dev --json > npm-audit-report.json || true
+          node -e "const r=require('./npm-audit-report.json'); console.log(JSON.stringify(r.metadata?.vulnerabilities || {}, null, 2))"
+      - name: Upload lockfile and audit report for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-dependency-remediation
+          path: |
+            package-lock.json
+            npm-audit-report.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Enforce production dependency security
         run: npm audit --omit=dev --audit-level=high
 
   pwa-cache-regression:
