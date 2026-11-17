@@ -168,7 +168,7 @@ export class BalanceService {
 
       locked.reversedAmount = centavos(jaEstornado + estorno);
       locked.reversed = locked.reversedAmount >= montanteOriginal - 0.005;
-      locked.reversedAt = locked.reversed ? new Date() : null;
+      locked.reversedAt = locked.reversed ? new Date() : undefined;
       await manager.save(BalanceMovementEntity, locked);
 
       balance.currentBalance = subtrai(Number(balance.currentBalance), estorno);
