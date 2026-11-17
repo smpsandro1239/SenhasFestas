@@ -44,20 +44,30 @@ export class SecurityMiddleware implements NestMiddleware {
         });
         return;
       }
-      {
-        const proto = req.get('x-forwarded-proto') || req.protocol;
-        const host = req.get('x-forwarded-host') || req.headers.host;
-        const mesmaOrigem = origin.replace(/\/+$/, '') === `${proto}://${host}`;
-        const permitidas = (process.env.FRONTEND_URL || 'http://localhost:3001')
-          .split(',')
-          .map((o) => o.trim().replace(/\/+$/, ''));
-        if (!mesmaOrigem && !permitidas.includes(origin.replace(/\/+$/, ''))) {
-          res.status(HttpStatus.FORBIDDEN).json({
-            statusCode: HttpStatus.FORBIDDEN,
-            message: 'Origem não permitida',
-          });
-          return;
-        }
+      const permitidas = (process.env.FRONTEND_URL || 'http://localhost:3001')
+        .split(',')
+        .map((o) => {
+          try {
+            return new URL(o.trim()).origin;
+          } catch {
+            return '';
+          }
+        })
+        .filter(Boolean);
+      let origemNormalizada = '';
+      try {
+        origemNormalizada = new URL(origin).origin;
+      } catch {
+        origemNormalizada = '';
+      }
+      // Não confiar em X-Forwarded-Host/Proto enviados pelo próprio cliente
+      // para validar CSRF. A origem permitida vem apenas da configuração.
+      if (!origemNormalizada || !permitidas.includes(origemNormalizada)) {
+        res.status(HttpStatus.FORBIDDEN).json({
+          statusCode: HttpStatus.FORBIDDEN,
+          message: 'Origem não permitida',
+        });
+        return;
       }
     }
 
