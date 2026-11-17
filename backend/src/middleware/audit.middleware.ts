@@ -196,7 +196,8 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
     try {
       const count = await this.reservarNoRedis(chave);
       if (count > this.maxAttempts) {
-        await this.libertarReservaRedis(chave);
+        // Não libertar a reserva dentro deste try: uma falha no DECR não pode
+        // cair no fallback e autorizar precisamente o pedido que foi bloqueado.
         this.responderLimite(res);
         return;
       }
