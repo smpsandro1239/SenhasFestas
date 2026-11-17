@@ -201,7 +201,7 @@ describe('OrderGateway — handleConnection', () => {
 
   it('aceita e regista o socket com token válido', async () => {
     const { gateway, jwtService } = criarGateway({
-      jwt: { verify: vi.fn().mockReturnValue({ sub: 'u1', role: 'organizer' }) },
+      jwt: { verify: vi.fn().mockReturnValue({ sub: 'u1', role: 'organizer', exp: Math.floor(Date.now() / 1000) + 900 }) },
     });
     const client = socketFalso();
     client.handshake = { auth: { token: 'bom' }, headers: {} };
@@ -215,7 +215,7 @@ describe('OrderGateway — handleConnection', () => {
 
   it('usa a role atual da BD e ignora uma role superadmin antiga no JWT', async () => {
     const { gateway } = criarGateway({
-      jwt: { verify: vi.fn().mockReturnValue({ sub: 'u1', role: 'superadmin' }) },
+      jwt: { verify: vi.fn().mockReturnValue({ sub: 'u1', role: 'superadmin', exp: Math.floor(Date.now() / 1000) + 900 }) },
       users: { findOne: vi.fn().mockResolvedValue({ id: 'u1', role: 'organizer', isActive: true }) },
     });
     const client = socketFalso();
