@@ -16,6 +16,22 @@
 
 # SenhasFestas — Progresso
 
+## 2026-11-17 — Arquivo automático de saldos sob concorrência (T41)
+
+**Objectivo**: impedir que o cron de arquivo grave estado desactualizado sobre saldos alterados em paralelo por extensões, estornos ou transferências.
+
+**Feito na branch `fix/balance-archive-transaction-lock-2026-11-v2`**
+- A consulta inicial recolhe apenas os IDs candidatos.
+- Cada saldo é relido dentro de uma transacção e bloqueado com `FOR UPDATE`, limitando o lock à tabela/alias `saldo` para não bloquear a relação opcional `event`.
+- A decisão final revalida o saldo actual, o prazo efectivo (incluindo `extendedUntil`), `archivedAt` e `deletedAt`.
+- Adicionados testes para lock, arquivamento, soft-delete e extensão concorrente após a descoberta do candidato.
+
+**Validação**
+- Pendente CI completa na PR #166.
+- Sem alteração de schema/migrations, valores contabilísticos ou dados de produção; sem deploy.
+
+---
+
 ## 2026-11-17 — Redacção de segredos na auditoria (T40)
 
 **Objectivo**: impedir que respostas de autenticação ou snapshots administrativos persistam credenciais no histórico de auditoria.
@@ -28,8 +44,8 @@
 - Testes de regressão para login, refresh, segredos aninhados, JWT/Bearer e erros com credenciais.
 
 **Validação**
-- A execução CI anterior à correcção passou 578/579 testes backend; o único teste falhou porque a expressão Bearer mascarava o JWT antes do padrão específico. A ordem foi corrigida no commit `c45aa02` e integrada na `main`.
-- Não foram encontrados workflow runs CI associados ao merge commit `1319615`; a validação pós-merge continua pendente.
+- A validação da PR #164 executou com sucesso backend (lint, testes, build e E2E), frontend (lint, typecheck, Vitest e build), Browser E2E, documentação, Security e CodeQL.
+- O teste JWT/Bearer foi alinhado com o resultado correcto `Bearer [JWT REDACTED]`; a verificação continua a confirmar que o JWT original não é persistido.
 - Vercel reportou bloqueio de quota diária (`api-deployments-free-per-day`); não há confirmação de deploy.
 - Sem alterações à base de dados ou migrations.
 
