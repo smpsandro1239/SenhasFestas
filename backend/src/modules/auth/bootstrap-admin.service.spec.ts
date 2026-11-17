@@ -4,14 +4,15 @@ import { BootstrapAdminService } from './bootstrap-admin.service';
 function criarService(password: string) {
   const userRepository = {
     findOne: vi.fn().mockResolvedValue(null),
-    create: vi.fn((value) => value),
+    create: vi.fn((value: any) => value),
     save: vi.fn().mockImplementation(async (value) => value),
   };
+  const valores: Record<string, string> = {
+    BOOTSTRAP_ADMIN_EMAIL: 'admin@example.com',
+    BOOTSTRAP_ADMIN_PASSWORD: password,
+  };
   const configService = {
-    get: vi.fn((key: string) => ({
-      BOOTSTRAP_ADMIN_EMAIL: 'admin@example.com',
-      BOOTSTRAP_ADMIN_PASSWORD: password,
-    })[key]),
+    get: vi.fn((key: string) => valores[key]),
   };
   return {
     service: new BootstrapAdminService(userRepository as any, configService as any),
