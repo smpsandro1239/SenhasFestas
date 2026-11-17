@@ -1,60 +1,75 @@
-# SenhasFestas - Guia de Contribuição
+# SenhasFestas — Guia de Contribuição
 
-## 📋 Como Contribuir
+Obrigado pelo interesse em contribuir para o SenhasFestas.
 
-Obrigada pelo seu interesse em contribuir com o SenhasFestas! Por favor, siga estas diretrizes para ajudar a melhorar o projeto.
+## Preparar o ambiente
 
-### 🔧 Preparação do Ambiente
+Requisitos: Node.js 24 ou superior e npm 11 ou superior.
 
-1. Fork o repositório
-2. Clone seu fork: `git clone https://github.com/seu-usuario/SenhasFestas.git`
-3. Crie uma branch: `git checkout -b feature/nova-funcionalidade`
-4. Instale as dependências:
-   ```bash
-   # Backend
-   cd backend
-   npm install
-   
-   # Frontend  
-   cd ../frontend
-   npm install
-   ```
+```bash
+git clone https://github.com/smpsandro1239/SenhasFestas.git
+cd SenhasFestas
+git checkout -b feature/nome-da-alteracao
+npm ci
+npm run build:shared
+```
 
-### 📝 Diretrizes de Código
+O projecto usa npm workspaces. Instala as dependências uma única vez na raiz; não executes `npm install` separadamente em `backend` e `frontend`, porque isso pode alterar lockfiles e quebrar a resolução dos workspaces.
 
-- Siga o estilo de código existente (ESLint/Prettier)
-- Escreva testes para novas funcionalidades
-- Atualize a documentação quando necessário
-- Use mensagens de commit claras e descritivas em PT-PT
-- Mantenha as funções pequenas e focadas
+## Comandos de validação
 
-### 🚀 Processo de Pull Request
+Antes de abrir um Pull Request, executa os comandos relevantes:
 
-1. Certifique-se de que seu código passa nos testes: `npm test`
-2. Atualize a documentação se houver mudanças na API
-3. Faça commit das suas mudanças: `git commit -m "feat: descreva sua mudança"`
-4. Faça push para seu fork: `git push origin feature/nova-funcionalidade`
-5. Abra um Pull Request para o branch `main`
+```bash
+# Lint de backend e frontend
+npm run lint
 
-### 🐛 Reportando Bugs
+# TypeScript
+npm run typecheck --workspace backend
+npm run typecheck --workspace frontend
 
-Ao reportar um bug, por favor inclua:
-- Descrição clara do problema
-- Passos para reproduzir
-- Comportamento esperado vs comportamento atual
-- Screenshots ou logs (se aplicável)
-- Versão do navegador/node
+# Testes unitários do backend e frontend
+npm test --workspace backend
+npm test --workspace frontend
 
-### 💡 Sugerindo Funcionalidades
+# Build completo
+npm run build
 
-Para sugerir novas funcionalidades:
-- Verifique se já não existe uma issue similar
-- Descreva o problema que a funcionalidade resolveria
-- Explique como ela beneficiaria os usuários
-- Se possível, inclua mockups ou fluxos de trabalho
+# Testes E2E do backend
+# ATENÇÃO: estes testes podem apagar o schema public.
+# Usa apenas uma BD local descartável terminada em _test ou _e2e.
+E2E_ALLOW_SCHEMA_RESET=true npm run test:e2e --workspace backend
 
-### 📄 Licença
+# Validação de documentação
+npm run verify:docs
+```
 
-Este projeto está licenciado sob a licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
+Para executar E2E, configura previamente uma base de dados PostgreSQL local e descartável. O teste recusa hosts remotos e exige o opt-in explícito. Nunca uses credenciais ou bases de dados de produção.
 
-Obrigado por contribuir com o SenhasFestas! 🙏
+## Padrões de desenvolvimento
+
+- Mantém TypeScript estrito no frontend e evita introduzir novos `any`.
+- Mantém regras de negócio no backend; o frontend não é autoridade para saldo, stock, permissões ou preços.
+- Usa transacções e locks para alterações concorrentes de saldo, stock e pedidos.
+- Operações financeiras e pedidos devem ser idempotentes antes de suportarem retries ou sincronização offline.
+- Escreve testes para comportamentos novos e regressões, sobretudo permissões, concorrência, saldo e stock.
+- Não guardes respostas privadas/autenticadas em cache do Service Worker.
+- Actualiza documentação e migrations sempre que alterares contratos ou modelo de dados.
+
+## Pull Requests
+
+1. Descreve o problema e a solução.
+2. Identifica migrations, alterações de API e impacto no frontend.
+3. Inclui testes e evidência dos comandos executados.
+4. Não marques como concluído algo que não foi validado.
+5. Não faças deploy nem alteres dados reais a partir de testes locais.
+
+Usa mensagens de commit claras, por exemplo `fix(auth): validar rotação de refresh tokens`.
+
+## Reportar vulnerabilidades
+
+Não publiques detalhes de vulnerabilidades exploráveis em issues públicas. Consulta [SECURITY.md](SECURITY.md) para o processo de divulgação responsável.
+
+## Licença
+
+O projecto está licenciado sob MIT. Consulta [LICENSE](LICENSE).
