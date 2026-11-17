@@ -13,13 +13,20 @@ export class RedisService implements OnModuleDestroy {
     return this.client !== null;
   }
 
-  async get(key: string): Promise<string | null> {
+  /**
+   * Leitura estrita para decisões de segurança: null significa chave ausente;
+   * indisponibilidade tem de ser uma excepção, nunca um falso "sem registos".
+   */
+  async getStrict(key: string): Promise<string | null> {
     if (!this.client) {
-      this.logger.warn(`[Redis indisponível] get ignorado: ${key}`);
-      return null;
+      throw new Error('Redis não configurado');
     }
+    return this.client.get(key);
+  }
+
+  async get(key: string): Promise<string | null> {
     try {
-      return await this.client.get(key);
+      return await this.getStrict(key);
     } catch (error) {
       this.logger.warn(`Falha no Redis get(${key}): ${(error as Error).message}`);
       return null;
@@ -65,21 +72,25 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
-  async incrementWithTtl(key: string, ttlSeconds: number): Promise<number | null> {
+  /**
+   * Incremento estrito para limites de segurança. A indisponibilidade não pode
+   * ser convertida em zero: o middleware tem de activar o contador local.
+   */
+  async incrementWithTtlStrict(key: string, ttlSeconds: number): Promise<number> {
     if (!this.client) {
-      return null;
+      throw new Error('Redis não configurado');
     }
-    // INCR + EXPIRE numa única operação Lua — atómico por construção. Sem isto,
-    // um processo que morra entre os dois comandos deixa a chave sem TTL (rate
-    // limit "para sempre"). Nota: a atomicidade é garantida pelo Redis (EVAL não
-    // é interleaved); não é testável com mocks — só com Redis real (B1-concorrência).
     const script = `
       local v = redis.call('INCR', KEYS[1])
       if v == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
       return v
     `;
+    return (await this.client.eval(script, 1, key, ttlSeconds)) as number;
+  }
+
+  async incrementWithTtl(key: string, ttlSeconds: number): Promise<number | null> {
     try {
-      return (await this.client.eval(script, 1, key, ttlSeconds)) as number;
+      return await this.incrementWithTtlStrict(key, ttlSeconds);
     } catch (error) {
       this.logger.warn(`Falha no Redis incrementWithTtl(${key}): ${(error as Error).message}`);
       return null;
