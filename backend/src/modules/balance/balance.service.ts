@@ -95,6 +95,7 @@ export class BalanceService {
       const movement = await manager.findOne(BalanceMovementEntity, {
         where: { id: movementId },
         relations: { balance: { user: true, event: true } as any },
+        withDeleted: true,
       });
       if (!movement) {
         throw new NotFoundException('Movimento não encontrado');
@@ -135,6 +136,7 @@ export class BalanceService {
       const balance = await manager.findOne(BalanceEntity, {
         where: { id: movement.balance.id },
         lock: { mode: 'pessimistic_write' },
+        withDeleted: true,
       });
       if (!balance) {
         throw new NotFoundException('Saldo não encontrado');
@@ -162,6 +164,9 @@ export class BalanceService {
       locked.reversedAt = new Date();
       await manager.save(BalanceMovementEntity, locked);
 
+      // O estorno tem de continuar possível após soft-delete; repõe o registo
+      // na vista arquivada para que o saldo não fique invisível.
+      balance.deletedAt = null;
       balance.currentBalance = subtrai(Number(balance.currentBalance), estorno);
       const savedBalance = await manager.save(BalanceEntity, balance);
 
@@ -205,6 +210,7 @@ export class BalanceService {
             ? ({ user: { id: userId }, event: { id: dto.eventId } } as any)
             : ({ user: { id: userId } } as any),
           lock: { mode: 'pessimistic_write' },
+          withDeleted: true,
         });
 
         if (balance) {
@@ -358,10 +364,15 @@ export class BalanceService {
     return { arquivados, removidos };
   }
 
-  private async carregarSaldoEvento(userId: string, eventId: string): Promise<BalanceEntity> {
+  private async carregarSaldoEvento(
+    userId: string,
+    eventId: string,
+    withDeleted = false,
+  ): Promise<BalanceEntity> {
     const balance = await this.balanceRepository.findOne({
       where: { user: { id: userId }, event: { id: eventId } } as any,
       relations: { event: true, user: true },
+      withDeleted,
     });
     if (!balance) {
       throw new NotFoundException('Saldo não encontrado');
@@ -386,7 +397,7 @@ export class BalanceService {
     dto: ExtendBalanceDto,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<SaldoEstado> {
-    const balance = await this.carregarSaldoEvento(userId, dto.eventId);
+    const balance = await this.carregarSaldoEvento(userId, dto.eventId, true);
     const until = new Date(dto.until);
     if (Number.isNaN(until.getTime()) || until.getTime() <= Date.now()) {
       throw new BadRequestException('Data de extensão tem de ser futura');
@@ -400,6 +411,7 @@ export class BalanceService {
       // Extensão para o futuro revive um saldo já arquivado.
       balance.archivedAt = null;
     }
+    balance.deletedAt = null;
     const saved = await this.balanceRepository.save(balance);
     return this.resumoSaldo(userId, saved);
   }
@@ -412,6 +424,7 @@ export class BalanceService {
     const balance = await this.carregarSaldoEvento(userId, eventId);
     arquivar?.({ antes: { archivedAt: balance.archivedAt ?? null }, eventId });
     balance.archivedAt = null;
+    balance.deletedAt = null;
     const saved = await this.balanceRepository.save(balance);
     return this.resumoSaldo(userId, saved);
   }
@@ -578,6 +591,7 @@ export class BalanceService {
       let destino = await manager.findOne(BalanceEntity, {
         where: { user: { id: userId }, event: { id: dto.toEventId } } as any,
         lock: { mode: 'pessimistic_write' },
+        withDeleted: true,
       });
       if (!destino) {
         const userEntity = await manager.findOne(UserEntity, {
@@ -592,9 +606,11 @@ export class BalanceService {
           currentBalance: 0,
         });
         await manager.save(BalanceEntity, destino);
-      } else if (destino.archivedAt) {
-        // O dinheiro chega agora ao destino: revive um saldo arquivado.
+      } else {
+        // Um saldo de destino pode estar soft-deleted/arquivado. A transferência
+        // de dinheiro novo reativa-o, evitando colisão no índice único user/event.
         destino.archivedAt = null;
+        destino.deletedAt = null;
       }
 
       arquivar?.({
