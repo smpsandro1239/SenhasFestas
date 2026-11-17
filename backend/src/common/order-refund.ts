@@ -19,6 +19,20 @@ export async function reembolsarSaldoEmTransacao(
   if (!temSaldoParaReembolsar(order)) {
     return;
   }
+
+  // Serializa o reembolso por encomenda mesmo que um futuro caminho de
+  // cancelamento deixe de bloquear a própria encomenda.
+  await manager.query(
+    'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+    ['order-refund', order.id],
+  );
+  const reembolsoExistente = await manager.findOne(BalanceMovementEntity, {
+    where: { orderId: order.id, type: MovementType.REFUND },
+  });
+  if (reembolsoExistente) {
+    return;
+  }
+
   const balance = await manager.findOne(BalanceEntity, {
     where: { id: order.balanceId },
     lock: { mode: 'pessimistic_write' },
