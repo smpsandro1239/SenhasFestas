@@ -379,20 +379,21 @@ describe('BalanceService — guard de janela operacional', () => {
       expect(resultado.currentBalance).toBe(40);
     });
 
-    it('loadBalance RECUSA carregar saldo arquivado → 409 (evita dinheiro preso)', async () => {
+    it('loadBalance encontra saldo soft-deleted e recusa carregamento enquanto arquivado', async () => {
       const balance = {
         id: 'b1',
         currentBalance: 50,
         archivedAt: new Date('2026-10-02T10:00:00Z'),
+        deletedAt: new Date('2026-11-01T10:00:00Z'),
         event: eventoExpirado,
       };
-      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) =>
-        fn(managerComSaldo(balance)),
-      );
+      const manager = managerComSaldo(balance);
+      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) => fn(manager));
 
       await expect(
         balanceService.loadBalance('u1', { amount: 10, eventId: 'evt1' } as any, { id: 'staff' }),
       ).rejects.toThrow('Saldo indisponível desde');
+      expect(manager.findOne.mock.calls[0][1]).toEqual(expect.objectContaining({ withDeleted: true }));
     });
 
     it('reverseLoad CONTINUA PERMITIDO com saldo soft-deleted (estorno é sempre possível)', async () => {
