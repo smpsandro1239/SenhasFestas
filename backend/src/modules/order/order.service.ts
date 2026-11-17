@@ -105,6 +105,9 @@ export class OrderService {
       }
 
       const balanceUsed = centavos(Math.min(dto.balanceUsed || 0, total));
+      if (balanceUsed > 0 && !dto.balanceId) {
+        throw new ForbiddenException('Usar saldo requer balanceId');
+      }
       if (dto.paymentMethod === 'balance') {
         if (!dto.balanceId) {
           throw new ForbiddenException('Pagamento com saldo requer balanceId');
@@ -190,8 +193,10 @@ export class OrderService {
     if (isClient && balanceCtx.user?.id !== user.id) {
       throw new ForbiddenException('Não pode usar o saldo de outro utilizador');
     }
-    if (balanceCtx.event?.id && balanceCtx.event.id !== eventId) {
-      throw new ForbiddenException('Saldo não pertence a este evento');
+    // Saldos são sempre scoped por evento. Um saldo legado sem eventId não
+    // pode ser consumido em qualquer evento (nem contornar a separação de caixa).
+    if (!balanceCtx.event?.id || balanceCtx.event.id !== eventId) {
+      throw new ForbiddenException('Saldo não pertence a este evento ou não tem evento associado');
     }
 
     const balance = await manager.findOne(BalanceEntity, {

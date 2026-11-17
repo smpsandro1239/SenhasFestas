@@ -637,3 +637,107 @@ describe('OrderService — snapshot anterior para auditoria (arquivar)', () => {
     expect(arquivar).toHaveBeenCalledWith({ antes: { status: 'received' }, eventId: 'evt1' });
   });
 });
+
+describe('OrderService — integridade do saldo associado ao pedido', () => {
+  function makeService(manager: any) {
+    const eventRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'evt1', status: 'active' }),
+    };
+    const eventUserRepository = {
+      findOne: vi.fn().mockResolvedValue({ id: 'membership-1' }),
+    };
+    const dataSource = {
+      transaction: vi.fn().mockImplementation(async (callback: any) => callback(manager)),
+    };
+    return new OrderService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      eventRepository as any,
+      eventUserRepository as any,
+      dataSource as any,
+      { generateOrderQRCode: vi.fn().mockResolvedValue('qr') } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+      { notifyNewOrder: vi.fn().mockResolvedValue(undefined) } as any,
+      { assertEventOperavel: vi.fn() } as any,
+    );
+  }
+
+  function makeManager(balance: any) {
+    return {
+      find: vi.fn().mockResolvedValue([
+        { id: 'p1', price: 100, isActive: true, event: { id: 'evt1' }, stock: null },
+      ]),
+      findOne: vi.fn().mockResolvedValue(balance),
+      create: vi.fn().mockImplementation((_entity: any, data: any) => data),
+      save: vi.fn().mockImplementation((_entity: any, data: any) => Promise.resolve(data)),
+    };
+  }
+
+  it('rejeita balanceUsed positivo sem balanceId para não registar consumo sem movimento', async () => {
+    const manager = makeManager(null);
+    const service = makeService(manager);
+
+    await expect(service.create(
+      { id: 'u1', role: 'client' },
+      {
+        eventId: 'evt1',
+        items: [{ productId: 'p1', quantity: 1 }],
+        source: 'qr',
+        paymentMethod: 'cash',
+        balanceUsed: 25,
+      } as any,
+    )).rejects.toThrow('Usar saldo requer balanceId');
+
+    expect(manager.create).not.toHaveBeenCalled();
+    expect(manager.findOne).not.toHaveBeenCalled();
+  });
+
+  it('rejeita saldo legado sem evento associado', async () => {
+    const manager = makeManager({
+      id: 'b1',
+      user: { id: 'u1' },
+      event: null,
+    });
+    const service = makeService(manager);
+
+    await expect(service.create(
+      { id: 'u1', role: 'client' },
+      {
+        eventId: 'evt1',
+        items: [{ productId: 'p1', quantity: 1 }],
+        source: 'qr',
+        paymentMethod: 'balance',
+        balanceId: 'b1',
+        balanceUsed: 100,
+      } as any,
+    )).rejects.toThrow('Saldo não pertence a este evento ou não tem evento associado');
+
+    expect(manager.findOne).toHaveBeenCalledOnce();
+  });
+
+  it('rejeita saldo pertencente a outro evento', async () => {
+    const manager = makeManager({
+      id: 'b1',
+      user: { id: 'u1' },
+      event: { id: 'evt2' },
+    });
+    const service = makeService(manager);
+
+    await expect(service.create(
+      { id: 'u1', role: 'client' },
+      {
+        eventId: 'evt1',
+        items: [{ productId: 'p1', quantity: 1 }],
+        source: 'qr',
+        paymentMethod: 'balance',
+        balanceId: 'b1',
+        balanceUsed: 100,
+      } as any,
+    )).rejects.toThrow('Saldo não pertence a este evento ou não tem evento associado');
+
+    expect(manager.findOne).toHaveBeenCalledOnce();
+  });
+});
