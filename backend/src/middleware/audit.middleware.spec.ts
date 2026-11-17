@@ -114,7 +114,7 @@ describe('LoginRateLimitMiddleware — reservas concorrentes e fallback local', 
     await middleware.use(fakeReq('1.2.3.4', 'Pessoa@Exemplo.pt'), fakeRes(), vi.fn());
 
     const chave = redisService.incrementWithTtlStrict.mock.calls[0]?.[0] as string;
-    expect(chave).toMatch(/^rl:login:1\\.2\\.3\\.4:[a-f0-9]{64}$/);
+    expect(chave).toMatch(/^rl:login:1\.2\.3\.4:[a-f0-9]{64}$/);
     expect(chave).not.toContain('Pessoa@Exemplo.pt');
     expect(chave).not.toContain('pessoa@exemplo.pt');
   });
