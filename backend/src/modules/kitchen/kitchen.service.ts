@@ -112,11 +112,11 @@ export class KitchenService {
       const salvo = await manager.save(OrderEntity, atual);
 
       if (novoEstado === 'cancelled') {
-        await reembolsarSaldoEmTransacao(manager, atual, utilizador?.id);
-        // Cancelado na cozinha (prato rejeitado / indisponível) devolve o
-        // stock tal como num cancelamento pelo caixa: sem isto as unidades
-        // derrapavam e o produto esgotava no sistema sem estar esgotado.
+        // Manter a ordem global de locks: pedido -> produtos (ID ascendente)
+        // -> saldo. Assim não há ciclo com a criação de encomendas.
+        // Cancelado na cozinha, o stock regressa tal como no cancelamento pelo caixa.
         await reporStockEmTransacao(manager, atual.id);
+        await reembolsarSaldoEmTransacao(manager, atual, utilizador?.id);
       }
 
       return salvo;

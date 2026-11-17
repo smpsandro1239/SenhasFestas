@@ -305,4 +305,66 @@ describe('App e2e (Postgres + Redis)', () => {
     ).rejects.toThrow('Idempotency-Key já utilizada com outro conteúdo');
   });
 
+  it('bloqueia produtos por ID em ordem estável quando encomendas concorrentes invertem os artigos', async () => {
+    const dataSource = app.get(DataSource);
+    const { email } = await criarUtilizadorTeste('order-stock-lock-order@example.com');
+    const user = await dataSource.getRepository(UserEntity).findOneByOrFail({ email });
+    const eventRepository = dataSource.getRepository(EventEntity);
+    const eventUsers = dataSource.getRepository(EventUserEntity);
+    const products = dataSource.getRepository(ProductEntity);
+    const orders = dataSource.getRepository(OrderEntity);
+    const orderService = app.get(OrderService);
+
+    const event = await eventRepository.save(
+      eventRepository.create({
+        name: 'E2E Ordem de locks',
+        shortCode: `LOCK-${randomUUID().slice(0, 8)}`,
+        startDate: new Date(Date.now() - 60 * 60 * 1000),
+        endDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        status: 'active',
+      }),
+    );
+    await eventUsers.save(eventUsers.create({ event, user, role: 'organizer' }));
+    const [produtoA, produtoB] = await products.save([
+      products.create({ event, name: 'E2E Lock A', price: 1, stock: 2, isActive: true }),
+      products.create({ event, name: 'E2E Lock B', price: 1, stock: 2, isActive: true }),
+    ]);
+
+    const payload = (items: Array<{ productId: string; quantity: number }>) => ({
+      eventId: event.id,
+      source: 'pos',
+      paymentMethod: 'cash',
+      items,
+    });
+    const [pedidoAB, pedidoBA] = await Promise.all([
+      orderService.create(
+        user,
+        payload([
+          { productId: produtoA.id, quantity: 1 },
+          { productId: produtoB.id, quantity: 1 },
+        ]) as any,
+        randomUUID(),
+      ),
+      orderService.create(
+        user,
+        payload([
+          { productId: produtoB.id, quantity: 1 },
+          { productId: produtoA.id, quantity: 1 },
+        ]) as any,
+        randomUUID(),
+      ),
+    ]);
+
+    expect(pedidoAB.id).not.toBe(pedidoBA.id);
+    expect(
+      await orders.count({ where: { event: { id: event.id }, createdById: user.id } }),
+    ).toBe(2);
+    const [stockA, stockB] = await Promise.all([
+      products.findOneByOrFail({ id: produtoA.id }),
+      products.findOneByOrFail({ id: produtoB.id }),
+    ]);
+    expect(Number(stockA.stock)).toBe(0);
+    expect(Number(stockB.stock)).toBe(0);
+  });
+
 });
