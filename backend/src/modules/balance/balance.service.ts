@@ -540,24 +540,40 @@ export class BalanceService {
         { archivedAt: IsNull(), currentBalance: MoreThan(0) as any },
         { archivedAt: LessThan(softDeleteLimite) },
       ],
-      relations: { event: true },
+      select: { id: true },
     });
 
     let arquivados = 0;
     let removidos = 0;
-    for (const saldo of candidatos) {
-      if (!saldo.archivedAt) {
-        const deadline = saldoDeadlineUtc(saldo.event, saldo.extendedUntil);
-        if (deadline && now.getTime() > deadline.getTime()) {
+    for (const candidato of candidatos) {
+      // A lista inicial é apenas uma descoberta de IDs. A decisão final tem de
+      // usar o estado actual, bloqueado, para não arquivar uma extensão recente
+      // nem competir com estornos/transferências que alterem o mesmo saldo.
+      await this.dataSource.transaction(async (manager) => {
+        const saldo = await manager.findOne(BalanceEntity, {
+          where: { id: candidato.id },
+          relations: { event: true },
+          withDeleted: true,
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!saldo || saldo.deletedAt) return;
+
+        if (!saldo.archivedAt) {
+          if (centavos(Number(saldo.currentBalance)) <= 0) return;
+          const deadline = saldoDeadlineUtc(saldo.event, saldo.extendedUntil);
+          if (!deadline || now.getTime() <= deadline.getTime()) return;
+
           saldo.archivedAt = now;
-          await this.balanceRepository.save(saldo);
+          await manager.save(BalanceEntity, saldo);
           arquivados += 1;
+          return;
         }
-        continue;
-      }
-      saldo.deletedAt = now;
-      await this.balanceRepository.save(saldo);
-      removidos += 1;
+
+        if (saldo.archivedAt.getTime() > softDeleteLimite.getTime()) return;
+        saldo.deletedAt = now;
+        await manager.save(BalanceEntity, saldo);
+        removidos += 1;
+      });
     }
 
     return { arquivados, removidos };
