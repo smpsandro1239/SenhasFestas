@@ -294,7 +294,7 @@ export async function getBalance(userId: string, eventId?: string): Promise<any>
 
 async function runIdempotentBalanceMutation<T>(
   endpoint: string,
-  operation: 'load' | 'deduct',
+  operation: 'load' | 'deduct' | 'reverse',
   payload: Record<string, unknown>,
   explicitKey?: string,
 ): Promise<T> {
@@ -580,13 +580,22 @@ export async function getOrdersMine(): Promise<any> {
   return apiRequest('/orders/mine');
 }
 
-export async function reverseLoad(userId: string, movementId: string, eventId?: string, amount?: number): Promise<any> {
+export async function reverseLoad(
+  userId: string,
+  movementId: string,
+  eventId?: string,
+  amount?: number,
+  idempotencyKey?: string,
+): Promise<any> {
   const query = eventId ? `?eventId=${encodeURIComponent(eventId)}` : '';
-  const body = amount !== undefined ? JSON.stringify({ amount }) : undefined;
-  return apiRequest(`/balances/${userId}/reverse/${movementId}${query}`, {
-    method: 'POST',
+  const body: Record<string, unknown> = {};
+  if (amount !== undefined) body.amount = amount;
+  return runIdempotentBalanceMutation(
+    `/balances/${userId}/reverse/${movementId}${query}`,
+    'reverse',
     body,
-  });
+    idempotencyKey,
+  );
 }
 
 export async function deleteProduct(id: string): Promise<any> {
