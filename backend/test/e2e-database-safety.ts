@@ -65,7 +65,7 @@ export function configuracaoBaseDadosE2e(
   }
 
   const sslMode = url?.searchParams.get('sslmode');
-  const ssl = ambiente.DB_SSL === 'true' || (sslMode !== null && sslMode !== 'disable')
+  const ssl = ambiente.DB_SSL === 'true' || (url !== undefined && sslMode !== null && sslMode !== 'disable')
     ? { rejectUnauthorized: false }
     : undefined;
 
