@@ -11,7 +11,7 @@ export default function OfflinePage() {
         📡
       </span>
       <h1 className="text-2xl font-bold text-zinc-100">Estás offline</h1>
-      <p className="max-w-md text-zinc-400">
+      <p className="max-w-md text-zinc-300">
         Não há ligação à internet neste momento. Podes voltar a tentar quando
         a rede regressar. Nesta versão, os pedidos, pagamentos e alterações não
         são guardados numa fila offline nem sincronizados automaticamente.
@@ -22,9 +22,9 @@ export default function OfflinePage() {
       </p>
       <Link
         href="/"
-        className="mt-2 rounded-full bg-zinc-100 px-6 py-3 font-medium text-zinc-900 transition hover:bg-zinc-200"
+        className="mt-2 inline-flex min-h-12 items-center justify-center rounded-full bg-zinc-100 px-6 py-3 font-semibold text-zinc-900 transition hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
       >
-        Tentar novamente
+        Voltar a tentar
       </Link>
     </main>
   );
