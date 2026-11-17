@@ -506,20 +506,10 @@ export class OrderService {
         throw new ForbiddenException('Pedido não pode ser cancelado neste estado');
       }
 
-      // Revalidar autorização depois de bloquear o pedido fecha a janela
-      // entre a verificação inicial e a escrita financeira/stock.
-      if (user?.role === 'client') {
-        const balance = currentOrder.balanceId
-          ? await manager.findOne(BalanceEntity, {
-              where: { id: currentOrder.balanceId, user: { id: user.id } },
-              lock: { mode: 'pessimistic_write' },
-              withDeleted: true,
-            })
-          : null;
-        if (!balance || balance.user?.id !== user.id) {
-          throw new ForbiddenException('Não pode cancelar o pedido de outro utilizador');
-        }
-      } else if (user?.role !== 'superadmin') {
+      // A associação do utilizador já foi verificada antes da transação.
+      // A verificação final do saldo (com lock) ocorre depois dos locks de
+      // produto para manter a ordem global produtos -> saldo.
+      if (user?.role !== 'client' && user?.role !== 'superadmin') {
         const membership = await manager.findOne(EventUserEntity, {
           where: { event: { id: order.event?.id }, user: { id: user?.id } },
           lock: { mode: 'pessimistic_read' },
@@ -539,6 +529,22 @@ export class OrderService {
       // Ordem global de locks: pedido -> produtos (ID ascendente) -> saldo.
       // Mantém a ordem compatível com a criação de encomendas (produtos -> saldo).
       await reporStockEmTransacao(manager, currentOrder.id);
+
+      // Para clientes, revalidar a titularidade com lock só depois dos locks
+      // de produto. Assim a ordem continua pedido -> produtos -> saldo.
+      if (user?.role === 'client') {
+        const balance = currentOrder.balanceId
+          ? await manager.findOne(BalanceEntity, {
+              where: { id: currentOrder.balanceId, user: { id: user.id } },
+              lock: { mode: 'pessimistic_write' },
+              withDeleted: true,
+            })
+          : null;
+        if (!balance || balance.user?.id !== user.id) {
+          throw new ForbiddenException('Não pode cancelar o pedido de outro utilizador');
+        }
+      }
+
       await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
 
       return updatedOrder;
