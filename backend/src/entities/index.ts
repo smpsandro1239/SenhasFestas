@@ -344,15 +344,6 @@ export class OrderEntity {
   @ManyToOne(() => EventEntity)
   event: EventEntity;
 
-  @Column({ type: 'uuid', nullable: true })
-  createdById?: string;
-
-  @Column({ type: 'varchar', length: 64, nullable: true })
-  idempotencyKey?: string;
-
-  @Column({ type: 'varchar', length: 64, nullable: true })
-  requestHash?: string;
-
   @OneToMany(() => OrderItemEntity, (item) => item.order, { cascade: true })
   items: OrderItemEntity[];
 
