@@ -1,4 +1,4 @@
-const CACHE_NAME = 'senhasfestas-v4';
+const CACHE_NAME = 'senhasfestas-v5';
 const PRECACHE_URLS = [
   '/manifest.webmanifest',
   '/icon-192.png',
@@ -32,23 +32,19 @@ function isSameOrigin(url) {
   return url.origin === self.location.origin;
 }
 
-async function networkFirst(request) {
-  const cache = await caches.open(CACHE_NAME);
+async function navigationNetworkOnly(request) {
   try {
-    const response = await fetch(request, { cache: 'no-store' });
-    if (response && response.status === 200 && request.method === 'GET') {
-      cache.put(request, response.clone());
-    }
-    return response;
+    // Nunca guardar HTML de navegação: pode conter dados autenticados,
+    // financeiros ou específicos do evento/utilizador.
+    return await fetch(request, { cache: 'no-store' });
   } catch {
-    const cached = await cache.match(request);
-    if (cached) return cached;
+    const cache = await caches.open(CACHE_NAME);
     const offlinePage = await cache.match('/offline');
     if (offlinePage) return offlinePage;
-    const files = await cache.matchAll('/');
-    const fallback = files.length ? files[0] : null;
-    if (fallback) return fallback;
-    return new Response('', { status: 200, headers: { 'Content-Type': 'text/html' } });
+    return new Response('Sem ligação à Internet', {
+      status: 503,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+    });
   }
 }
 
@@ -60,13 +56,12 @@ self.addEventListener('fetch', (event) => {
   if (!isSameOrigin(url)) return;
   if (url.pathname.startsWith('/api/')) return;
 
-  // Navegações: network-first com queda offline
   if (request.mode === 'navigate') {
-    event.respondWith(networkFirst(request));
+    event.respondWith(navigationNetworkOnly(request));
     return;
   }
 
-  // Assets com hash no nome: cache-first é seguro e rápido
+  // Apenas assets versionados do Next.js podem usar cache-first.
   if (url.pathname.startsWith('/_next/static/')) {
     event.respondWith(
       caches.match(request).then(
@@ -84,10 +79,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Restante (manifest, ícones): stale-while-revalidate
+  // Cache limitado a recursos públicos e estáticos conhecidos.
+  const recursoPublico =
+    url.pathname === '/manifest.webmanifest' ||
+    url.pathname === '/icon-192.png' ||
+    url.pathname === '/icon-512.png';
+
+  if (!recursoPublico) return;
+
   event.respondWith(
     caches.match(request).then((cached) => {
-      const network = fetch(request)
+      const network = fetch(request, { cache: 'no-store' })
         .then((response) => {
           if (response && response.ok) {
             const clone = response.clone();
@@ -95,9 +97,10 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => {
-          return cached || new Response('', { status: 200, headers: { 'Content-Type': 'text/html' } });
-        });
+        .catch(() => cached || new Response('', {
+          status: 503,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+        }));
       return cached || network;
     }),
   );
