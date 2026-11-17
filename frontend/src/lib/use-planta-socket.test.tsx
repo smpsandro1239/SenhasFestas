@@ -83,7 +83,7 @@ describe('usePlantaSocket (contrato do canal de planta)', () => {
       expect.objectContaining({ auth: { token: 'token-abc' }, transports: ['websocket'] }),
     );
     disparar(socket, 'connect');
-    expect(socket.emit).toHaveBeenCalledWith('joinEventPlanta', 'evt1');
+    expect(socket.emit).toHaveBeenCalledWith('joinEventPlanta', 'evt1', expect.any(Function));
   });
 
   it('re-entra na planta no reconnect (não fica fora após blip)', () => {
