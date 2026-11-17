@@ -1,6 +1,7 @@
 import {
   IsString,
   IsUUID,
+  Length,
   IsInt,
   IsNumber,
   Min,
@@ -32,8 +33,9 @@ export class CreateOrderDto {
   @IsUUID()
   eventId: string;
 
-  @IsUUID()
+  @IsString()
   @IsOptional()
+  @Length(8, 128)
   idempotencyKey?: string;
 
   @IsEnum(['qr', 'pos'])
