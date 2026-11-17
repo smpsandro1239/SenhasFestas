@@ -259,7 +259,7 @@ describe('App e2e (Postgres + Redis)', () => {
         event,
         name: 'E2E Produto com stock',
         price: 2.5,
-        stock: 10,
+        stock: 2,
         isActive: true,
       }),
     );
@@ -289,12 +289,12 @@ describe('App e2e (Postgres + Redis)', () => {
     ).toBe(1);
 
     const afterConcurrentRetry = await products.findOneByOrFail({ id: product.id });
-    expect(Number(afterConcurrentRetry.stock)).toBe(8);
+    expect(Number(afterConcurrentRetry.stock)).toBe(0);
 
     const replay = await orderService.create(user, payload as any, idempotencyKey);
     expect(replay.id).toBe(first.id);
     const afterReplay = await products.findOneByOrFail({ id: product.id });
-    expect(Number(afterReplay.stock)).toBe(8);
+    expect(Number(afterReplay.stock)).toBe(0);
 
     await expect(
       orderService.create(
