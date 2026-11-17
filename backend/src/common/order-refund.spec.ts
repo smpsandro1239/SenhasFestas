@@ -13,7 +13,8 @@ describe('reembolsarSaldoEmTransacao — saldos soft-deleted', () => {
       deletedAt: new Date('2026-11-01T10:00:00.000Z'),
     };
     const manager = {
-      findOne: vi.fn().mockResolvedValue(balance),
+      query: vi.fn().mockResolvedValue(undefined),
+      findOne: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(balance),
       save: vi.fn().mockImplementation(async (_entity: any, value: any) => value),
       create: vi.fn().mockImplementation((_entity: any, value: any) => value),
     };
@@ -24,7 +25,14 @@ describe('reembolsarSaldoEmTransacao — saldos soft-deleted', () => {
       'operator-1',
     );
 
-    expect(manager.findOne).toHaveBeenCalledWith(BalanceEntity, {
+    expect(manager.query).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      ['order-refund', 'order-1'],
+    );
+    expect(manager.findOne).toHaveBeenNthCalledWith(1, BalanceMovementEntity, {
+      where: { orderId: 'order-1', type: MovementType.REFUND },
+    });
+    expect(manager.findOne).toHaveBeenNthCalledWith(2, BalanceEntity, {
       where: { id: 'balance-1' },
       lock: { mode: 'pessimistic_write' },
       withDeleted: true,
@@ -41,5 +49,31 @@ describe('reembolsarSaldoEmTransacao — saldos soft-deleted', () => {
         orderId: 'order-1',
       }),
     );
+  });
+
+  it('não credita novamente quando já existe movimento REFUND para a encomenda', async () => {
+    const manager = {
+      query: vi.fn().mockResolvedValue(undefined),
+      findOne: vi.fn().mockResolvedValue({
+        id: 'refund-existing',
+        orderId: 'order-2',
+        type: MovementType.REFUND,
+      }),
+      save: vi.fn(),
+      create: vi.fn(),
+    };
+
+    await reembolsarSaldoEmTransacao(
+      manager as any,
+      { id: 'order-2', balanceId: 'balance-2', balanceUsed: 10 } as OrderEntity,
+      'operator-1',
+    );
+
+    expect(manager.query).toHaveBeenCalledTimes(1);
+    expect(manager.findOne).toHaveBeenCalledWith(BalanceMovementEntity, {
+      where: { orderId: 'order-2', type: MovementType.REFUND },
+    });
+    expect(manager.save).not.toHaveBeenCalled();
+    expect(manager.create).not.toHaveBeenCalled();
   });
 });
