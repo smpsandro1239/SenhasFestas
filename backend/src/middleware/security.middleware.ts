@@ -1,8 +1,6 @@
 import { Injectable, NestMiddleware, HttpStatus } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 
-const VERCEL_APP_RE = /^(?:[\w-]+\.)+vercel\.app$/;
-
 function normalizarOrigem(valor: string): string {
   try {
     const entrada = valor.includes('://') ? valor : `https://${valor}`;
