@@ -84,7 +84,7 @@ mesa e relatórios financeiros.
 
 ### Prioridade alta (curto prazo)
 
-- **CI frontend Vitest** — adicionado nesta branch: o job frontend passa a executar `npm test` depois de lint/typecheck e antes do build.
+- **CI frontend Vitest** — concluído e validado: o job frontend executa `npm test` depois de lint/typecheck e antes do build; a suite Vitest passou na PR #167.
 
 1. **Testes de integração do fluxo de pendente da planta**
    - **Porquê**: é onde os bugs têm aparecido; só há testes de helpers puros.
