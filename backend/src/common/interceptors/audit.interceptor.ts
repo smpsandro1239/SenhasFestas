@@ -52,6 +52,9 @@ export function definirAuditEvento(req: Request, eventId: string | undefined): v
  */
 export const AUDIT_ENTITY_ID = Symbol('auditEntityId');
 
+/** Âmbitos e entidades que devem receber um registo da mesma operação. */
+export const AUDIT_TARGETS = Symbol('auditTargets');
+
 export function definirAuditEntidade(req: Request, entityId: string | undefined): void {
   (req as any)[AUDIT_ENTITY_ID] = entityId;
 }
@@ -66,6 +69,8 @@ export interface SnapshotAuditoria {
   antes?: unknown;
   eventId?: string;
   entidadeId?: string;
+  /** Uma operação que atravessa eventos pode ter de ser visível em cada âmbito. */
+  alvos?: Array<{ eventId: string; entidadeId: string }>;
   extras?: Record<string, unknown>;
 }
 
@@ -81,6 +86,9 @@ export function arquivarAuditoria(req: Request): (snapshot: SnapshotAuditoria) =
     }
     definirAuditEvento(req, snapshot.eventId);
     definirAuditEntidade(req, snapshot.entidadeId);
+    if (snapshot.alvos?.length) {
+      (req as any)[AUDIT_TARGETS] = snapshot.alvos;
+    }
   };
 }
 
@@ -158,11 +166,10 @@ export class AuditInterceptor implements NestInterceptor {
       concatMap((data) => {
         const ator = this.resolverAtor(req, acao, data);
         const eventId = this.eventoEfetivo(req, eventIdBase, data, entity);
-        return from(this.auditService.record({
+        const entityIdEfetivo = this.entidadeEfetiva(req, entityId, data);
+        const registoBase = {
           action: acao,
           entity,
-          entityId: this.entidadeEfetiva(req, entityId, data),
-          eventId,
           actorId: ator.id,
           actorRole: ator.role,
           before: this.resumoResposta((req as any)[AUDIT_BEFORE]),
@@ -176,17 +183,25 @@ export class AuditInterceptor implements NestInterceptor {
           }) as Record<string, unknown>,
           ip: req.ip,
           userAgent: req.headers['user-agent'],
-        })).pipe(map(() => data));
+        };
+        const alvos = this.alvosAuditoria(req, entityIdEfetivo, eventId);
+        return from(Promise.all(
+          alvos.map((alvo) => this.auditService.record({
+            ...registoBase,
+            entityId: alvo.entidadeId,
+            eventId: alvo.eventId,
+          })),
+        )).pipe(map(() => data));
       }),
       catchError((error) => {
         const ator = this.resolverAtor(req, acao, undefined);
         const statusCode = (error as { status?: number })?.status ?? 500;
         const eventId = this.eventoEfetivo(req, eventIdBase);
-        return from(this.auditService.record({
+        const entityIdEfetivo = this.entidadeEfetiva(req, entityId);
+        const eventIdEfetivo = this.eventoEfetivo(req, eventIdBase);
+        const registoBase = {
           action: metodo === 'POST' && acao === 'LOGIN' ? 'LOGIN_FAILED' : acao,
           entity,
-          entityId: this.entidadeEfetiva(req, entityId),
-          eventId: this.eventoEfetivo(req, eventIdBase),
           actorId: ator.id,
           actorRole: ator.role,
           details: this.sanitizarValor({
@@ -199,9 +214,36 @@ export class AuditInterceptor implements NestInterceptor {
           }) as Record<string, unknown>,
           ip: req.ip,
           userAgent: req.headers['user-agent'],
-        })).pipe(concatMap(() => throwError(() => error)));
+        };
+        const alvos = this.alvosAuditoria(req, entityIdEfetivo, eventIdEfetivo);
+        return from(Promise.all(
+          alvos.map((alvo) => this.auditService.record({
+            ...registoBase,
+            entityId: alvo.entidadeId,
+            eventId: alvo.eventId,
+          })),
+        )).pipe(concatMap(() => throwError(() => error)));
       }),
     );
+  }
+
+  private alvosAuditoria(
+    req: Request,
+    entityId?: string,
+    eventId?: string,
+  ): Array<{ entidadeId?: string; eventId?: string }> {
+    const configurados = (req as any)[AUDIT_TARGETS] as
+      | Array<{ eventId: string; entidadeId: string }>
+      | undefined;
+    if (!configurados?.length) {
+      return [{ entidadeId: entityId, eventId }];
+    }
+    const unicos = new Map<string, { entidadeId: string; eventId: string }>();
+    for (const alvo of configurados) {
+      if (!alvo?.eventId || !alvo?.entidadeId) continue;
+      unicos.set(`${alvo.eventId}:${alvo.entidadeId}`, alvo);
+    }
+    return unicos.size > 0 ? [...unicos.values()] : [{ entidadeId: entityId, eventId }];
   }
 
   private caminho(req: Request): string {
