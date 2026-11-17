@@ -39,6 +39,9 @@ const mockOrderItemRepository = {
 
 const mockMembershipService = {
   assertMember: vi.fn(),
+  eventIdsFor: vi.fn(),
+  rolesEfetivas: vi.fn(),
+  roleEfetiva: vi.fn(),
 };
 
 describe('CatalogService', () => {
@@ -60,6 +63,9 @@ describe('CatalogService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockMembershipService.assertMember.mockResolvedValue(undefined);
+    mockMembershipService.eventIdsFor.mockResolvedValue(['e1']);
+    mockMembershipService.rolesEfetivas.mockResolvedValue(['organizer']);
+    mockMembershipService.roleEfetiva.mockResolvedValue('organizer');
     mockCooccurrenceQueryBuilder = {
       innerJoin: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
@@ -83,6 +89,28 @@ describe('CatalogService', () => {
   });
 
   describe('findAll', () => {
+    it('limita uma listagem agregada aos eventos da membership', async () => {
+      mockProductRepository.findAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll(undefined, 1, 20, {}, ['e1', 'e2']);
+
+      expect(mockProductRepository.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { isActive: true, event: { id: In(['e1', 'e2']) } },
+        }),
+      );
+    });
+
+    it('não devolve produtos quando o utilizador não tem memberships', async () => {
+      await expect(service.findAll(undefined, 1, 20, {}, [])).resolves.toEqual({
+        items: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+      });
+      expect(mockProductRepository.findAndCount).not.toHaveBeenCalled();
+    });
+
     it('returns only active products', async () => {
       const products = [{ id: 'p1', name: 'Bifana', isActive: true }];
       mockProductRepository.findAndCount.mockResolvedValue([products, 1]);
@@ -152,13 +180,22 @@ describe('CatalogService', () => {
   describe('includeInactive só é honrado para quem gere o catálogo', () => {
     const controller = new CatalogController(
       { findAll: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 }) } as any,
-      { assertMember: vi.fn() } as any,
+      {
+        assertMember: vi.fn().mockResolvedValue(undefined),
+        eventIdsFor: vi.fn().mockResolvedValue(['evt1']),
+        rolesEfetivas: vi.fn().mockResolvedValue(['organizer']),
+        roleEfetiva: vi.fn().mockResolvedValue('organizer'),
+      } as any,
     );
 
     const listaChamada = (role: string, includeInactive?: string) => {
       controller['catalogService'].findAll = vi
         .fn()
         .mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 });
+      const membership = controller['membershipService'] as any;
+      membership.eventIdsFor.mockResolvedValue(role === 'superadmin' ? null : ['evt1']);
+      membership.rolesEfetivas.mockResolvedValue([role]);
+      membership.roleEfetiva.mockResolvedValue(role);
       return controller
         .findAll(
           { page: 1, limit: 20, includeInactive } as any,
@@ -169,7 +206,10 @@ describe('CatalogService', () => {
 
     it.each(MANAGEMENT_ROLES)('%s recebe os inativos quando pede', async (role) => {
       const spy = await listaChamada(role, 'true');
-      expect(spy).toHaveBeenCalledWith(undefined, 1, 20, expect.objectContaining({ includeInactive: true }));
+      expect(spy).toHaveBeenCalledWith(
+         undefined, 1, 20, expect.objectContaining({ includeInactive: true }),
+         role === 'superadmin' ? undefined : ['evt1'],
+       );
     });
 
     it.each(['cashier', 'treasurer', 'bar', 'kitchen'])(
@@ -181,15 +221,20 @@ describe('CatalogService', () => {
           1,
           20,
           expect.objectContaining({ includeInactive: false }),
+          role === 'superadmin' ? undefined : ['evt1'],
         );
       },
     );
 
-    it('client nem chega a ver a lista: sai antes, sem eventId', async () => {
-      // o early return de role=client sem eventId. Nao ha lista para filtrar,
-      // logo includeInactive nem chega a ser avaliado.
+    it('client vê apenas os produtos dos eventos em que tem membership', async () => {
       const spy = await listaChamada('client', 'true');
-      expect(spy).not.toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledWith(
+        undefined,
+        1,
+        20,
+        expect.objectContaining({ includeInactive: false }),
+        ['evt1'],
+      );
     });
 
     it("includeInactive='false' conta como nao pedir", async () => {
@@ -201,6 +246,7 @@ describe('CatalogService', () => {
         1,
         20,
         expect.objectContaining({ includeInactive: false }),
+        undefined,
       );
     });
 
@@ -239,7 +285,12 @@ describe('CatalogService', () => {
     const dupMock = vi.fn();
     const controller = new CatalogController(
       { duplicate: dupMock, softRemove: vi.fn() } as any,
-      { assertMember: vi.fn() } as any,
+      {
+        assertMember: vi.fn().mockResolvedValue(undefined),
+        eventIdsFor: vi.fn().mockResolvedValue(['evt1']),
+        rolesEfetivas: vi.fn().mockResolvedValue(['organizer']),
+        roleEfetiva: vi.fn().mockResolvedValue('organizer'),
+      } as any,
     );
     const CHAMADO = { id: 'p1' };
 
@@ -1034,7 +1085,12 @@ describe('CatalogService', () => {
     const impMock = vi.fn();
     const controller = new CatalogController(
       { importProducts: impMock } as any,
-      { assertMember: vi.fn() } as any,
+      {
+        assertMember: vi.fn().mockResolvedValue(undefined),
+        eventIdsFor: vi.fn().mockResolvedValue(['evt1']),
+        rolesEfetivas: vi.fn().mockResolvedValue(['organizer']),
+        roleEfetiva: vi.fn().mockResolvedValue('organizer'),
+      } as any,
     );
     const DTO = { sourceEventId: 'o1', targetEventId: 'd1', productIds: ['p1'] };
 
@@ -1142,7 +1198,12 @@ describe('CatalogService', () => {
     it('a rota exige MANAGEMENT_ROLES', () => {
       const controller = new CatalogController(
         { ajustarStock: vi.fn() } as any,
-        { assertMember: vi.fn() } as any,
+        {
+        assertMember: vi.fn().mockResolvedValue(undefined),
+        eventIdsFor: vi.fn().mockResolvedValue(['evt1']),
+        rolesEfetivas: vi.fn().mockResolvedValue(['organizer']),
+        roleEfetiva: vi.fn().mockResolvedValue('organizer'),
+      } as any,
       );
       const handler = controller.ajustarStock;
       expect(Reflect.getMetadata(ROLES_KEY, handler) ?? []).toEqual(MANAGEMENT_ROLES);
