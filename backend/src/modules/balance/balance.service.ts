@@ -89,6 +89,21 @@ export class BalanceService {
     }
   }
 
+  private async assertMemberEventInTransaction(
+    manager: import('typeorm').EntityManager,
+    userId: string,
+    eventId: string,
+  ): Promise<void> {
+    const membership = await manager.findOne(EventUserEntity, {
+      where: { user: { id: userId }, event: { id: eventId } },
+      // FOR SHARE impede remoção/alteração da membership até a operação financeira concluir.
+      lock: { mode: 'pessimistic_read' },
+    });
+    if (!membership) {
+      throw new ForbiddenException('Não pertence a este evento');
+    }
+  }
+
   async assertMemberEvent(userId: string, eventId: string): Promise<void> {
     const membership = await this.eventUserRepository.findOne({
       where: { user: { id: userId }, event: { id: eventId } },
@@ -189,6 +204,7 @@ export class BalanceService {
         }
         const membro = await manager.findOne(EventUserEntity, {
           where: { user: { id: actor.id }, event: { id: eventoMovimento } },
+          lock: { mode: 'pessimistic_read' },
         });
         if (!membro) {
           throw new ForbiddenException('Não pertence a este evento');
@@ -319,6 +335,9 @@ export class BalanceService {
         let event: EventEntity | undefined;
         if (dto.eventId) {
           event = await manager.findOne(EventEntity, { where: { id: dto.eventId } }) ?? undefined;
+          if (actor && actor.role !== 'superadmin') {
+            await this.assertMemberEventInTransaction(manager, actor.id, dto.eventId);
+          }
         }
 
         if (idempotencyKey) {
@@ -424,6 +443,9 @@ export class BalanceService {
       await this.eventService.assertEventOperavelById(dto.eventId);
     }
     const resultado = await this.dataSource.transaction(async (manager) => {
+      if (actor && actor.role !== 'superadmin') {
+        await this.assertMemberEventInTransaction(manager, actor.id, dto.eventId);
+      }
       if (idempotencyKey) {
         await this.lockOperationKey(manager, actor.id, 'deduct', idempotencyKey);
         const anterior = await manager.findOne(BalanceMovementEntity, {
@@ -762,6 +784,12 @@ export class BalanceService {
 
     const montante = centavos(dto.amount);
     const resultado = await this.dataSource.transaction(async (manager) => {
+      if (actor && actor.role !== 'superadmin') {
+        // Adquirir locks de membership na mesma ordem para transferências A→B e B→A.
+        for (const eventId of [...new Set([dto.fromEventId, dto.toEventId])].sort()) {
+          await this.assertMemberEventInTransaction(manager, actor.id, eventId);
+        }
+      }
       if (idempotencyKey && storedIdempotencyKey) {
         await this.lockOperationKey(manager, actor.id, 'transfer', idempotencyKey);
         const movimentoDestinoAnterior = await manager.findOne(BalanceMovementEntity, {
