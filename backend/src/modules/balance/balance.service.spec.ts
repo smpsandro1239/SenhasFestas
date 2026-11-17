@@ -395,11 +395,12 @@ describe('BalanceService — guard de janela operacional', () => {
       ).rejects.toThrow('Saldo indisponível desde');
     });
 
-    it('reverseLoad CONTINUA PERMITIDO com saldo arquivado (estorno é sempre possível)', async () => {
+    it('reverseLoad CONTINUA PERMITIDO com saldo soft-deleted (estorno é sempre possível)', async () => {
       const balance = {
         id: 'b1',
         currentBalance: 100,
         archivedAt: new Date('2026-10-02T10:00:00Z'),
+        deletedAt: new Date('2026-11-01T10:00:00Z'),
         event: eventoExpirado,
       };
       (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) =>
@@ -410,6 +411,7 @@ describe('BalanceService — guard de janela operacional', () => {
 
       expect(resultado.reversedMovementId).toBe('mov1');
       expect(resultado.balance.currentBalance).toBe(90);
+      expect(balance.deletedAt).toBeNull();
     });
 
     it('archiveExpiredBalances arquiva vencidos, ignora os vigentes e soft-deleta os arquivados há 30+ dias', async () => {
