@@ -64,6 +64,22 @@ describe('RateLimitMiddleware — fallback local quando Redis falha', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it('não duplica o orçamento IP quando Redis recupera com a janela local ainda ativa', async () => {
+    redisService.incrementWithTtlStrict.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    const next = vi.fn();
+
+    await middleware.use(fakeReq(), fakeRes(), next);
+    redisService.incrementWithTtlStrict.mockResolvedValue(1);
+
+    await middleware.use(fakeReq(), fakeRes(), next);
+    const bloqueado = fakeRes();
+    await middleware.use(fakeReq(), bloqueado, next);
+
+    expect(redisService.incrementWithTtlStrict).toHaveBeenCalledTimes(1);
+    expect(bloqueado.status).toHaveBeenCalledWith(429);
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
   it('usa contador local se Redis devolver indisponibilidade por excepção', async () => {
     redisService.incrementWithTtlStrict.mockRejectedValue(new Error('ECONNREFUSED'));
     const next = vi.fn();
