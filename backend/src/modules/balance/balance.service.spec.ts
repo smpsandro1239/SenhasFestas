@@ -679,7 +679,7 @@ describe('BalanceService — transferência entre eventos (melhoria #8)', () => 
     (svc as any).eventUserRepository.findOne.mockResolvedValue({ id: 'm1' });
 
     const origem = { id: 'b-origem', currentBalance: 100 };
-    const destino = { id: 'b-destino', currentBalance: 20 };
+    const destino = { id: 'b-destino', currentBalance: 20, archivedAt: new Date('2026-01-01'), deletedAt: new Date('2026-02-01') };
     const manager = {
       findOne: vi
         .fn()
@@ -703,6 +703,9 @@ describe('BalanceService — transferência entre eventos (melhoria #8)', () => 
 
     expect(r.originBalance.currentBalance).toBe(70);
     expect(r.balance.currentBalance).toBe(50);
+    expect(destino.archivedAt).toBeNull();
+    expect(destino.deletedAt).toBeNull();
+    expect(manager.findOne.mock.calls[1][1]).toEqual(expect.objectContaining({ withDeleted: true }));
     expect(r.movement).toEqual(
       expect.objectContaining({
         type: MovementType.LOAD,
@@ -910,12 +913,14 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
 
   it('extendBalance arquiva o estado anterior (extendedUntil/archivedAt)', async () => {
     const svc = Novo();
-    (svc as any).balanceRepository.findOne.mockResolvedValue({
+    const saldo = {
       id: 'b1',
       event: { id: 'evt1' },
       extendedUntil: null,
       archivedAt: new Date('2026-01-01'),
-    });
+      deletedAt: new Date('2026-02-01'),
+    };
+    (svc as any).balanceRepository.findOne.mockResolvedValue(saldo);
     (svc as any).balanceRepository.save = vi.fn().mockImplementation((e: any) => Promise.resolve(e));
     const arquivar = vi.fn();
 
@@ -929,18 +934,29 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
       antes: { extendedUntil: null, archivedAt: new Date('2026-01-01') },
       eventId: 'evt1',
     });
+    expect((svc as any).balanceRepository.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({ withDeleted: true }),
+    );
+    expect(saldo.deletedAt).toBeNull();
+    expect(saldo.archivedAt).toBeNull();
   });
 
-  it('unarchiveBalance arquiva o archivedAt anterior', async () => {
+  it('unarchiveBalance recupera também um saldo soft-deleted', async () => {
     const svc = Novo();
     const archivedAt = new Date('2026-01-01');
-    (svc as any).balanceRepository.findOne.mockResolvedValue({ id: 'b1', event: { id: 'evt1' }, archivedAt });
+    const saldo = { id: 'b1', event: { id: 'evt1' }, archivedAt, deletedAt: new Date('2026-02-01') };
+    (svc as any).balanceRepository.findOne.mockResolvedValue(saldo);
     (svc as any).balanceRepository.save = vi.fn().mockImplementation((e: any) => Promise.resolve(e));
     const arquivar = vi.fn();
 
     await svc.unarchiveBalance('u1', 'evt1', arquivar);
 
     expect(arquivar).toHaveBeenCalledWith({ antes: { archivedAt }, eventId: 'evt1' });
+    expect((svc as any).balanceRepository.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({ withDeleted: true }),
+    );
+    expect(saldo.deletedAt).toBeNull();
+    expect(saldo.archivedAt).toBeNull();
   });
 
   it('markNotified arquiva o notifiedAt anterior', async () => {
