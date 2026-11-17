@@ -23,6 +23,43 @@ export class MembershipService {
     return membros.map((m) => m.event?.id).filter((id): id is string => Boolean(id));
   }
 
+  /**
+   * Roles efectivas para uma rota que agrega ou atravessa eventos.
+   * Sem evento explícito, todas as memberships têm de satisfazer a política
+   * do endpoint; nunca usar a role global para elevar uma membership mista.
+   */
+  async rolesEfetivas(user: any, eventIds?: string[]): Promise<string[]> {
+    if (!user) {
+      throw new ForbiddenException('Não autenticado');
+    }
+    if (user.role === 'superadmin') {
+      return ['superadmin'];
+    }
+
+    const ids = [...new Set((eventIds ?? []).filter((id): id is string => typeof id === 'string' && id.length > 0))];
+    if (ids.length > 0) {
+      const memberships = await Promise.all(
+        ids.map((eventId) =>
+          this.eventUserRepository.findOne({
+            where: { event: { id: eventId }, user: { id: user.id } },
+          }),
+        ),
+      );
+      if (memberships.some((membership) => !membership)) {
+        throw new ForbiddenException('Não pertence a todos os eventos desta operação');
+      }
+      return [...new Set(memberships.map((membership) => membership!.role))];
+    }
+
+    const memberships = await this.eventUserRepository.find({
+      where: { user: { id: user.id } as any },
+    });
+    if (memberships.length === 0) {
+      return [user.role];
+    }
+    return [...new Set(memberships.map((membership) => membership.role))];
+  }
+
   async assertMember(user: any, eventId: string): Promise<void> {
     if (!user || user.role === 'superadmin') {
       return;
