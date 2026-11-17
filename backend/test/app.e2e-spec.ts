@@ -9,6 +9,7 @@ import { UserEntity, ProductEntity, OrderEntity, OrderItemEntity, EventEntity, E
 import { CatalogService } from '../src/modules/catalog/catalog.service';
 import { OrderService } from '../src/modules/order/order.service';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { BalanceService } from '../src/modules/balance/balance.service';
 import { configuracaoBaseDadosE2e } from './e2e-database-safety';
 
 const PROBE_TIMEOUT_MS = 5000;
@@ -759,6 +760,58 @@ describe('App e2e (Postgres + Redis)', () => {
         },
       }),
     ).toBe(1);
+  });
+
+  it('arquiva saldos com lock PostgreSQL e respeita extensões/soft-delete', async () => {
+    const dataSource = app.get(DataSource);
+    const now = new Date();
+    const caixa = await criarCaixaComEvento('archive');
+    caixa.event.endDate = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
+    caixa.event.balanceGraceDays = 0;
+    await dataSource.getRepository(EventEntity).save(caixa.event);
+
+    const { email: activeEmail } = await criarUtilizadorTeste(
+      `archive-active-${randomUUID()}@example.com`,
+    );
+    const activeUser = await dataSource.getRepository(UserEntity).findOneByOrFail({
+      email: activeEmail,
+    });
+    const activeBalance = await dataSource.getRepository(BalanceEntity).save(
+      dataSource.getRepository(BalanceEntity).create({
+        user: activeUser,
+        event: caixa.event,
+        currentBalance: 12,
+      }),
+    );
+
+    const { email: oldEmail } = await criarUtilizadorTeste(
+      `archive-old-${randomUUID()}@example.com`,
+    );
+    const oldUser = await dataSource.getRepository(UserEntity).findOneByOrFail({
+      email: oldEmail,
+    });
+    const oldBalance = await dataSource.getRepository(BalanceEntity).save(
+      dataSource.getRepository(BalanceEntity).create({
+        user: oldUser,
+        event: caixa.event,
+        currentBalance: 8,
+        archivedAt: new Date(now.getTime() - 31 * 24 * 60 * 60 * 1000),
+      }),
+    );
+
+    const resultado = await app.get(BalanceService).archiveExpiredBalances(now);
+
+    expect(resultado).toEqual({ arquivados: 1, removidos: 1 });
+    const saldoArquivado = await dataSource.getRepository(BalanceEntity).findOneByOrFail({
+      id: activeBalance.id,
+    });
+    expect(saldoArquivado.archivedAt).toEqual(now);
+
+    const saldoRemovido = await dataSource.getRepository(BalanceEntity).findOne({
+      where: { id: oldBalance.id },
+      withDeleted: true,
+    });
+    expect(saldoRemovido?.deletedAt).toEqual(now);
   });
 
 });
