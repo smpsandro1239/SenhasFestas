@@ -187,4 +187,68 @@ describe('AuditInterceptor — before/after', () => {
     expect(respostaEmitida).toBe(true);
   });
 
+  it('remove access tokens, refresh tokens e passwords dos snapshots sem alterar a resposta', async () => {
+    const req = fazerReq('POST', '/api/auth/login');
+    const resposta = {
+      token: 'access-token-secreto',
+      user: {
+        id: 'user-1',
+        email: 'teste@example.com',
+        passwordHash: 'hash-secreto',
+        profile: { refreshToken: 'refresh-token-secreto' },
+      },
+    };
+
+    const resultado = await lastValueFrom(
+      interceptor.intercept(fazerContexto(req), { handle: () => of(resposta) } as any),
+    );
+
+    expect(resultado).toBe(resposta);
+    expect(record.mock.calls[0][0].after).toEqual({
+      token: '[REDACTED]',
+      user: {
+        id: 'user-1',
+        email: 'teste@example.com',
+        passwordHash: '[REDACTED]',
+        profile: { refreshToken: '[REDACTED]' },
+      },
+    });
+    expect(JSON.stringify(record.mock.calls[0][0].after)).not.toContain('secreto');
+  });
+
+  it('remove credenciais de extras e strings Bearer/JWT dos detalhes', async () => {
+    const req = fazerReq('POST', '/api/auth/refresh');
+    const jwt = 'eyJabcdefghijk.eyJabcdefghijk.eyJabcdefghijk';
+    arquivarAuditoria(req)({
+      extras: {
+        authorization: 'Bearer access-secret',
+        integration: { apiKey: 'api-secret', note: `Authorization: Bearer ${jwt}` },
+      },
+    });
+
+    await correr(req, { success: true });
+
+    const details = record.mock.calls[0][0].details;
+    expect(details.authorization).toBe('[REDACTED]');
+    expect(details.integration.apiKey).toBe('[REDACTED]');
+    expect(details.integration.note).toContain('Bearer [REDACTED]');
+    expect(details.integration.note).toContain('[JWT REDACTED]');
+    expect(JSON.stringify(details)).not.toContain('api-secret');
+    expect(JSON.stringify(details)).not.toContain(jwt);
+  });
+
+  it('não persiste mensagens de erro potencialmente sensíveis', async () => {
+    const req = fazerReq('POST', '/api/auth/login');
+    const erro = new Error('connection failed with password=super-secret');
+    const contexto = fazerContexto(req);
+    const observable = interceptor.intercept(
+      contexto,
+      { handle: () => { throw erro; } } as any,
+    );
+
+    await expect(lastValueFrom(observable)).rejects.toBe(erro);
+    expect(record.mock.calls[0][0].details.erro).toBe('Error');
+    expect(JSON.stringify(record.mock.calls[0][0].details)).not.toContain('super-secret');
+  });
+
 });
