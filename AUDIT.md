@@ -3,7 +3,7 @@
 **Data:** 2026-11-17  
 **Âmbito:** revisão estática do repositório e execução observada do GitHub Actions.  
 **Branch de trabalho:** `codex/autonomous-hardening-2026-11`  
-**Estado:** auditoria inicial concluída; T40 foi integrada e todos os gates de código passaram na validação da PR #164. O deploy Vercel permanece bloqueado pela quota diária. T41 está em correcção na PR #166.
+**Estado:** auditoria inicial concluída; T40 foi integrada e todos os gates de código passaram na validação da PR #164. O deploy Vercel permanece bloqueado pela quota diária. T41 foi integrada pela PR #166 e todos os gates de CI passaram; deployments Vercel continuam bloqueados por quota diária.
 
 > Esta auditoria distingue comportamento confirmado por código/testes de comportamento ainda não demonstrado em produção. Não foram executados testes destrutivos contra qualquer base de dados real.
 
@@ -21,7 +21,7 @@ A arquitectura geral é coerente: monorepo npm workspaces, backend NestJS modula
 | Alta | Testes E2E podiam apagar schema de uma BD remota | Barreira T37 na PR #39; CI em validação |
 | Alta | Service Worker podia guardar HTML/RSC autenticado em cache persistente | Corrigido nesta branch; CI em validação |
 | Alta | README prometia sincronização offline que não existe no código | Texto corrigido
-| Alta | Arquivo automático de saldos escrevia sem lock/revalidação dentro de transacção | Correcção T41 em revisão na PR #166; CI pendente nesta branch; fila offline continua por implementar |
+| Alta | Arquivo automático de saldos escrevia sem lock/revalidação dentro de transacção | Corrigido na PR #166; backend, PostgreSQL E2E, frontend, Browser E2E, Security e CodeQL passaram nesta branch; fila offline continua por implementar |
 | Alta | Fallback de rate limit em memória não é global entre réplicas | Limitação residual; requer Redis disponível ou rate limiter distribuído |
 | Média | README declarava Next.js 14, enquanto o workspace usa Next.js 15.5.24 | Corrigido nesta branch |
 | Média | Uso de `any` em serviços e API frontend reduz a segurança estática | Dívida técnica |
