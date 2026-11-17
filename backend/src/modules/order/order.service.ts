@@ -524,14 +524,14 @@ export class OrderService {
       }
 
       currentOrder.status = 'cancelled';
-      const updatedOrder = await manager.save(OrderEntity, currentOrder);
 
       // Ordem global de locks: pedido -> produtos (ID ascendente) -> saldo.
       // Mantém a ordem compatível com a criação de encomendas (produtos -> saldo).
       await reporStockEmTransacao(manager, currentOrder.id);
 
       // Para clientes, revalidar a titularidade com lock só depois dos locks
-      // de produto. Assim a ordem continua pedido -> produtos -> saldo.
+      // de produto. A validação precede qualquer escrita na encomenda: se falhar,
+      // a transação termina sem persistir alterações (também simplifica retries).
       if (user?.role === 'client') {
         const balance = currentOrder.balanceId
           ? await manager.findOne(BalanceEntity, {
@@ -545,6 +545,7 @@ export class OrderService {
         }
       }
 
+      const updatedOrder = await manager.save(OrderEntity, currentOrder);
       await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
 
       return updatedOrder;
