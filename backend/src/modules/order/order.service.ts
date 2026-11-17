@@ -68,8 +68,27 @@ export class OrderService {
     await this.eventService.assertEventOperavel(event);
 
     let savedOrder: OrderEntity;
+    let replayed = false;
     try {
       savedOrder = await this.dataSource.transaction(async (manager) => {
+        if (idempotencyKey) {
+          // Serializa a mesma chave no PostgreSQL. O segundo pedido só verifica
+          // a existência depois de o primeiro confirmar ou reverter a transação,
+          // evitando falhas falsas de stock antes de chegar ao índice UNIQUE.
+          await manager.query(
+            'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+            [`${event.id}:${user.id}`, idempotencyKey],
+          );
+          const existente = await manager.findOne(OrderEntity, {
+            where: { event: { id: event.id }, createdById: user.id, idempotencyKey },
+          });
+          if (existente) {
+            this.assertHashPedido(existente, requestHash!);
+            replayed = true;
+            return existente;
+          }
+        }
+
         const products = dto.items.length
           ? await manager.find(ProductEntity, {
               where: { id: In(dto.items.map((item) => item.productId)) },
@@ -191,7 +210,7 @@ export class OrderService {
       throw error;
     }
 
-    return this.finalizarCriacao(savedOrder, event.id, false);
+    return this.finalizarCriacao(savedOrder, event.id, replayed);
   }
 
   private validarChaveIdempotencia(value?: string): string | undefined {
