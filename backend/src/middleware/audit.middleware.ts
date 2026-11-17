@@ -36,13 +36,52 @@ export class RateLimitMiddleware implements NestMiddleware {
 
   constructor(private readonly redisService: RedisService) {}
 
+  private verificarLimiteLocal(ip: string): boolean {
+    const recentes = nunca(this.local.get(ip) || [], this.windowMs, Date.now());
+    if (recentes.length > 0) {
+      this.local.set(ip, recentes);
+    } else {
+      this.local.delete(ip);
+    }
+    return recentes.length >= this.maxRequests;
+  }
+
+  private registarPedidoLocal(ip: string): void {
+    const recentes = nunca(this.local.get(ip) || [], this.windowMs, Date.now());
+    recentes.push(Date.now());
+    this.local.set(ip, recentes);
+
+    const timer = setTimeout(() => {
+      const atualizadas = nunca(this.local.get(ip) || [], this.windowMs, Date.now());
+      if (atualizadas.length > 0) {
+        this.local.set(ip, atualizadas);
+      } else {
+        this.local.delete(ip);
+      }
+    }, this.windowMs);
+    timer.unref?.();
+  }
+
   async use(req: Request, res: Response, next: NextFunction) {
     const ip = req.ip || 'unknown';
+
+    // Contagens locais feitas durante uma falha Redis mantêm-se activas
+    // durante toda a janela, mesmo quando o Redis recupera entretanto.
+    if (this.verificarLimiteLocal(ip)) {
+      res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+        statusCode: HttpStatus.TOO_MANY_REQUESTS,
+        message: 'Muitas requisições. Tente novamente mais tarde.',
+      });
+      return;
+    }
 
     if (this.redisService.isEnabled) {
       const key = `${RL_IP_PREFIX}${ip}`;
       try {
-        const count = await this.redisService.incrementWithTtlStrict(key, Math.ceil(this.windowMs / 1000));
+        const count = await this.redisService.incrementWithTtlStrict(
+          key,
+          Math.ceil(this.windowMs / 1000),
+        );
         if (count > this.maxRequests) {
           res.status(HttpStatus.TOO_MANY_REQUESTS).json({
             statusCode: HttpStatus.TOO_MANY_REQUESTS,
@@ -53,34 +92,11 @@ export class RateLimitMiddleware implements NestMiddleware {
         next();
         return;
       } catch (error) {
-        // fail-closed: Redis indisponível não abre o limite — cai na contagem local
         Logger.warn(`Falha no rate limit via Redis (contagem local): ${(error as Error).message}`);
       }
     }
 
-    const now = Date.now();
-    const recentRequests = nunca(this.local.get(ip) || [], this.windowMs, now);
-
-    if (recentRequests.length >= this.maxRequests) {
-      res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-        statusCode: HttpStatus.TOO_MANY_REQUESTS,
-        message: 'Muitas requisições. Tente novamente mais tarde.',
-      });
-      return;
-    }
-
-    recentRequests.push(now);
-    this.local.set(ip, recentRequests);
-
-    setTimeout(() => {
-      const updated = nunca(this.local.get(ip) || [], this.windowMs, Date.now());
-      if (updated.length > 0) {
-        this.local.set(ip, updated);
-      } else {
-        this.local.delete(ip);
-      }
-    }, this.windowMs);
-
+    this.registarPedidoLocal(ip);
     next();
   }
 }
