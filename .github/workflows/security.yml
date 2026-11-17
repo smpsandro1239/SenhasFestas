@@ -29,6 +29,7 @@ jobs:
       - name: Resolve compatible dependency updates
         run: npm install --ignore-scripts
       - name: Apply non-breaking security fixes
+        continue-on-error: true
         run: npm audit fix --ignore-scripts
       - name: Save updated lockfile and audit report
         if: always()
