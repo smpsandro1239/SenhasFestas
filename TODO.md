@@ -96,4 +96,4 @@ não foi commitado).
   e do runtime foi replicado e arrancado localmente, mas o `docker build` em si não
   correu.
 
-| `[~]` | T38 o Service Worker podia guardar HTML/RSC autenticado e a UI prometia sincronização offline inexistente | pwa/segurança | alta | D19 | Cache de navegações e RSC removido; cache limitado a assets estáticos; página offline corrigida; teste `service-worker-cache.test.ts`; gates pendentes. Fila offline transaccional continua por implementar e não deve ser anunciada como disponível |
+| `[~]` | T38 o Service Worker podia guardar HTML/RSC autenticado e a UI prometia sincronização offline inexistente | pwa/segurança | alta | D19 | Cache de navegações e RSC removido; cache v5 elimina cache v4 potencialmente privado; cache limitado a assets estáticos; página offline corrigida; teste `service-worker-cache.test.ts`; gates pendentes. Fila offline transaccional continua por implementar e não deve ser anunciada como disponível |
