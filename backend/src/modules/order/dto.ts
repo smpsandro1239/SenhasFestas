@@ -32,10 +32,6 @@ export class CreateOrderDto {
   @IsUUID()
   eventId: string;
 
-  @IsUUID()
-  @IsOptional()
-  idempotencyKey?: string;
-
   @IsEnum(['qr', 'pos'])
   source: string;
 
