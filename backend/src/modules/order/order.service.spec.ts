@@ -460,6 +460,25 @@ describe('OrderService — A8: valida produtos ativos, do evento e com stock (RE
     ).rejects.toThrow('Stock insuficiente');
   });
 
+  it('agrega quantidades de linhas repetidas do mesmo produto antes de validar stock', async () => {
+    const p1 = { id: 'p1', price: 100, isActive: true, event: { id: 'evt1' }, stock: 3 };
+    const manager = makeManager([p1]);
+    const svc = makeSvc(manager);
+
+    await expect(
+      svc.create({ id: 'u1', role: 'client' }, {
+        eventId: 'evt1',
+        items: [
+          { productId: 'p1', quantity: 2, notes: 'sem gelo' },
+          { productId: 'p1', quantity: 2, notes: 'com gelo' },
+        ],
+        source: 'qr',
+      } as any),
+    ).rejects.toThrow('Stock insuficiente');
+
+    expect(manager.save).not.toHaveBeenCalledWith(ProductEntity, expect.anything());
+  });
+
   it('aceita produto válido sem stock definido (regressão)', async () => {
     const manager = makeManager([{ id: 'p1', price: 100, isActive: true, event: { id: 'evt1' }, stock: null }]);
     const svc = makeSvc(manager);

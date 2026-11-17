@@ -8,7 +8,7 @@ import { QRCodeService } from '../../services/qr-code.service';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { NotificationService } from '../../services/notification.service';
 import { MovementType } from '../../entities';
-import { centavos, soma, subtrai } from '../../common/money';
+import { centavos, subtrai } from '../../common/money';
 import { reembolsarSaldoEmTransacao, temSaldoParaReembolsar } from '../../common/order-refund';
 import { assertPodeMexerEmSaldo, assertSaldoUtilizavel } from '../../common/balance-guard';
 import { reporStockEmTransacao } from '../../common/order-stock';
@@ -70,13 +70,14 @@ export class OrderService {
     let savedOrder: OrderEntity;
     try {
       savedOrder = await this.dataSource.transaction(async (manager) => {
-        const products = dto.items.length
+        const productIds = [...new Set(dto.items.map((item) => item.productId))];
+        const products = productIds.length
           ? await manager.find(ProductEntity, {
-              where: { id: In(dto.items.map((item) => item.productId)) },
+              where: { id: In(productIds) },
               relations: { event: true },
             })
           : [];
-        if (products.length !== dto.items.length) {
+        if (products.length !== productIds.length) {
           throw new NotFoundException('Um ou mais produtos não encontrados');
         }
         const productById = new Map(products.map((product) => [product.id, product]));
@@ -86,8 +87,8 @@ export class OrderService {
         // ler o mesmo número e vender a mesma unidade. O lock pessimista
         // serializa a venda e devolve o valor atual, que é o usado para validar
         // e para decrementar.
-        const trackedIds = dto.items
-          .map((item) => productById.get(item.productId))
+        const trackedIds = productIds
+          .map((productId) => productById.get(productId))
           .filter((product) => product?.stock != null)
           .map((product) => product!.id);
         const lockedById = new Map<string, ProductEntity>();
@@ -99,6 +100,17 @@ export class OrderService {
           for (const product of locked) {
             lockedById.set(product.id, product);
           }
+          if (lockedById.size !== trackedIds.length) {
+            throw new NotFoundException('Um ou mais produtos deixaram de estar disponíveis');
+          }
+        }
+
+        const quantityByProductId = new Map<string, number>();
+        for (const item of dto.items) {
+          quantityByProductId.set(
+            item.productId,
+            (quantityByProductId.get(item.productId) ?? 0) + item.quantity,
+          );
         }
 
         let total = 0;
@@ -113,11 +125,16 @@ export class OrderService {
           if (!product.isActive) {
             throw new BadRequestException(`Produto indisponível: ${item.productId}`);
           }
-          const stock = lockedById.get(item.productId)?.stock ?? product.stock;
-          if (stock != null && item.quantity > Number(stock)) {
-            throw new BadRequestException(`Stock insuficiente para: ${item.productId}`);
-          }
           total = centavos(total + item.quantity * centavos(Number(product.price)));
+        }
+
+        for (const [productId, quantity] of quantityByProductId) {
+          const product = productById.get(productId)!;
+          const locked = lockedById.get(productId);
+          const stock = locked ? locked.stock : product.stock;
+          if (stock != null && quantity > Number(stock)) {
+            throw new BadRequestException(`Stock insuficiente para: ${productId}`);
+          }
         }
 
         const balanceUsed = centavos(Math.min(dto.balanceUsed || 0, total));
@@ -164,10 +181,10 @@ export class OrderService {
 
         // Decrementar o stock só nos produtos com controlo (stock != null).
         // Quem não tem controlo (menu aberto) fica intocável.
-        for (const item of dto.items) {
-          const locked = lockedById.get(item.productId);
+        for (const [productId, quantity] of quantityByProductId) {
+          const locked = lockedById.get(productId);
           if (locked?.stock != null) {
-            locked.stock = Number(locked.stock) - item.quantity;
+            locked.stock = Number(locked.stock) - quantity;
             await manager.save(ProductEntity, locked);
           }
         }
