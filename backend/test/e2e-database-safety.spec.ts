@@ -31,11 +31,11 @@ describe('configuracaoBaseDadosE2e — barreira contra BD remota', () => {
     try {
       writeFileSync(
         join(diretorio, '.env.development'),
-        'DATABASE_URL=postgresql://user:pass@ep-remote.eu.neon.tech/senhasfestas_test?sslmode=require\\n',
+        'DATABASE_URL=postgresql://user:pass@ep-remote.eu.neon.tech/senhasfestas_test?sslmode=require\n',
       );
       writeFileSync(
         join(diretorio, '.env'),
-        'DATABASE_URL=postgresql://user:pass@localhost/senhasfestas_test\\n',
+        'DATABASE_URL=postgresql://user:pass@localhost/senhasfestas_test\n',
       );
 
       const ambiente = carregarAmbienteE2e(diretorio, {});
@@ -53,7 +53,7 @@ describe('configuracaoBaseDadosE2e — barreira contra BD remota', () => {
     try {
       writeFileSync(
         join(diretorio, '.env.development'),
-        'DATABASE_URL=postgresql://user:pass@ep-remote.eu.neon.tech/senhasfestas_test\\n',
+        'DATABASE_URL=postgresql://user:pass@ep-remote.eu.neon.tech/senhasfestas_test\n',
       );
       const ambiente = carregarAmbienteE2e(diretorio, {
         DATABASE_URL: 'postgresql://user:pass@localhost/senhasfestas_test',
