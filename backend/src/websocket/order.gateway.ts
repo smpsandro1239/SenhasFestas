@@ -133,7 +133,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
    */
   private async autenticarSocket(client: Socket): Promise<{ id: string; role: string }> {
     const rawToken =
-      client.handshake.auth?.token || client.handshake.headers?.authorization?.replace(/^Bearer\\s+/i, '');
+      client.handshake.auth?.token || client.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '');
     if (!rawToken || typeof rawToken !== 'string') {
       throw new Error('token em falta');
     }
