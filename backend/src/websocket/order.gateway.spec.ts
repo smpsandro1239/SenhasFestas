@@ -54,9 +54,6 @@ function criarGateway(overrides: {
     verify: vi.fn().mockImplementation(() => ({ sub: 'u1', role: 'organizer', exp: Math.floor(Date.now() / 1000) + 900 })),
     ...overrides.jwt,
   };
-  const eventUserRepository = {
-    findOne: vi.fn().mockResolvedValue(null),
-  };
   const userRepository = {
     findOne: vi.fn().mockImplementation(({ where }: any) =>
       where?.isActive ? { id: where.id, role: 'organizer', isActive: true } : null,
