@@ -291,6 +291,80 @@ describe('BalanceService — guard de janela operacional', () => {
       expect(resultado.reversedMovementId).toBe('mov1');
       expect(resultado.eventId).toBe('evtA');
     });
+    it('acumula estornos parciais e o estorno final usa apenas o remanescente', async () => {
+      const movimento: any = {
+        id: 'mov-parcial',
+        reversed: false,
+        reversedAmount: 0,
+        amount: 10,
+        type: MovementType.LOAD,
+        balance: { id: 'b1', user: { id: 'u1' }, event: eventoAtivo },
+      };
+      const saldo: any = { id: 'b1', currentBalance: 100 };
+      const manager = {
+        findOne: vi.fn().mockImplementation((entity: any) => {
+          if (entity?.name === 'BalanceMovementEntity') return Promise.resolve(movimento);
+          if (entity?.name === 'BalanceEntity') return Promise.resolve(saldo);
+          return Promise.resolve(null);
+        }),
+        save: vi.fn().mockImplementation(async (_entity: any, value: any) => value),
+        create: vi.fn().mockImplementation((_entity: any, value: any) => ({ ...value })),
+      };
+      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) => fn(manager));
+
+      await balanceService.reverseLoad(
+        'u1',
+        'mov-parcial',
+        { id: 'root', role: 'superadmin' },
+        { amount: 4 } as any,
+      );
+
+      expect(movimento.reversedAmount).toBe(4);
+      expect(movimento.reversed).toBe(false);
+      expect(saldo.currentBalance).toBe(96);
+
+      await balanceService.reverseLoad(
+        'u1',
+        'mov-parcial',
+        { id: 'root', role: 'superadmin' },
+      );
+
+      expect(movimento.reversedAmount).toBe(10);
+      expect(movimento.reversed).toBe(true);
+      expect(saldo.currentBalance).toBe(90);
+      expect(manager.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('não permite estornar mais do que o remanescente do carregamento', async () => {
+      const movimento = {
+        id: 'mov-parcial',
+        reversed: false,
+        reversedAmount: 7,
+        amount: 10,
+        type: MovementType.LOAD,
+        balance: { id: 'b1', user: { id: 'u1' }, event: eventoAtivo },
+      };
+      const manager = {
+        findOne: vi.fn().mockImplementation((entity: any) => {
+          if (entity?.name === 'BalanceMovementEntity') return Promise.resolve(movimento);
+          if (entity?.name === 'BalanceEntity') return Promise.resolve({ id: 'b1', currentBalance: 100 });
+          return Promise.resolve(null);
+        }),
+        save: vi.fn(),
+        create: vi.fn(),
+      };
+      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) => fn(manager));
+
+      await expect(
+        balanceService.reverseLoad(
+          'u1',
+          'mov-parcial',
+          { id: 'root', role: 'superadmin' },
+          { amount: 4 } as any,
+        ),
+      ).rejects.toThrow('Valor a estornar excede o remanescente disponível');
+      expect(manager.save).not.toHaveBeenCalled();
+    });
   });
 
   describe('arquivamento de saldo (Parte 2)', () => {
