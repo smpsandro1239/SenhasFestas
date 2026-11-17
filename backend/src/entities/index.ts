@@ -293,6 +293,10 @@ export enum MovementType {
 
 @Entity('balance_movements')
 @Index(['balance', 'createdAt'])
+@Index('UQ_balance_movements_idempotency', ['createdById', 'idempotencyKey'], {
+  unique: true,
+  where: '"idempotencyKey" IS NOT NULL AND "createdById" IS NOT NULL',
+})
 export class BalanceMovementEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -330,6 +334,13 @@ export class BalanceMovementEntity {
 
   @Column({ type: 'uuid', nullable: true })
   createdById?: string;
+
+  // Chave/hash opcionais para tornar operações financeiras seguras perante retries HTTP.
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  idempotencyKey?: string;
+
+  @Column({ type: 'char', length: 64, nullable: true })
+  requestHash?: string;
 
   @CreateDateColumn()
   createdAt: Date;
