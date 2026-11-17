@@ -65,7 +65,9 @@ export class OrderService {
       }
     }
 
-    await this.eventService.assertEventOperavel(event);
+    if (!idempotencyKey) {
+      await this.eventService.assertEventOperavel(event);
+    }
 
     let savedOrder: OrderEntity;
     let replayed = false;
@@ -87,6 +89,7 @@ export class OrderService {
             replayed = true;
             return existente;
           }
+          await this.eventService.assertEventOperavel(event);
         }
 
         const products = dto.items.length
