@@ -208,14 +208,14 @@ jobs:
 
       - name: Arrancar backend e frontend
         run: |
-          (cd backend && npm run start:prod > /tmp/backend.log 2>&1 &)
-          (cd frontend && PORT=3001 npm run start > /tmp/frontend.log 2>&1 &)
+          (cd backend && PORT=3000 npm run start:prod > /tmp/backend.log 2>&1 &)
+          (cd frontend && npx next start -p 3001 > /tmp/frontend.log 2>&1 &)
           echo "à espera do backend (:3000) e frontend (:3001)…"
           npx --yes wait-on@8 http-get://localhost:3000/api/health http-get://localhost:3001/auth/login --timeout 120000
 
       - name: Testes browser (realtime da planta + cabeçalhos)
         working-directory: frontend
-        run: npx playwright test e2e/planta-realtime.spec.ts e2e/security-headers.spec.ts
+        run: npx playwright test e2e/planta-realtime.spec.ts e2e/security-headers.spec.ts e2e/design-system.spec.ts
 
       - name: Logs em falha
         if: failure()
