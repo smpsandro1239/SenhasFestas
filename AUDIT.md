@@ -3,13 +3,13 @@
 **Data:** 2026-11-17  
 **Âmbito:** revisão estática do repositório e execução observada do GitHub Actions.  
 **Branch de trabalho:** `codex/autonomous-hardening-2026-11`  
-**Estado:** auditoria inicial concluída; correcções de segurança e PWA em validação pelo CI. Não fazer merge enquanto os gates obrigatórios não estiverem verdes.
+**Estado:** auditoria inicial concluída; T40 foi integrada pela PR #163. A correcção JWT/Bearer está na `main`; falta confirmar a CI pós-merge. Outras tarefas de hardening continuam pendentes.
 
 > Esta auditoria distingue comportamento confirmado por código/testes de comportamento ainda não demonstrado em produção. Não foram executados testes destrutivos contra qualquer base de dados real.
 
 ## Resumo executivo
 
-**Actualização 2026-11-17 (T40):** o `AuditInterceptor` sanitiza recursivamente `before`, `after` e `details`. Tokens de sessão, passwords, API keys, cookies e credenciais não são persistidos; strings Bearer/JWT são mascaradas e mensagens de erro brutas não são gravadas. Testes de regressão cobrem login/refresh e detalhes aninhados. A alteração está em validação por CI na PR de hardening de auditoria.
+**Actualização 2026-11-17 (T40):** o `AuditInterceptor` sanitiza recursivamente `before`, `after` e `details`. Tokens de sessão, passwords, API keys, cookies e credenciais não são persistidos; strings Bearer/JWT são mascaradas e mensagens de erro brutas não são gravadas. Testes de regressão cobrem login/refresh e detalhes aninhados. A alteração foi integrada pela PR #163 (`1319615`); a ordem de redacção JWT/Bearer foi corrigida em `c45aa02`. A CI pós-merge ainda não está confirmada.
 
 A arquitectura geral é coerente: monorepo npm workspaces, backend NestJS modular, frontend Next.js App Router, pacote partilhado de contratos realtime, PostgreSQL, Redis e CI com jobs separados. Existem boas decisões já implementadas: validação global dos DTOs, RBAC com função efectiva por evento, refresh tokens armazenados por hash, transacções nos fluxos financeiros, índices únicos para invariantes importantes e builds Docker multi-stage.
 
