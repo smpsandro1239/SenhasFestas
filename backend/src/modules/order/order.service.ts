@@ -54,6 +54,7 @@ export class OrderService {
     if (!isMember && user.role !== 'superadmin') {
       throw new ForbiddenException('Não pertence a este evento');
     }
+    const roleEfetiva = user.role === 'superadmin' ? 'superadmin' : isMember?.role ?? user.role;
 
     // Um retry confirmado devolve o pedido original mesmo depois do fecho
     // operacional do evento; não volta a debitar saldo nem a baixar stock.
@@ -214,7 +215,14 @@ export class OrderService {
         }
 
         if (dto.balanceId && balanceUsed > 0) {
-          await this.consumeBalanceInTransaction(manager, user, dto.balanceId, balanceUsed, createdOrder.id, event.id);
+          await this.consumeBalanceInTransaction(
+            manager,
+            { ...user, role: roleEfetiva },
+            dto.balanceId,
+            balanceUsed,
+            createdOrder.id,
+            event.id,
+          );
         }
 
         return createdOrder;
