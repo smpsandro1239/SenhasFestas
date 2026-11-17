@@ -3,13 +3,13 @@
 **Data:** 2026-11-17  
 **Âmbito:** revisão estática do repositório e execução observada do GitHub Actions.  
 **Branch de trabalho:** `codex/autonomous-hardening-2026-11`  
-**Estado:** auditoria inicial concluída; T40 foi integrada pela PR #163. A correcção JWT/Bearer está na `main`; falta confirmar a CI pós-merge. Outras tarefas de hardening continuam pendentes.
+**Estado:** auditoria inicial concluída; T40 foi integrada e todos os gates de código passaram na validação da PR #164. O deploy Vercel permanece bloqueado pela quota diária. T41 está em correcção na PR #166.
 
 > Esta auditoria distingue comportamento confirmado por código/testes de comportamento ainda não demonstrado em produção. Não foram executados testes destrutivos contra qualquer base de dados real.
 
 ## Resumo executivo
 
-**Actualização 2026-11-17 (T40):** o `AuditInterceptor` sanitiza recursivamente `before`, `after` e `details`. Tokens de sessão, passwords, API keys, cookies e credenciais não são persistidos; strings Bearer/JWT são mascaradas e mensagens de erro brutas não são gravadas. Testes de regressão cobrem login/refresh e detalhes aninhados. A alteração foi integrada pela PR #163 (`1319615`); a ordem de redacção JWT/Bearer foi corrigida em `c45aa02`. A CI pós-merge ainda não está confirmada.
+**Actualização 2026-11-17 (T40):** o `AuditInterceptor` sanitiza recursivamente `before`, `after` e `details`. Tokens de sessão, passwords, API keys, cookies e credenciais não são persistidos; strings Bearer/JWT são mascaradas e mensagens de erro brutas não são gravadas. Testes de regressão cobrem login/refresh e detalhes aninhados. A alteração foi integrada pela PR #163 (`1319615`); a ordem de redacção JWT/Bearer foi corrigida em `c45aa02`. A CI da PR #164 passou (backend, frontend, Browser E2E, docs, Security e CodeQL); a Vercel não conseguiu criar deployments por limite diário.
 
 A arquitectura geral é coerente: monorepo npm workspaces, backend NestJS modular, frontend Next.js App Router, pacote partilhado de contratos realtime, PostgreSQL, Redis e CI com jobs separados. Existem boas decisões já implementadas: validação global dos DTOs, RBAC com função efectiva por evento, refresh tokens armazenados por hash, transacções nos fluxos financeiros, índices únicos para invariantes importantes e builds Docker multi-stage.
 
@@ -20,7 +20,8 @@ A arquitectura geral é coerente: monorepo npm workspaces, backend NestJS modula
 | Alta | Rate limit podia falhar aberto quando Redis devolvia erro/null | Correcção T36 na PR #39; CI em validação |
 | Alta | Testes E2E podiam apagar schema de uma BD remota | Barreira T37 na PR #39; CI em validação |
 | Alta | Service Worker podia guardar HTML/RSC autenticado em cache persistente | Corrigido nesta branch; CI em validação |
-| Alta | README prometia sincronização offline que não existe no código | Texto corrigido nesta branch; fila offline continua por implementar |
+| Alta | README prometia sincronização offline que não existe no código | Texto corrigido
+| Alta | Arquivo automático de saldos escrevia sem lock/revalidação dentro de transacção | Correcção T41 em revisão na PR #166; CI pendente nesta branch; fila offline continua por implementar |
 | Alta | Fallback de rate limit em memória não é global entre réplicas | Limitação residual; requer Redis disponível ou rate limiter distribuído |
 | Média | README declarava Next.js 14, enquanto o workspace usa Next.js 15.5.24 | Corrigido nesta branch |
 | Média | Uso de `any` em serviços e API frontend reduz a segurança estática | Dívida técnica |
