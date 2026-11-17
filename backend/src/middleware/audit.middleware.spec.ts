@@ -164,7 +164,7 @@ describe('LoginRateLimitMiddleware — reservas concorrentes e fallback local', 
 
     expect(next).toHaveBeenCalledTimes(1);
     expect([primeira.statusCode, segunda.statusCode]).toContain(429);
-    expect(redisService.releaseCounterReservationStrict).toHaveBeenCalledTimes(1);
+    expect(redisService.releaseCounterReservationStrict).not.toHaveBeenCalled();
   });
 
   it('liberta a reserva de um login bem-sucedido', async () => {
