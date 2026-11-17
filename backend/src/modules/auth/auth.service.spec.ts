@@ -35,6 +35,7 @@ describe('AuthService', () => {
       mockRepository as any,
       mockJwtService as any,
       mockEventService as any,
+      mockDataSource as any,
     );
   });
 
