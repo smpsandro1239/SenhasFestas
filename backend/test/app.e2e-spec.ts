@@ -120,6 +120,7 @@ describe('App e2e (Postgres + Redis)', () => {
     const response = await request(app.getHttpServer())
       .post('/api/auth/refresh')
       .set('Cookie', `sf_refresh=${refreshToken}`)
+      .set('Origin', process.env.FRONTEND_URL || 'http://localhost:3001')
       .set('Content-Type', 'application/json')
       .expect(200);
 
@@ -137,6 +138,7 @@ describe('App e2e (Postgres + Redis)', () => {
     const response = await request(app.getHttpServer())
       .post('/api/auth/logout')
       .set('Cookie', `sf_refresh=${refreshToken}`)
+      .set('Origin', process.env.FRONTEND_URL || 'http://localhost:3001')
       .set('Content-Type', 'application/json')
       .expect(200);
 
@@ -145,6 +147,7 @@ describe('App e2e (Postgres + Redis)', () => {
     const reutilizado = await request(app.getHttpServer())
       .post('/api/auth/refresh')
       .set('Cookie', `sf_refresh=${refreshToken}`)
+      .set('Origin', process.env.FRONTEND_URL || 'http://localhost:3001')
       .set('Content-Type', 'application/json')
       .expect(401);
     expect(reutilizado.body.statusCode).toBe(401);
