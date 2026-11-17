@@ -133,6 +133,13 @@ export class BalanceService {
         throw new ConflictException('Carregamento já estornado');
       }
 
+      const montanteOriginal = centavos(Number(locked.amount));
+      const jaEstornado = centavos(Number(locked.reversedAmount ?? 0));
+      const restante = centavos(Math.max(0, montanteOriginal - jaEstornado));
+      if (restante <= 0) {
+        throw new ConflictException('Carregamento já estornado');
+      }
+
       const balance = await manager.findOne(BalanceEntity, {
         where: { id: movement.balance.id },
         lock: { mode: 'pessimistic_write' },
@@ -142,17 +149,16 @@ export class BalanceService {
         throw new NotFoundException('Saldo não encontrado');
       }
 
-      // Estorno pode ser parcial: o valor estornado nunca excede o disponível
-      // (saldo atual) nem o montante original do carregamento.
-      const montanteOriginal = centavos(Number(locked.amount));
+      // Estornos parciais acumulam no movimento original. O default estorna
+      // apenas o remanescente, nunca o montante original uma segunda vez.
       const saldoAtual = centavos(Number(balance.currentBalance));
-      const estorno = dto?.amount !== undefined ? centavos(Number(dto.amount)) : montanteOriginal;
-      const disponivel = Math.min(saldoAtual, montanteOriginal);
+      const estorno = dto?.amount !== undefined ? centavos(Number(dto.amount)) : restante;
+      const disponivel = Math.min(saldoAtual, restante);
       if (estorno <= 0) {
         throw new ForbiddenException('Valor a estornar inválido');
       }
       if (estorno > disponivel + 0.005) {
-        throw new ForbiddenException('Saldo insuficiente para estornar (já utilizado)');
+        throw new ForbiddenException('Valor a estornar excede o remanescente disponível');
       }
 
       arquivar?.({
@@ -160,8 +166,9 @@ export class BalanceService {
         eventId: (movement.balance as any)?.event?.id as string | undefined,
       });
 
-      locked.reversed = true;
-      locked.reversedAt = new Date();
+      locked.reversedAmount = centavos(jaEstornado + estorno);
+      locked.reversed = locked.reversedAmount >= montanteOriginal - 0.005;
+      locked.reversedAt = locked.reversed ? new Date() : undefined;
       await manager.save(BalanceMovementEntity, locked);
 
       balance.currentBalance = subtrai(Number(balance.currentBalance), estorno);
@@ -576,10 +583,19 @@ export class BalanceService {
 
     const montante = centavos(dto.amount);
     const resultado = await this.dataSource.transaction(async (manager) => {
-      const origem = await manager.findOne(BalanceEntity, {
-        where: { user: { id: userId }, event: { id: dto.fromEventId } } as any,
-        lock: { mode: 'pessimistic_write' },
-      });
+      // Todas as transferências bloqueiam os saldos pela mesma ordem de evento.
+      // Sem isto, A→B e B→A podem bloquear origem/destino em ordem inversa.
+      const saldosPorEvento = new Map<string, BalanceEntity>();
+      for (const eventId of [dto.fromEventId, dto.toEventId].sort()) {
+        const saldo = await manager.findOne(BalanceEntity, {
+          where: { user: { id: userId }, event: { id: eventId } } as any,
+          lock: { mode: 'pessimistic_write' },
+          withDeleted: eventId === dto.toEventId,
+        });
+        if (saldo) saldosPorEvento.set(eventId, saldo);
+      }
+
+      const origem = saldosPorEvento.get(dto.fromEventId);
       if (!origem) {
         throw new NotFoundException('O utilizador não tem saldo no evento de origem');
       }
@@ -587,11 +603,7 @@ export class BalanceService {
         throw new ForbiddenException('Saldo insuficiente no evento de origem');
       }
 
-      let destino = await manager.findOne(BalanceEntity, {
-        where: { user: { id: userId }, event: { id: dto.toEventId } } as any,
-        lock: { mode: 'pessimistic_write' },
-        withDeleted: true,
-      });
+      let destino = saldosPorEvento.get(dto.toEventId) ?? null;
       if (!destino) {
         const userEntity = await manager.findOne(UserEntity, {
           where: { id: userId },

@@ -318,6 +318,10 @@ export class BalanceMovementEntity {
   @Column({ default: false })
   reversed: boolean;
 
+  // Montante acumulado dos estornos parciais deste carregamento.
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  reversedAmount: number;
+
   @Column({ type: 'timestamp', nullable: true })
   reversedAt?: Date;
 
