@@ -572,4 +572,96 @@ describe('App e2e (Postgres + Redis)', () => {
     ).toBe(1);
   });
 
+  it('não duplica transferências concorrentes entre eventos com a mesma Idempotency-Key', async () => {
+    const dataSource = app.get(DataSource);
+    const caixa = await criarCaixaComEvento('transfer');
+    const { email } = await criarUtilizadorTeste(`balance-transfer-${randomUUID()}@example.com`);
+    const cliente = await dataSource.getRepository(UserEntity).findOneByOrFail({ email });
+    const eventRepository = dataSource.getRepository(EventEntity);
+    const eventUsers = dataSource.getRepository(EventUserEntity);
+    const destino = await eventRepository.save(
+      eventRepository.create({
+        name: 'E2E Saldo destino',
+        shortCode: `DST-${randomUUID().slice(0, 8)}`,
+        startDate: new Date(Date.now() - 60 * 60 * 1000),
+        endDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        status: 'active',
+      }),
+    );
+    await eventUsers.save(eventUsers.create({
+      event: destino,
+      user: caixa.user,
+      role: 'cashier',
+    }));
+
+    const endpoint = `/api/balances/${cliente.id}`;
+    const chaveCarga = randomUUID();
+    const chaveTransferencia = randomUUID();
+    await request(app.getHttpServer())
+      .post(`${endpoint}/load`)
+      .set('Authorization', `Bearer ${caixa.token}`)
+      .set('Idempotency-Key', chaveCarga)
+      .send({ eventId: caixa.event.id, amount: 50, paymentMethod: 'cash' })
+      .expect(201);
+
+    const enviarTransferencia = (amount: number) =>
+      request(app.getHttpServer())
+        .post(`${endpoint}/transfer`)
+        .set('Authorization', `Bearer ${caixa.token}`)
+        .set('Idempotency-Key', chaveTransferencia)
+        .send({
+          fromEventId: caixa.event.id,
+          toEventId: destino.id,
+          amount,
+        });
+
+    const [first, second] = await Promise.all([
+      enviarTransferencia(20),
+      enviarTransferencia(20),
+    ]);
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+
+    const saldos = dataSource.getRepository(BalanceEntity);
+    const origem = await saldos.findOneByOrFail({
+      user: { id: cliente.id },
+      event: { id: caixa.event.id },
+    });
+    const saldoDestino = await saldos.findOneByOrFail({
+      user: { id: cliente.id },
+      event: { id: destino.id },
+    });
+    expect(Number(origem.currentBalance)).toBe(30);
+    expect(Number(saldoDestino.currentBalance)).toBe(20);
+
+    const movimentos = dataSource.getRepository(BalanceMovementEntity);
+    expect(
+      await movimentos.count({
+        where: {
+          createdById: caixa.user.id,
+          type: MovementType.CANCEL,
+          balance: { event: { id: caixa.event.id } },
+          description: `Transferência para ${destino.name}`,
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await movimentos.count({
+        where: {
+          createdById: caixa.user.id,
+          type: MovementType.LOAD,
+          balance: { event: { id: destino.id } },
+          description: `Transferência de ${caixa.event.name}`,
+        },
+      }),
+    ).toBe(1);
+
+    const conflito = await enviarTransferencia(15);
+    expect(conflito.status).toBe(409);
+    const origemFinal = await saldos.findOneByOrFail({ id: origem.id });
+    const destinoFinal = await saldos.findOneByOrFail({ id: saldoDestino.id });
+    expect(Number(origemFinal.currentBalance)).toBe(30);
+    expect(Number(destinoFinal.currentBalance)).toBe(20);
+  });
+
 });

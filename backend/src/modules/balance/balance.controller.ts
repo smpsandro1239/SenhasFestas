@@ -102,12 +102,13 @@ export class BalanceController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() dto: TransferBalanceDto,
     @Request() req: any,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     this.assertStaffEventScope(req.user, dto.toEventId);
     if (req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, dto.toEventId);
     }
-    return this.balanceService.transferBalance(userId, dto, req.user, arquivarAuditoria(req));
+    return this.balanceService.transferBalance(userId, dto, req.user, arquivarAuditoria(req), idempotencyKey);
   }
 
   @Post(':userId/extend')

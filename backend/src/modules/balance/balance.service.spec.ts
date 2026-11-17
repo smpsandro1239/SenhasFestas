@@ -756,6 +756,7 @@ describe('BalanceService — transferência entre eventos (melhoria #8)', () => 
     const svc = Novo();
     const eventos: any[] = [];
     (svc as any).eventRepository.findOne.mockResolvedValue({ id: 'magusto', name: 'Magusto' });
+    eventService.assertEventOperavelById.mockResolvedValue({ id: 'atual', name: 'Atual' } as any);
     (svc as any).eventUserRepository.findOne.mockResolvedValue({ id: 'm1' });
 
     const origem = { id: 'b-origem', currentBalance: 100 };
@@ -792,12 +793,22 @@ describe('BalanceService — transferência entre eventos (melhoria #8)', () => 
         description: 'Transferência de Magusto',
       }),
     );
-    expect(manager.create).toHaveBeenCalledWith(
+    expect(manager.create).toHaveBeenNthCalledWith(
+      1,
       BalanceMovementEntity,
       expect.objectContaining({
         type: MovementType.CANCEL,
         amount: 30,
         description: 'Transferência para Atual',
+      }),
+    );
+    expect(manager.create).toHaveBeenNthCalledWith(
+      2,
+      BalanceMovementEntity,
+      expect.objectContaining({
+        type: MovementType.LOAD,
+        amount: 30,
+        description: 'Transferência de Magusto',
       }),
     );
     expect(eventService.vincularCliente).toHaveBeenCalledWith('u1', 'atual');

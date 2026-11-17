@@ -721,6 +721,7 @@ export class BalanceService {
     dto: TransferBalanceDto,
     actor?: any,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
+    rawIdempotencyKey?: string,
   ): Promise<{
     balance: { id: string; currentBalance: number };
     originBalance: { id: string; currentBalance: number };
@@ -731,10 +732,26 @@ export class BalanceService {
     if (dto.fromEventId === dto.toEventId) {
       throw new ForbiddenException('Origem e destino têm de ser eventos diferentes');
     }
-    const toEvent = await this.eventService.assertEventOperavelById(dto.toEventId);
-    const fromEvent = await this.eventRepository.findOne({
-      where: { id: dto.fromEventId },
-    });
+
+    const idempotencyKey = this.validarChaveIdempotencia(rawIdempotencyKey, actor);
+    const storedIdempotencyKey = idempotencyKey
+      ? this.hashChaveIdempotencia('transfer', idempotencyKey)
+      : undefined;
+    const requestHash = idempotencyKey
+      ? this.hashOperacaoFinanceira('transfer', actor.id, userId, dto.fromEventId, {
+          toEventId: dto.toEventId,
+          amount: centavos(dto.amount),
+        })
+      : undefined;
+
+    // A leitura simples permite reproduzir uma transferência confirmada mesmo
+    // que o evento de destino tenha fechado entretanto. A operabilidade só é
+    // validada depois de procurar um resultado idempotente anterior.
+    const toEvent = await this.eventRepository.findOne({ where: { id: dto.toEventId }, withDeleted: true });
+    if (!toEvent) {
+      throw new NotFoundException('Evento de destino não encontrado');
+    }
+    const fromEvent = await this.eventRepository.findOne({ where: { id: dto.fromEventId }, withDeleted: true });
     if (!fromEvent) {
       throw new NotFoundException('Evento de origem não encontrado');
     }
@@ -745,6 +762,68 @@ export class BalanceService {
 
     const montante = centavos(dto.amount);
     const resultado = await this.dataSource.transaction(async (manager) => {
+      if (idempotencyKey && storedIdempotencyKey) {
+        await this.lockOperationKey(manager, actor.id, 'transfer', idempotencyKey);
+        const movimentoDestinoAnterior = await manager.findOne(BalanceMovementEntity, {
+          where: {
+            createdById: actor.id,
+            type: MovementType.LOAD,
+            idempotencyKey: storedIdempotencyKey,
+          },
+          relations: { balance: true },
+          withDeleted: true,
+        });
+        const movimentoOrigemAnterior = await manager.findOne(BalanceMovementEntity, {
+          where: {
+            createdById: actor.id,
+            type: MovementType.CANCEL,
+            idempotencyKey: storedIdempotencyKey,
+          },
+          relations: { balance: true },
+          withDeleted: true,
+        });
+
+        if (movimentoDestinoAnterior || movimentoOrigemAnterior) {
+          if (!movimentoDestinoAnterior || !movimentoOrigemAnterior) {
+            throw new ConflictException('Transferência idempotente incompleta');
+          }
+          this.assertHashOperacao(movimentoDestinoAnterior, requestHash!);
+          this.assertHashOperacao(movimentoOrigemAnterior, requestHash!);
+          if (!movimentoDestinoAnterior.balance || !movimentoOrigemAnterior.balance) {
+            throw new NotFoundException('Saldo da transferência não encontrado');
+          }
+          const saldoDestinoAnterior = await manager.findOne(BalanceEntity, {
+            where: { id: movimentoDestinoAnterior.balance.id },
+            withDeleted: true,
+          });
+          const saldoOrigemAnterior = await manager.findOne(BalanceEntity, {
+            where: { id: movimentoOrigemAnterior.balance.id },
+            withDeleted: true,
+          });
+          if (!saldoDestinoAnterior || !saldoOrigemAnterior) {
+            throw new NotFoundException('Saldo da transferência não encontrado');
+          }
+          return {
+            balance: {
+              id: saldoDestinoAnterior.id,
+              currentBalance: Number(saldoDestinoAnterior.currentBalance),
+            },
+            originBalance: {
+              id: saldoOrigemAnterior.id,
+              currentBalance: Number(saldoOrigemAnterior.currentBalance),
+            },
+            movement: movimentoDestinoAnterior,
+            fromEventId: dto.fromEventId,
+            toEventId: dto.toEventId,
+          };
+        }
+      }
+
+      if (fromEvent.deletedAt) {
+        throw new NotFoundException('Evento de origem não encontrado');
+      }
+      const eventoDestinoOperavel = await this.eventService.assertEventOperavelById(dto.toEventId);
+
       // Todas as transferências bloqueiam os saldos pela mesma ordem de evento.
       // Sem isto, A→B e B→A podem bloquear origem/destino em ordem inversa.
       const saldosPorEvento = new Map<string, BalanceEntity>();
@@ -804,8 +883,10 @@ export class BalanceService {
         balance: origemSalva,
         type: MovementType.CANCEL,
         amount: montante,
-        description: `Transferência para ${toEvent.name}`,
+        description: `Transferência para ${eventoDestinoOperavel.name}`,
         createdById: actor?.id,
+        idempotencyKey: storedIdempotencyKey,
+        requestHash,
       });
       await manager.save(BalanceMovementEntity, movOrigem);
 
@@ -815,6 +896,8 @@ export class BalanceService {
         amount: montante,
         description: `Transferência de ${fromEvent.name}`,
         createdById: actor?.id,
+        idempotencyKey: storedIdempotencyKey,
+        requestHash,
       });
       await manager.save(BalanceMovementEntity, movDestino);
 
