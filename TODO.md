@@ -101,3 +101,83 @@ não foi commitado).
 - **Build Docker ainda por verificar** (não há Docker no ambiente): o layout do runner
   e do runtime foi replicado e arrancado localmente, mas o `docker build` em si não
   correu.
+
+---
+
+# Backlog consolidado de produto, engenharia e operação (2026-11-17)
+
+Esta secção é a **fonte de verdade para o trabalho ainda por resolver**. Os itens
+históricos acima mantêm-se como registo; os itens abaixo são o plano executável
+a seguir. Não marcar uma tarefa como concluída apenas por existir código: exige
+critérios de aceitação, testes adequados e evidência registada no
+`PROGRESS.md`. Quando uma auditoria confirmar que um risco não existe, fechar o
+item com a prova e não implementar alterações desnecessárias.
+
+Legenda: `[ ]` por iniciar · `[~]` em curso · `[x]` concluído · `[!]` bloqueado.
+Prioridades: **P0** bloqueia segurança/produção; **P1** essencial antes de beta/
+produção; **P2** melhoria importante; **P3** evolução futura.
+
+## Ordem de execução
+
+1. **Segurança e integridade** — T42 a T46.
+2. **Dados, desempenho e resiliência** — T47 a T52.
+3. **Qualidade funcional e experiência** — T53 a T58.
+4. **Entrega, operação e documentação** — T59 a T62.
+
+## Backlog activo
+
+| Estado | ID | Trabalho a resolver / melhorar / acrescentar | Prioridade | Critério de conclusão |
+|---|---|---|---|---|
+| [ ] | T42 | Rate limiting distribuído e política de falha Redis em produção | P0 | Limites de login/API coerentes entre réplicas; comportamento explícito quando Redis falha; sem bypass por reinício/instância; testes concorrentes e de indisponibilidade; health checks não bloqueados. Escolher fail-closed ou backend alternativo após medir impacto operacional. |
+| [ ] | T43 | Auditoria integral das operações financeiras e administrativas | P0 | Rever carregamentos, consumos, estornos, transferências, extensões, fechos de caixa, stock, permissões e alterações de evento; confirmar snapshots before/after, actor, eventId, entidade, motivo, correlação e sanitização; testes que provem ausência de segredos e de duplicados. |
+| [ ] | T44 | Auditoria de autorização e isolamento multi-evento (tenant isolation) | P0 | Inventariar controllers/services/gateways; provar que utilizadores só acedem a dados dos eventos onde têm associação/role; testar IDs de outros eventos, utilizadores removidos, roles alteradas, superadmin e acesso por WebSocket; corrigir qualquer IDOR/cross-tenant. |
+| [ ] | T45 | Integridade financeira, idempotência e concorrência ponta-a-ponta | P0 | Rever criação/cancelamento de pedidos, descontos, estornos, transferências, fecho de caixa e reposição de stock; transacções, locks, constraints e chaves idempotentes; testes PostgreSQL concorrentes e invariantes contabilísticas (sem saldo/stock negativo indevido nem movimentos duplicados). |
+| [ ] | T46 | Revisão de autenticação, sessões, cookies e protecção contra abuso | P1 | Rever access/refresh, rotação/revogação, logout, expiração, recuperação de conta, brute force, códigos de acesso, CSRF/CORS e headers; testes de regressão e documentação das decisões. |
+| [ ] | T47 | Auditoria de esquema PostgreSQL, índices e migrations | P1 | Inventário de entidades/índices/FK/unique/check constraints; detectar índices em falta ou redundantes, colunas sem uso, migrations não reversíveis e divergências entre schema e entidades; propor migrations pequenas e testadas com BD vazia e upgrade real. |
+| [ ] | T48 | Perfil de performance das queries e eliminação de N+1 | P1 | Medir endpoints críticos com dados representativos; usar EXPLAIN (ANALYZE, BUFFERS) em ambiente de teste; rever paginação/ordenação/filtros e relações TypeORM; estabelecer baseline e justificar cada índice. |
+| [ ] | T49 | Paginação, filtros e limites de payload em todas as listagens | P1 | Inventariar endpoints de listagem; impor paginação estável, limites máximos, ordenação determinística e validação de filtros; testes para grandes volumes e prevenção de respostas sem limite. |
+| [ ] | T50 | Escalabilidade do realtime e compatibilidade de deployment | P1 | Documentar e testar Socket.IO com Redis adapter/fan-out em múltiplas réplicas; esclarecer comportamento na Vercel/serverless; garantir fallback/aviso explícito e definir arquitectura suportada para produção. |
+| [ ] | T51 | Backups, restauro e recuperação de desastre PostgreSQL/Redis | P1 | Definir RPO/RTO, política de backup, retenção, encriptação e acesso; executar restauro numa instância isolada; validar migrations e integridade após restauro; documentar runbook. |
+| [ ] | T52 | Observabilidade operacional e alertas | P1 | Logs estruturados com correlation/request ID, métricas de latência/erros/filas/Redis/BD, alertas accionáveis e dashboards; garantir redacção de dados pessoais/segredos; documentar health/readiness e resposta a incidentes. |
+| [ ] | T53 | Testes E2E completos dos fluxos POS, cliente QR, cozinha/KDS e ecrã público | P1 | Cobrir percurso completo por role e evento: criar pedido, validar saldo/stock, preparar, entregar, cancelar/estornar; cenários de falha, concorrência e reconexão; dados E2E isolados e limpeza garantida. |
+| [ ] | T54 | Revisão de stock, consumos, cancelamentos e reconciliação | P1 | Confirmar que todas as transições actualizam stock e movimentos exactamente uma vez; concorrência entre POS/cozinha; regras de stock ilimitado; relatórios reconciliáveis com movimentos e pedidos; testes de invariantes. |
+| [ ] | T55 | Decisão de produto e arquitectura para operação offline | P1 | Manter explicitamente offline apenas para assets/UI informativa ou desenhar fila durável transaccional; não prometer sincronização. Se avançar: idempotência server-side, ordenação, conflitos, expiração, segurança local, retry/backoff, reconciliação e testes de perda de rede. |
+| [ ] | T56 | Auditoria funcional de saldos, senhas, carregamentos e fechos de caixa | P1 | Mapear regras de negócio e estados; testar arredondamentos, limites, saldo zero/negativo, estornos parciais/totais, transferência entre eventos, arquivo/recuperação e fecho/reabertura; relatórios batem certo com ledger. |
+| [ ] | T57 | Auditoria visual e UX de todos os ecrãs e dispositivos | P2 | Rever administração, POS, cozinha, cliente, público e autenticação em telemóvel/tablet/desktop; estados vazios/loading/erro/sucesso; consistência do design system, acessibilidade e prevenção de acções destrutivas acidentais. |
+| [ ] | T58 | Acessibilidade e usabilidade por teclado/leitor de ecrã | P2 | WCAG 2.2 AA como alvo; foco visível, labels, contraste, navegação por teclado, diálogos, tabelas e feedback; testes automatizados e revisão manual dos fluxos críticos. |
+| [ ] | T59 | Validação real dos Dockerfiles e Docker Compose | P1 | Executar builds limpos dos containers a partir da raiz, arranque completo, health checks, migrations e smoke tests; validar volumes, permissões, shutdown e ausência de dependências de ficheiros locais. A validação anterior não substitui docker build real. |
+| [ ] | T60 | Recuperar e validar o pipeline de deployment Vercel/VPS | P1 | Resolver quota/acesso Vercel quando possível; confirmar root/build/output/env vars, migrations, crons, health checks, rollback e smoke tests; registar deployment ID/URL e nunca marcar concluído só por build local/CI. |
+| [ ] | T61 | Privacidade, retenção e ciclo de vida dos dados | P1 | Inventariar dados pessoais, logs, auditoria, tokens e exports; definir retenção/eliminação, minimização, exportação e controlo de acesso; rever RGPD e subprocessadores com aconselhamento adequado antes de produção. |
+| [ ] | T62 | Contratos da API, validação e documentação Swagger | P2 | Rever DTOs, validação, códigos de erro, formatos e compatibilidade frontend/backend; eliminar divergências; documentar autenticação, roles, paginação, limites e exemplos reais; testes de contrato. |
+| [ ] | T63 | Testes de carga e capacidade operacional | P1 | Definir cenários realistas de pico de festa; medir concorrência de login, POS, pedidos, cozinha, saldo, stock e sockets; identificar limites de CPU/RAM/BD/Redis; estabelecer metas e relatório reproduzível. |
+| [ ] | T64 | Gestão de dependências, runtime e cadeia de fornecimento | P2 | Rever Node/npm/Next/Nest/TypeORM/TypeScript e dependências directas/transitivas; validar compatibilidade Node 24 e lockfile reproduzível; tratar alertas Dependabot com testes e política de actualização. |
+| [ ] | T65 | Revisão de segurança de ficheiros, uploads, QR e exports | P2 | Confirmar validação de MIME/tamanho/conteúdo, armazenamento privado, nomes seguros, autorização por evento, prevenção de SSRF/path traversal e ausência de dados sensíveis em QR/exports. |
+| [ ] | T66 | Revisão de relatórios, métricas e reconciliação operacional | P2 | Definir fonte de verdade para vendas, consumos, estornos, caixa e stock; reconciliar totais por evento/período/operador; testar timezone, intervalos, arredondamentos e exportações. |
+| [ ] | T67 | Higiene documental e remoção de informação contraditória | P2 | Alinhar README, PLAN, TODO, AUDIT, PROGRESS, SECURITY, CONTRIBUTING e deployment docs com a implementação actual; remover promessas antigas (offline, disponibilidade, capacidade) sem evidência. |
+| [ ] | T68 | Verificação de tarefas antigas e bloqueadores ainda abertos | P2 | Reavaliar T34 (acesso/token Vercel), T35 (tag archive/pre-t17), validação Chrome DevTools MCP e integração Redis; fechar, actualizar ou justificar cada item com evidência actual. |
+
+## Itens já concluídos que continuam a exigir vigilância
+
+- **T36 — rate limit com fallback local:** concluído quanto a não falhar aberto sem qualquer contador; continua a limitação multi-réplica, agora acompanhada por T42.
+- **T37 — segurança da BD E2E:** concluído; manter o opt-in, host loopback e sufixo de BD descartável em qualquer novo teste destrutivo.
+- **T38 — cache PWA:** concluído quanto a não persistir HTML/RSC autenticado; não equivale a suporte de pedidos/pagamentos offline. A evolução está condicionada a T55.
+- **T39 — governação CI/segurança:** concluído; manter Dependabot, CodeQL, Gitleaks e permissões mínimas activos.
+- **T40 — redacção de segredos na auditoria:** concluído; T43 valida a cobertura real por domínio.
+- **T41 — arquivo de saldos concorrente:** concluído; T45 deve verificar os restantes fluxos financeiros.
+
+## Regras de execução deste backlog
+
+1. Trabalhar por ordem de prioridade e dependências, em lotes pequenos e revistos.
+2. Antes de alterar código, confirmar que o problema existe na `main` e identificar o comportamento esperado.
+3. Para cada item, registar ficheiros, decisão técnica, testes, migrations e riscos no `PROGRESS.md`.
+4. Criar PRs focadas; resolver conflitos rebaseando/reaplicando sobre a `main`, sem apagar trabalho válido.
+5. Integrar apenas quando os checks obrigatórios estiverem verdes e não houver comentários críticos por resolver.
+6. Alterações à base de dados são permitidas enquanto os dados forem de teste, mas cada migration deve ter testes de instalação/upgrade e plano de rollback quando aplicável.
+7. Não activar funcionalidades financeiras/offline nem anunciar capacidades sem idempotência, reconciliação e testes adequados.
+8. Deploy só é considerado concluído após confirmação do provider e smoke tests no ambiente publicado.
+9. Actualizar o estado deste ficheiro no mesmo PR que conclui cada tarefa; nunca deixar itens concluídos sem evidência.
+10. Quando a auditoria demonstrar que um item não se aplica, fechar com a justificação e prova, em vez de criar complexidade artificial.
+
+## Critério global de conclusão do projecto
+
+O projecto só passa a **pronto para beta/produção** quando todos os P0 e P1 aplicáveis estiverem concluídos, os fluxos financeiros e de isolamento multi-evento tiverem testes E2E/concorrência, os backups tiverem sido restaurados com sucesso, os testes de carga tiverem resultados aceitáveis, os deployments e crons estiverem verificados no ambiente real e não existirem vulnerabilidades críticas/altas sem mitigação aceite. Os itens P2/P3 podem continuar no roadmap com risco explicitamente aceite.
