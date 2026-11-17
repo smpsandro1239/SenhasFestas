@@ -3,7 +3,7 @@
 **Data:** 2026-11-17  
 **Âmbito:** revisão estática do repositório e execução observada do GitHub Actions.  
 **Branch de trabalho:** `codex/autonomous-hardening-2026-11`  
-**Estado:** auditoria inicial concluída; T40 foi integrada e todos os gates de código passaram na validação da PR #164. O deploy Vercel permanece bloqueado pela quota diária. T41 foi integrada pela PR #166 e todos os gates de CI passaram; deployments Vercel continuam bloqueados por quota diária.
+**Estado:** auditoria inicial concluída; T40 foi integrada e todos os gates de código passaram na validação da PR #164. O deploy Vercel permanece bloqueado pela quota diária. T41 foi integrada pela PR #166 e todos os gates de CI passaram. T36–T39 também foram validadas na PR #167. Deployments Vercel continuam bloqueados por quota diária.
 
 > Esta auditoria distingue comportamento confirmado por código/testes de comportamento ainda não demonstrado em produção. Não foram executados testes destrutivos contra qualquer base de dados real.
 
@@ -17,15 +17,15 @@ A arquitectura geral é coerente: monorepo npm workspaces, backend NestJS modula
 
 | Gravidade | Constatação | Estado |
 |---|---|---|
-| Alta | Rate limit podia falhar aberto quando Redis devolvia erro/null | Correcção T36 na PR #39; CI em validação |
-| Alta | Testes E2E podiam apagar schema de uma BD remota | Barreira T37 na PR #39; CI em validação |
-| Alta | Service Worker podia guardar HTML/RSC autenticado em cache persistente | Corrigido nesta branch; CI em validação |
+| Alta | Rate limit podia falhar aberto quando Redis devolvia erro/null | Corrigido: fallback local e operações estritas; testes backend passaram na PR #167. Limitação multi-réplica registada |
+| Alta | Testes E2E podiam apagar schema de uma BD remota | Corrigido: opt-in + host loopback + nome descartável; PostgreSQL E2E passou na PR #167 |
+| Alta | Service Worker podia guardar HTML/RSC autenticado em cache persistente | Corrigido: cache apenas de assets estáticos; regressão PWA passou na PR #167 |
 | Alta | README prometia sincronização offline que não existe no código | Texto corrigido
 | Alta | Arquivo automático de saldos escrevia sem lock/revalidação dentro de transacção | Corrigido na PR #166; backend, PostgreSQL E2E, frontend, Browser E2E, Security e CodeQL passaram nesta branch; fila offline continua por implementar |
 | Alta | Fallback de rate limit em memória não é global entre réplicas | Limitação residual; requer Redis disponível ou rate limiter distribuído |
 | Média | README declarava Next.js 14, enquanto o workspace usa Next.js 15.5.24 | Corrigido nesta branch |
 | Média | Uso de `any` em serviços e API frontend reduz a segurança estática | Dívida técnica |
-| Média | Não existia SAST nem actualização automática de dependências | Dependabot e CodeQL adicionados nesta branch; CI de segurança ainda por validar |
+| Média | Não existia SAST nem actualização automática de dependências | CodeQL, Gitleaks e dependency audit passaram na PR #167; Dependabot semanal configurado |
 | Média | Helmet não está instalado/configurado; existem cabeçalhos manuais | Consolidar política de cabeçalhos |
 | Média | Cobertura de auditoria before/after não é universal | Expandir para mutações financeiras e administrativas |
 
