@@ -1,3 +1,39 @@
+## 2026-11-17 — T42: rate limiting fail-closed em produção e health checks
+
+**Feito directamente na `main`**
+- O rate limit global da API já não recorre ao contador local quando `NODE_ENV=production` e o Redis não está configurado.
+- Se o Redis estiver configurado mas o incremento atómico falhar, o pedido recebe `503 Service Unavailable` e `Retry-After: 30`; o controller não é executado.
+- O login mantém a mesma política fail-closed (configuração ausente ou indisponibilidade Redis).
+- Os endpoints `/api/health`, `/api/health/ready` e `/api/health/live` ficam fora do rate limiter para permitir monitorização e recuperação.
+- A readiness exige agora Redis saudável em produção; em desenvolvimento/testes, Redis desactivado continua permitido.
+- Logs de falha dos middlewares usam apenas o nome da classe da excepção, não a mensagem potencialmente sensível.
+
+**Testes acrescentados/actualizados**
+- Rate limit geral: Redis ausente, Redis indisponível e bypass dos três health endpoints.
+- Readiness: Redis ausente em produção (503) e Redis opcional em desenvolvimento.
+- Mantidos os testes de concorrência e fallback local fora de produção.
+
+**Decisão operacional**
+- Em produção, Redis passa a ser dependência obrigatória da API. É uma escolha fail-closed para evitar que o limite efectivo se multiplique por instância.
+- Antes de publicar, garantir `REDIS_URL` configurado e Redis acessível; caso contrário a API ficará deliberadamente indisponível (503) e readiness ficará unhealthy.
+- O middleware global ainda não tem métricas/alertas próprios; observabilidade permanece no âmbito de T42/T52.
+
+**Commits**
+- `a70561d` — rate limit distribuído obrigatório em produção.
+- `3505068` — testes de fail-closed e health bypass.
+- `922ce76` — readiness exige Redis em produção.
+- `75200d2` — testes de readiness.
+- `19ff25e` — correcção da expressão de health endpoints.
+- Actualização do TODO registada neste commit.
+
+**Validação**
+- Alterações de código e testes estão na `main`.
+- Ainda não foi possível confirmar a execução/passagem dos workflows GitHub Actions neste ponto.
+- Vercel permanece independente e sujeito ao limite diário de deployments; nenhum deployment foi considerado concluído.
+- Sem alterações de schema, migrations ou dados.
+
+---
+
 ## 2026-11-17 — T42: falha fechada do rate limit de login em produção
 
 **Feito directamente na `main`**
