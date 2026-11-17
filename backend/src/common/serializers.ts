@@ -26,7 +26,23 @@ export function toPublicUser<T extends Partial<UserEntity>>(
   return safe;
 }
 
-const CAMPOS_SENSIVEIS = new Set([\n  'password',\n  'token',\n  'refreshtoken',\n  'tokenhash',\n  'authorization',\n  'cookie',\n  'secret',\n  'jwtsecret',\n  'email',\n  'phone',\n  'accesscode',\n  'qrcode',\n  'nif',\n  'taxid',\n  'address',\n]);
+const CAMPOS_SENSIVEIS = new Set([
+  'password',
+  'token',
+  'refreshtoken',
+  'tokenhash',
+  'authorization',
+  'cookie',
+  'secret',
+  'jwtsecret',
+  'email',
+  'phone',
+  'accesscode',
+  'qrcode',
+  'nif',
+  'taxid',
+  'address',
+]);
 
 export function snapshot(value: unknown, profundidade = 4): unknown {
   if (value === null || value === undefined) {
