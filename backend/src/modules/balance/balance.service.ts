@@ -550,12 +550,13 @@ export class BalanceService {
       // usar o estado actual, bloqueado, para não arquivar uma extensão recente
       // nem competir com estornos/transferências que alterem o mesmo saldo.
       await this.dataSource.transaction(async (manager) => {
-        const saldo = await manager.findOne(BalanceEntity, {
-          where: { id: candidato.id },
-          relations: { event: true },
-          withDeleted: true,
-          lock: { mode: 'pessimistic_write' },
-        });
+        const saldo = await manager
+          .createQueryBuilder(BalanceEntity, 'saldo')
+          .leftJoinAndSelect('saldo.event', 'event')
+          .where('saldo.id = :id', { id: candidato.id })
+          .setLock('pessimistic_write', undefined, ['saldo'])
+          .withDeleted()
+          .getOne();
         if (!saldo || saldo.deletedAt) return;
 
         if (!saldo.archivedAt) {
