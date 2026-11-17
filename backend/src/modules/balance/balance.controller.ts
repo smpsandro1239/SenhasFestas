@@ -49,12 +49,13 @@ export class BalanceController {
     @Request() req: any,
     @Query('eventId', new ParseUUIDPipe({ optional: true })) eventId?: string,
     @Body() dto?: ReverseLoadDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     this.assertStaffEventScope(req.user, eventId);
     if (eventId && req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, eventId);
     }
-    return this.balanceService.reverseLoad(userId, movementId, req.user, dto, arquivarAuditoria(req));
+    return this.balanceService.reverseLoad(userId, movementId, req.user, dto, arquivarAuditoria(req), idempotencyKey);
   }
 
   @Post(':userId/deduct')

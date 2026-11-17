@@ -502,4 +502,74 @@ describe('App e2e (Postgres + Redis)', () => {
     ).toBe(1);
   });
 
+  it('não duplica estornos parciais concorrentes quando o cliente repete o pedido', async () => {
+    const dataSource = app.get(DataSource);
+    const caixa = await criarCaixaComEvento('reverse');
+    const { email } = await criarUtilizadorTeste(`balance-reverse-${randomUUID()}@example.com`);
+    const cliente = await dataSource.getRepository(UserEntity).findOneByOrFail({ email });
+    const endpoint = `/api/balances/${cliente.id}`;
+    const chaveCarga = randomUUID();
+    const chaveEstorno = randomUUID();
+
+    await request(app.getHttpServer())
+      .post(`${endpoint}/load`)
+      .set('Authorization', `Bearer ${caixa.token}`)
+      .set('Idempotency-Key', chaveCarga)
+      .send({ eventId: caixa.event.id, amount: 25, paymentMethod: 'cash' })
+      .expect(201);
+
+    const carregamento = await dataSource.getRepository(BalanceMovementEntity).findOneByOrFail({
+      createdById: caixa.user.id,
+      idempotencyKey: chaveCarga,
+      type: MovementType.LOAD,
+    });
+
+    const enviarEstorno = (amount: number) =>
+      request(app.getHttpServer())
+        .post(`${endpoint}/reverse/${carregamento.id}?eventId=${caixa.event.id}`)
+        .set('Authorization', `Bearer ${caixa.token}`)
+        .set('Idempotency-Key', chaveEstorno)
+        .send({ amount });
+
+    const [first, second] = await Promise.all([
+      enviarEstorno(10),
+      enviarEstorno(10),
+    ]);
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+
+    const saldos = dataSource.getRepository(BalanceEntity);
+    const saldo = await saldos.findOneByOrFail({
+      user: { id: cliente.id },
+      event: { id: caixa.event.id },
+    });
+    expect(Number(saldo.currentBalance)).toBe(15);
+    expect(
+      await dataSource.getRepository(BalanceMovementEntity).count({
+        where: {
+          reversedOfId: carregamento.id,
+          createdById: caixa.user.id,
+          type: MovementType.CANCEL,
+        },
+      }),
+    ).toBe(1);
+
+    const conflito = await enviarEstorno(15);
+    expect(conflito.status).toBe(409);
+    const replay = await enviarEstorno(10);
+    expect(replay.status).toBe(201);
+
+    const saldoFinal = await saldos.findOneByOrFail({ id: saldo.id });
+    expect(Number(saldoFinal.currentBalance)).toBe(15);
+    expect(
+      await dataSource.getRepository(BalanceMovementEntity).count({
+        where: {
+          reversedOfId: carregamento.id,
+          createdById: caixa.user.id,
+          type: MovementType.CANCEL,
+        },
+      }),
+    ).toBe(1);
+  });
+
 });

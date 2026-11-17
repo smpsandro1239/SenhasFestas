@@ -53,7 +53,7 @@ export class BalanceService {
   }
 
   private hashOperacaoFinanceira(
-    operation: 'load' | 'deduct',
+    operation: 'load' | 'deduct' | 'reverse' | 'transfer',
     actorId: string,
     userId: string,
     eventId: string,
@@ -64,10 +64,14 @@ export class BalanceService {
       .digest('hex');
   }
 
+  private hashChaveIdempotencia(operation: 'reverse' | 'transfer', key: string): string {
+    return createHash('sha256').update(`senhasfestas:${operation}:${key}`).digest('hex');
+  }
+
   private async lockOperationKey(
     manager: import('typeorm').EntityManager,
     actorId: string,
-    operation: 'load' | 'deduct',
+    operation: 'load' | 'deduct' | 'reverse' | 'transfer',
     idempotencyKey: string,
   ): Promise<void> {
     await manager.query(
@@ -143,12 +147,23 @@ export class BalanceService {
     actor?: any,
     dto?: ReverseLoadDto,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
+    rawIdempotencyKey?: string,
   ): Promise<{
     balance: { id: string; currentBalance: number };
     movement: BalanceMovementEntity;
     reversedMovementId: string;
     eventId?: string;
   }> {
+    const idempotencyKey = this.validarChaveIdempotencia(rawIdempotencyKey, actor);
+    const storedIdempotencyKey = idempotencyKey
+      ? this.hashChaveIdempotencia('reverse', idempotencyKey)
+      : undefined;
+    const requestHash = idempotencyKey
+      ? this.hashOperacaoFinanceira('reverse', actor.id, userId, movementId, {
+          amount: dto?.amount === undefined ? null : centavos(dto.amount),
+        })
+      : undefined;
+
     const resultado = await this.dataSource.transaction(async (manager) => {
       const movement = await manager.findOne(BalanceMovementEntity, {
         where: { id: movementId },
@@ -177,6 +192,41 @@ export class BalanceService {
         });
         if (!membro) {
           throw new ForbiddenException('Não pertence a este evento');
+        }
+      }
+
+      if (idempotencyKey && storedIdempotencyKey) {
+        await this.lockOperationKey(manager, actor.id, 'reverse', idempotencyKey);
+        const anterior = await manager.findOne(BalanceMovementEntity, {
+          where: {
+            createdById: actor.id,
+            type: MovementType.CANCEL,
+            idempotencyKey: storedIdempotencyKey,
+          },
+          relations: { balance: true },
+          withDeleted: true,
+        });
+        if (anterior) {
+          this.assertHashOperacao(anterior, requestHash!);
+          if (!anterior.balance) {
+            throw new NotFoundException('Saldo do estorno não encontrado');
+          }
+          const saldoAnterior = await manager.findOne(BalanceEntity, {
+            where: { id: anterior.balance.id },
+            withDeleted: true,
+          });
+          if (!saldoAnterior) {
+            throw new NotFoundException('Saldo do estorno não encontrado');
+          }
+          return {
+            balance: {
+              id: saldoAnterior.id,
+              currentBalance: Number(saldoAnterior.currentBalance),
+            },
+            movement: anterior,
+            reversedMovementId: movementId,
+            eventId: (movement.balance as any)?.event?.id as string | undefined,
+          };
         }
       }
 
@@ -239,6 +289,8 @@ export class BalanceService {
         description: estorno >= montanteOriginal - 0.005 ? 'Estorno de carregamento' : 'Estorno parcial de carregamento',
         reversedOfId: locked.id,
         createdById: actor?.id,
+        idempotencyKey: storedIdempotencyKey,
+        requestHash,
       });
       const savedReversal = await manager.save(BalanceMovementEntity, reversal);
 
