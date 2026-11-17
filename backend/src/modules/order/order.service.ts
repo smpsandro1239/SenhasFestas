@@ -454,6 +454,16 @@ export class OrderService {
       .getOne();
   }
 
+  private snapshotFinanceiroAuditoria(order: Partial<OrderEntity>): Record<string, unknown> {
+    return {
+      status: order.status ?? null,
+      total: centavos(Number(order.total ?? 0)),
+      balanceUsed: centavos(Number(order.balanceUsed ?? 0)),
+      paymentMethod: order.paymentMethod ?? null,
+      balanceId: order.balanceId ?? null,
+    };
+  }
+
   async cancelOrder(
     id: string,
     user: any,
@@ -492,7 +502,14 @@ export class OrderService {
       }
     }
 
-    arquivar?.({ antes: { status: order.status }, eventId: order.event?.id });
+    arquivar?.({
+      antes: this.snapshotFinanceiroAuditoria(order),
+      eventId: order.event?.id,
+      extras: {
+        stockRestoration: true,
+        refundAmount: temSaldoParaReembolsar(order) ? centavos(Number(order.balanceUsed)) : 0,
+      },
+    });
 
     const savedOrder = await this.dataSource.transaction(async (manager) => {
       const currentOrder = await manager.findOne(OrderEntity, {
@@ -591,7 +608,17 @@ export class OrderService {
       throw new ForbiddenException(`Transição inválida: ${order.status} -> ${status}`);
     }
 
-    arquivar?.({ antes: { status: order.status }, eventId: order.event?.id });
+    arquivar?.({
+      antes: this.snapshotFinanceiroAuditoria(order),
+      eventId: order.event?.id,
+      extras: {
+        transition: `${order.status} -> ${status}`,
+        stockRestoration: status === 'cancelled',
+        refundAmount: status === 'cancelled' && temSaldoParaReembolsar(order)
+          ? centavos(Number(order.balanceUsed))
+          : 0,
+      },
+    });
 
     const savedOrder = await this.dataSource.transaction(async (manager) => {
       const currentOrder = await manager.findOne(OrderEntity, {
