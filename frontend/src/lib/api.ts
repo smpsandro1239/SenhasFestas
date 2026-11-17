@@ -1,3 +1,5 @@
+import { getOrderIdempotencyContext, releaseOrderIdempotencyContext } from './order-idempotency';
+
 // Sessão same-origin: o Next rewrite /api/:path* encaminha para a API.
 // Cookies ficam host-only no domínio do frontend — sem Domain, sem CORS, sem PSL.
 const API_BASE = '/api';
@@ -83,7 +85,7 @@ export async function ensureFreshToken(): Promise<boolean> {
 
 async function tryRefreshToken(): Promise<boolean> {
   if (!refreshing) {
-    refreshing = (async () => {
+    const renovar = async (): Promise<boolean> => {
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -104,10 +106,20 @@ async function tryRefreshToken(): Promise<boolean> {
         return true;
       } catch {
         return false;
-      } finally {
-        refreshing = null;
       }
-    })();
+    };
+
+    // Um lock partilhado entre separadores evita que dois refresh legítimos
+    // rodem o mesmo cookie em simultâneo. O servidor trata qualquer replay
+    // posterior como comprometimento e revoga as sessões do utilizador.
+    if (typeof navigator !== 'undefined' && navigator.locks?.request) {
+      refreshing = navigator.locks.request('senhasfestas-refresh-token', renovar);
+    } else {
+      refreshing = renovar();
+    }
+    refreshing = refreshing.finally(() => {
+      refreshing = null;
+    });
   }
   return refreshing;
 }
@@ -230,11 +242,30 @@ export async function getOrdersByEvent(eventId: string): Promise<any> {
   return apiRequest(`/orders/event/${eventId}`);
 }
 
-export async function createOrder(data: any): Promise<any> {
-  return apiRequest('/orders', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
+export async function createOrder(data: any, idempotencyKey?: string): Promise<any> {
+  const context = !idempotencyKey && typeof window !== 'undefined'
+    ? await getOrderIdempotencyContext(data)
+    : undefined;
+  const key = idempotencyKey ?? context?.key;
+
+  try {
+    const result = await apiRequest('/orders', {
+      method: 'POST',
+      headers: key ? { 'Idempotency-Key': key } : undefined,
+      body: JSON.stringify(data),
+    });
+    if (context) releaseOrderIdempotencyContext(context, 'success');
+    return result;
+  } catch (error) {
+    // 429 pode ser repetido com a mesma chave; os restantes 4xx são respostas
+    // definitivas, incluindo 409 por reutilização com payload diferente.
+    if (context) {
+      const definitivo = error instanceof ApiError &&
+        error.status >= 400 && error.status < 500 && error.status !== 429;
+      releaseOrderIdempotencyContext(context, definitivo ? 'definitive-error' : 'ambiguous-error');
+    }
+    throw error;
+  }
 }
 
 export async function updateOrderStatus(orderId: string, status: string): Promise<any> {

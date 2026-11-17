@@ -1,3 +1,19 @@
+## 2026-11-17 — Governação de segurança do repositório (T39)
+
+**Feito na branch `codex/autonomous-hardening-2026-11`**
+- Criado `SECURITY.md` com divulgação responsável via GitHub Security Advisory privada, âmbito e informação segura a incluir.
+- Criado `.github/dependabot.yml` para npm (workspaces/lockfile raiz) e GitHub Actions, com actualização semanal.
+- Criado workflow `.github/workflows/codeql.yml` para análise JavaScript/TypeScript em push, PR, agenda semanal e execução manual.
+- Workflow CI principal passa a declarar `permissions: contents: read` por omissão.
+- Reescrito `CONTRIBUTING.md`: instalação única na raiz via `npm ci`, build shared, typecheck/testes por workspace, E2E apenas contra BD local descartável e aviso sobre dinheiro/idempotência.
+- Actualizado `AUDIT.md`, `PLAN.md` e `TODO.md`.
+
+**Validação**
+- Ainda não há execução CodeQL/Dependabot confirmada. O CI do commit de documentação e os workflows recém-adicionados têm de ser observados no HEAD final.
+- Os comandos documentados para E2E mantêm a barreira `E2E_ALLOW_SCHEMA_RESET=true`, host loopback e sufixo de BD descartável.
+
+---
+
 # SenhasFestas — Progresso
 
 > Log de sessões. Mais recente no topo.
@@ -10,6 +26,52 @@
 - Não duplicar aqui o que está no `PLAN.md` (roadmap) ou `REVIEW.md` (critérios).
 - Registar decisões que não são óbvias no código — as que um leitor futuro não
   conseguiria inferir.
+
+---
+
+## 2026-11-17 — Hardening de rate limit e segurança dos E2E (T36/T37)
+
+**Objectivo**: fechar duas falhas de segurança identificadas no último estado do repositório: rate limit que podia falhar aberto com Redis indisponível e testes E2E capazes de executar operações destrutivas numa BD remota.
+
+**Feito na branch `codex/autonomous-hardening-2026-11`**
+- Redis: adicionados `getStrict` e `incrementWithTtlStrict`; as APIs tolerantes existentes mantêm o comportamento de degradação para consumidores não críticos.
+- Rate limit global: passa a usar o incremento estrito; qualquer falha Redis segue para o contador local.
+- Rate limit de login: usa leitura/incremento estritos; falhas Redis são contabilizadas localmente, incluindo falha ocorrida depois de a resposta 401 ser enviada. O contador local continua a ser verificado após recuperação do Redis.
+- E2E: criado `backend/test/e2e-database-safety.ts`; exige `E2E_ALLOW_SCHEMA_RESET=true`, host loopback e base de dados com sufixo `_test` ou `_e2e`. O helper também respeita `DB_SSL` e `sslmode`.
+- Os specs `app.e2e-spec.ts` e `rate-limit.e2e-spec.ts` validam o destino antes de inicializar a aplicação; o CI declara explicitamente o opt-in nos jobs E2E.
+- Adicionados testes unitários para indisponibilidade Redis, fallback local e bloqueio de destinos E2E remotos/não descartáveis.
+
+**Gates e limitações**
+- **Ainda não executados**: `tsc`, Vitest, build e lint do backend; gates do frontend.
+- O ambiente desta sessão não tem checkout local nem conectividade de rede para clonar o repositório. As alterações estão na branch remota; a validação completa terá de ser feita pelo CI da pull request antes de qualquer merge.
+- Não foi executado qualquer E2E contra a BD configurada. A nova barreira foi desenhada para bloquear hosts remotos e exige opt-in explícito.
+
+**Pendente**
+- Abrir/validar PR draft e analisar os resultados do CI.
+- Corrigir eventuais falhas de typecheck/testes reveladas pelo CI antes de considerar T36/T37 concluídos.
+
+---
+
+## 2026-11-17 — Auditoria técnica e hardening PWA (T38)
+
+**Objectivo**: concluir a revisão estática das 10 áreas pedidas e corrigir um risco de privacidade no Service Worker, além de alinhar a documentação com o comportamento real.
+
+**Feito na branch `codex/autonomous-hardening-2026-11`**
+- Criado `AUDIT.md` com arquitectura, segurança, dados, testes, performance, CI/CD, documentação, PWA e roadmap priorizado.
+- Corrigido README: Next.js 15 e descrição honesta do modo offline (fallback PWA/cache estático; não há fila transaccional).
+- Service Worker: deixa de persistir respostas de navegação autenticada e deixa de interceptar RSC/HTML dinâmico. Mantém cache de assets estáticos explicitamente permitidos e página offline precacheada. A cache passou de v4 para v5 para apagar dados privados antigos que pudessem já estar armazenados.
+- Página `/offline`: deixa claro que pedidos/pagamentos/alterações não são enfileirados nem sincronizados automaticamente; recomenda verificar o estado antes de repetir uma operação.
+- Adicionado teste de regressão `frontend/src/lib/service-worker-cache.test.ts`.
+- CI: o job frontend passa a executar `npm test` entre typecheck e build; anteriormente o workflow não executava a suite Vitest do frontend.
+- T38/D19 registado no plano e TODO.
+
+**Gates**
+- O CI do commit anterior reportou 498/500 testes backend: dois testes recém-adicionados falharam por ambiente DB_SSL herdado e por o teste não validar correctamente a transição do fallback local. A branch foi corrigida; o teste SSL passa explicitamente `DB_SSL=false` no cenário local. Foi ainda fechado o caso mais perigoso: URL remota escondida em `.env.development`/`.env`, carregando os mesmos ficheiros antes do bootstrap Nest.
+- O run do commit com o isolamento SSL foi colocado em fila. As alterações PWA e a auditoria geraram novos commits depois desse SHA; o CI do HEAD mais recente ainda tem de ser confirmado.
+- Não foi executado teste browser local nem operação contra BD de produção.
+
+**Decisão**
+- Não implementar ainda fila offline de pedidos/pagamentos: falta idempotência de servidor e reconciliação. Repetir POST de dinheiro/stock sem estas garantias pode duplicar movimentos.
 
 ---
 

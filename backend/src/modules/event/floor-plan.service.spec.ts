@@ -6,10 +6,19 @@ import {
 } from '@nestjs/common';
 import { FloorPlanService } from './floor-plan.service';
 
+const mockUpdateQuery = {
+  update: vi.fn().mockReturnThis(),
+  set: vi.fn().mockReturnThis(),
+  where: vi.fn().mockReturnThis(),
+  andWhere: vi.fn().mockReturnThis(),
+  execute: vi.fn().mockResolvedValue({ affected: 1 }),
+};
+
 const mockFloorPlanRepository = {
   find: vi.fn(),
   findOne: vi.fn(),
   create: vi.fn(),
+  createQueryBuilder: vi.fn(() => mockUpdateQuery),
   save: vi.fn(),
   remove: vi.fn(),
   count: vi.fn(),
@@ -240,7 +249,7 @@ describe('FloorPlanService — obter/guardar (optimistic locking)', () => {
         version: 4,
       }),
     );
-    expect(mockFloorPlanRepository.save).toHaveBeenCalled();
+    expect(mockUpdateQuery.execute).toHaveBeenCalled();
   });
 
   it('guardar aceita payload sem zonas (compatibilidade)', async () => {
@@ -288,7 +297,40 @@ describe('FloorPlanService — obter/guardar (optimistic locking)', () => {
         nome: 'Principal',
       }),
     );
-    expect(mockFloorPlanRepository.save).not.toHaveBeenCalled();
+    expect(mockUpdateQuery.execute).not.toHaveBeenCalled();
+  });
+
+  it('guardar usa compare-and-swap e devolve 409 quando outra gravação vence a corrida', async () => {
+    mockFloorPlanRepository.findOne
+      .mockResolvedValueOnce(novaLinha({ version: 3 }))
+      .mockResolvedValueOnce(
+        novaLinha({
+          documento: { mesas: [{ id: 'mesa-remota' }], zonas: [] },
+          version: 4,
+        }),
+      );
+    mockUpdateQuery.execute.mockResolvedValueOnce({ affected: 0 });
+
+    const erro = await service
+      .guardar('evt1', 'p1', ORGANIZADOR, {
+        mesas: [{ id: 'mesa-local' }],
+        zonas: [],
+        version: 3,
+      } as any)
+      .catch((e: any) => e);
+
+    expect(erro).toBeInstanceOf(ConflictException);
+    expect(erro.getStatus()).toBe(409);
+    expect(erro.getResponse()).toEqual(
+      expect.objectContaining({
+        mesas: [{ id: 'mesa-remota' }],
+        version: 4,
+      }),
+    );
+    expect(mockUpdateQuery.where).toHaveBeenCalledWith('"id" = :id', { id: 'p1' });
+    expect(mockUpdateQuery.andWhere).toHaveBeenCalledWith('"eventId" = :eventId', { eventId: 'evt1' });
+    expect(mockUpdateQuery.andWhere).toHaveBeenCalledWith('"version" = :version', { version: 3 });
+    expect(mockOrderGateway.emitPlantaUpdate).not.toHaveBeenCalled();
   });
 
   it('guardar expõe o estado anterior pelo callback (antes de gravar)', async () => {
@@ -313,7 +355,7 @@ describe('FloorPlanService — obter/guardar (optimistic locking)', () => {
       entidadeId: 'p1',
       eventId: 'evt1',
     });
-    expect(mockFloorPlanRepository.save).toHaveBeenCalled();
+    expect(mockUpdateQuery.execute).toHaveBeenCalled();
   });
 
   it('guardar não chama o callback no conflito (409)', async () => {
@@ -354,10 +396,11 @@ describe('FloorPlanService — obter/guardar (optimistic locking)', () => {
     } as any);
 
     expect(resultado.dimensoes).toEqual({ larguraM: 20.5, alturaM: 12 });
-    expect(mockFloorPlanRepository.save.mock.calls[0][0].documento.dimensoes).toEqual({
-      larguraM: 20.5,
-      alturaM: 12,
-    });
+    expect(mockUpdateQuery.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documento: expect.objectContaining({ dimensoes: { larguraM: 20.5, alturaM: 12 } }),
+      }),
+    );
   });
 
   it('guardar sem dimensões preserva as existentes', async () => {

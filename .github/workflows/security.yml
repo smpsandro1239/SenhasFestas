@@ -1,0 +1,78 @@
+name: Security
+
+on:
+  push:
+    branches: [main, security/hardening-2026-11-final]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secret-scan:
+    name: Secret scanning (Gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan current tree and Git history
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: false
+
+  dependency-audit:
+    name: Dependency audit and lockfile remediation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Resolve compatible dependency updates
+        run: npm install --ignore-scripts
+      - name: Apply non-breaking security fixes
+        continue-on-error: true
+        run: npm audit fix --ignore-scripts
+      - name: Save updated lockfile and audit report
+        if: always()
+        run: |
+          npm audit --json > npm-audit-full.json || true
+          npm audit --omit=dev --json > npm-audit-report.json || true
+          node -e "const r=require('./npm-audit-report.json'); console.log(JSON.stringify(r.metadata?.vulnerabilities || {}, null, 2))"
+      - name: Upload lockfile and audit report for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-dependency-remediation
+          path: |
+            package-lock.json
+            npm-audit-report.json
+            npm-audit-full.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Enforce production dependency security
+        run: npm audit --omit=dev --audit-level=high
+
+  pwa-cache-regression:
+    name: PWA private-cache regression tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify service worker never caches private navigation
+        run: node --test scripts/test-service-worker-security.mjs

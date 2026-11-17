@@ -37,6 +37,7 @@ export async function criarAplicacao(opcoes: CriarAplicacaoOpcoes = {}): Promise
         .split(',')
         .map((o) => o.trim().replace(/\/+$/, ''))
         .filter(Boolean),
+      ...(process.env.VERCEL_URL ? [process.env.VERCEL_URL] : []),
     ]);
 
     app.use((req, res, next) => {
@@ -44,7 +45,7 @@ export async function criarAplicacao(opcoes: CriarAplicacaoOpcoes = {}): Promise
         // Open redirect fix (A6): o 301 antigo refletia qualquer Host
         // (https://${req.headers.host}) — um atacante controlava o domínio do
         // redirect. Só redireciona para hosts confiáveis: FRONTEND_URL,
-        // API_TRUSTED_HOSTS, localhost, ou *.vercel.app (previews não partem).
+        // API_TRUSTED_HOSTS, localhost ou o hostname exacto de VERCEL_URL.
         const host = String(req.headers.host || '');
         if (!hostConfiavel(host, trustedHosts)) {
           return res.status(400).json({ statusCode: 400, message: 'Host não permitido' });
@@ -110,7 +111,14 @@ export function configuracaoBaseDados(configService: ConfigService) {
       password: configService.get<string>('DB_PASSWORD') ?? 'postgres',
       database: configService.get<string>('DB_NAME') ?? 'senhasfestas',
       ssl:
-        configService.get<string>('DB_SSL') === 'true' ? { rejectUnauthorized: false } : undefined,
+        configService.get<string>('DB_SSL') === 'true'
+          ? {
+              rejectUnauthorized: true,
+              ...(configService.get<string>('DB_SSL_CA')
+                ? { ca: configService.get<string>('DB_SSL_CA') }
+                : {}),
+            }
+          : undefined,
     };
   }
 
@@ -124,7 +132,14 @@ export function configuracaoBaseDados(configService: ConfigService) {
     ssl:
       url.searchParams.get('sslmode') === 'require' ||
       configService.get<string>('DB_SSL') === 'true'
-        ? { rejectUnauthorized: false }
+        ? {
+            // Validar o certificado do servidor evita aceitar certificados
+            // arbitrários em ligações PostgreSQL remotas.
+            rejectUnauthorized: true,
+            ...(configService.get<string>('DB_SSL_CA')
+              ? { ca: configService.get<string>('DB_SSL_CA') }
+              : {}),
+          }
         : undefined,
   };
 }

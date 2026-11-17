@@ -40,12 +40,16 @@ export function criarSocketAutenticado(options: {
     timeout: 5000,
   });
 
-  const entrarNoEvento = () => socket.emit(roomEvent, eventId);
+  const entrarNoEvento = () => {
+    // "connected" só significa que o transporte Socket.IO abriu. A aplicação
+    // só está pronta para realtime depois de o servidor confirmar a room.
+    onStatus('reconnecting');
+    socket.emit(roomEvent, eventId, (resultado?: { ok?: boolean }) => {
+      onStatus(resultado?.ok === true ? 'connected' : 'offline');
+    });
+  };
 
-  socket.on('connect', () => {
-    onStatus('connected');
-    entrarNoEvento();
-  });
+  socket.on('connect', entrarNoEvento);
   socket.on('reconnect', entrarNoEvento);
   socket.on(mensagem, (payload: unknown) => onMessage(payload));
   socket.on('disconnect', () => onStatus('reconnecting'));

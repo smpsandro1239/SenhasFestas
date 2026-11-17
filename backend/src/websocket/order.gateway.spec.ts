@@ -28,6 +28,7 @@ function criarGateway(overrides: {
   membership?: any;
   config?: any;
   jwt?: any;
+  users?: any;
 } = {}) {
   const redisService = {
     publish: vi.fn().mockResolvedValue(undefined),
@@ -50,11 +51,17 @@ function criarGateway(overrides: {
     ...overrides.config,
   };
   const jwtService = {
-    verify: vi.fn(),
+    verify: vi.fn().mockImplementation(() => ({ sub: 'u1', role: 'organizer', exp: Math.floor(Date.now() / 1000) + 900 })),
     ...overrides.jwt,
   };
   const eventUserRepository = {
     findOne: vi.fn().mockResolvedValue(null),
+  };
+  const userRepository = {
+    findOne: vi.fn().mockImplementation(({ where }: any) =>
+      where?.isActive ? { id: where.id, role: 'organizer', isActive: true } : null,
+    ),
+    ...overrides.users,
   };
 
   const gateway = new OrderGateway(
@@ -63,8 +70,9 @@ function criarGateway(overrides: {
     redisService as any,
     membershipService as any,
     eventUserRepository as any,
+    userRepository as any,
   );
-  return { gateway, redisService, membershipService, configService, jwtService, eventUserRepository };
+  return { gateway, redisService, membershipService, configService, jwtService, eventUserRepository, userRepository };
 }
 
 function socketFalso(user?: { id: string; role: string }) {
@@ -74,6 +82,7 @@ function socketFalso(user?: { id: string; role: string }) {
     emit: vi.fn(),
     join: vi.fn(),
     disconnect: vi.fn(),
+    handshake: { auth: { token: 'bom' }, headers: {} },
   } as any;
 }
 
@@ -193,7 +202,7 @@ describe('OrderGateway — handleConnection', () => {
 
   it('aceita e regista o socket com token válido', async () => {
     const { gateway, jwtService } = criarGateway({
-      jwt: { verify: vi.fn().mockReturnValue({ sub: 'u1', role: 'organizer' }) },
+      jwt: { verify: vi.fn().mockReturnValue({ sub: 'u1', role: 'organizer', exp: Math.floor(Date.now() / 1000) + 900 }) },
     });
     const client = socketFalso();
     client.handshake = { auth: { token: 'bom' }, headers: {} };
@@ -203,6 +212,45 @@ describe('OrderGateway — handleConnection', () => {
     expect(jwtService.verify).toHaveBeenCalled();
     expect(client.data.user).toEqual({ id: 'u1', role: 'organizer' });
     expect(client.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('rejeita tokens sem expiração para não manter sockets indefinidos', async () => {
+    const { gateway } = criarGateway({
+      jwt: { verify: vi.fn().mockReturnValue({ sub: 'u1', role: 'organizer' }) },
+    });
+    const client = socketFalso();
+    client.handshake = { auth: { token: 'sem-exp' }, headers: {} };
+
+    await gateway.handleConnection(client);
+
+    expect(client.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('usa a role atual da BD e ignora uma role superadmin antiga no JWT', async () => {
+    const { gateway } = criarGateway({
+      jwt: { verify: vi.fn().mockReturnValue({ sub: 'u1', role: 'superadmin', exp: Math.floor(Date.now() / 1000) + 900 }) },
+      users: { findOne: vi.fn().mockResolvedValue({ id: 'u1', role: 'organizer', isActive: true }) },
+    });
+    const client = socketFalso();
+    client.handshake = { auth: { token: 'bom' }, headers: {} };
+
+    await gateway.handleConnection(client);
+
+    expect(client.data.user).toEqual({ id: 'u1', role: 'organizer' });
+    expect(client.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('desconecta utilizadores desativados mesmo com JWT válido', async () => {
+    const { gateway } = criarGateway({
+      jwt: { verify: vi.fn().mockReturnValue({ sub: 'u1', role: 'organizer' }) },
+      users: { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    const client = socketFalso();
+    client.handshake = { auth: { token: 'bom' }, headers: {} };
+
+    await gateway.handleConnection(client);
+
+    expect(client.disconnect).toHaveBeenCalledWith(true);
   });
 });
 
@@ -214,11 +262,13 @@ describe('OrderGateway — handleJoinEventPlanta', () => {
   it('rejeita não autenticado', async () => {
     const { gateway } = criarGateway();
     const client = socketFalso();
+    client.handshake = { auth: {}, headers: {} };
 
-    await gateway.handleJoinEventPlanta(client, 'evt1');
+    const resultado = await gateway.handleJoinEventPlanta(client, 'evt1');
 
     expect(client.emit).toHaveBeenCalledWith('error', { message: 'Não autenticado' });
     expect(client.join).not.toHaveBeenCalled();
+    expect(resultado).toEqual({ ok: false, message: 'Não autenticado' });
   });
 
   it('rejeita quem não pertence ao evento', async () => {
@@ -226,11 +276,11 @@ describe('OrderGateway — handleJoinEventPlanta', () => {
       membership: { roleEfetiva: vi.fn().mockRejectedValue(new Error('Não pertence a este evento')) },
     });
     const client = socketFalso({ id: 'u1', role: 'kitchen' });
-
-    await gateway.handleJoinEventPlanta(client, 'evt1');
+    const ack = await gateway.handleJoinEventPlanta(client, 'evt1');
 
     expect(membershipService.roleEfetiva).toHaveBeenCalledWith(client.data.user, 'evt1');
     expect(client.emit).toHaveBeenCalledWith('error', { message: 'Não pertence a este evento' });
+    expect(ack).toEqual({ ok: false, message: 'Não pertence a este evento' });
     expect(client.join).not.toHaveBeenCalled();
   });
 
@@ -252,11 +302,13 @@ describe('OrderGateway — handleJoinEventPlanta', () => {
     const { gateway } = criarGateway({
       membership: { roleEfetiva: vi.fn().mockResolvedValue('organizer') },
     });
-    const client = socketFalso({ id: 'u1', role: 'organizer' });
+    // Simula a mensagem a chegar antes de handleConnection() terminar.
+    const client = socketFalso();
+    const ack = await gateway.handleJoinEventPlanta(client, 'evt1');
 
-    await gateway.handleJoinEventPlanta(client, 'evt1');
-
+    expect(client.data.user).toEqual({ id: 'u1', role: 'organizer' });
     expect(client.join).toHaveBeenCalledWith('event:evt1:planta');
+    expect(ack).toEqual({ ok: true });
     expect(client.emit).not.toHaveBeenCalled();
   });
 
@@ -344,5 +396,27 @@ describe('OrderGateway — wiring subscriberAtivo via Redis', () => {
   it('sem REDIS_URL não cria subscriber nem consome o construtor', () => {
     const { gateway } = criarGateway();
     expect(gateway['subscriber']).toBeNull();
+  });
+});
+
+
+describe('OrderGateway — confirmação de entrada na room de pedidos', () => {
+  it('confirma a room apenas depois de validar a membership e entrar', async () => {
+    const { gateway, eventUserRepository } = criarGateway();
+    eventUserRepository.findOne.mockResolvedValue({ id: 'membership-1' });
+    const client = socketFalso({ id: 'u1', role: 'organizer' });
+    const ack = await gateway.handleJoinEvent(client, 'evt1');
+
+    expect(client.join).toHaveBeenCalledWith('event:evt1');
+    expect(ack).toEqual({ ok: true });
+  });
+
+  it('devolve erro de confirmação quando a membership não existe', async () => {
+    const { gateway } = criarGateway();
+    const client = socketFalso({ id: 'u1', role: 'organizer' });
+    const ack = await gateway.handleJoinEvent(client, 'evt1');
+
+    expect(client.join).not.toHaveBeenCalled();
+    expect(ack).toEqual({ ok: false, message: 'Não pertence a este evento' });
   });
 });

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { vi } from 'vitest';
+import { DataSource } from 'typeorm';
 import { AuthController } from '../src/modules/auth/auth.controller';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { UserEntity, RefreshTokenEntity } from '../src/entities';
@@ -48,6 +49,12 @@ describe('AuthController', () => {
             findByCode: vi.fn(),
             vincularCliente: vi.fn(),
             entrar: vi.fn(),
+          },
+        },
+        {
+          provide: DataSource,
+          useValue: {
+            transaction: vi.fn(),
           },
         },
       ],

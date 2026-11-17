@@ -1,11 +1,14 @@
-import { IsEmail, IsString, MinLength, IsOptional, IsIn, IsBoolean } from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength, IsOptional, IsIn, IsBoolean, IsByteLength } from 'class-validator';
 
 export class CreateUserDto {
   @IsEmail()
   email: string;
 
+  // Passwords novas: mínimo 12 caracteres; bcrypt aceita no máximo 72 bytes.
   @IsString()
-  @MinLength(6)
+  @MinLength(12)
+  @MaxLength(72)
+  @IsByteLength(1, 72)
   password: string;
 
   @IsString()

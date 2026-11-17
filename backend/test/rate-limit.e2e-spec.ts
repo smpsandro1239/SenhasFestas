@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { criarAplicacao } from '../src/app.setup';
+import { configuracaoBaseDadosE2e } from './e2e-database-safety';
 
 const LIMITE = 3;
 const RAIZ = '/api/health/live';
@@ -29,6 +30,8 @@ describe('Rate limit e2e (429, não 500)', () => {
     process.env.REDIS_URL = '';
 
     try {
+      // Este spec não limpa o schema, mas também não deve ligar-se a uma BD remota.
+      configuracaoBaseDadosE2e();
       app = await criarAplicacao({ swagger: false });
       await app.init();
     } catch (error) {

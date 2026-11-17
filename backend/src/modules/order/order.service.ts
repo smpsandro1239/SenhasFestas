@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource, In } from 'typeorm';
 import { OrderEntity, OrderItemEntity, BalanceEntity, BalanceMovementEntity, ProductEntity, EventEntity, EventUserEntity } from '../../entities';
@@ -7,7 +8,7 @@ import { QRCodeService } from '../../services/qr-code.service';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { NotificationService } from '../../services/notification.service';
 import { MovementType } from '../../entities';
-import { centavos, soma, subtrai } from '../../common/money';
+import { centavos, subtrai } from '../../common/money';
 import { reembolsarSaldoEmTransacao, temSaldoParaReembolsar } from '../../common/order-refund';
 import { assertPodeMexerEmSaldo, assertSaldoUtilizavel } from '../../common/balance-guard';
 import { reporStockEmTransacao } from '../../common/order-stock';
@@ -39,12 +40,13 @@ export class OrderService {
     private readonly eventService: EventService,
   ) {}
 
-  async create(user: any, dto: CreateOrderDto): Promise<any> {
+  async create(user: any, dto: CreateOrderDto, rawIdempotencyKey?: string): Promise<any> {
+    const idempotencyKey = this.validarChaveIdempotencia(rawIdempotencyKey);
+    const requestHash = idempotencyKey ? this.hashPedido(user.id, dto) : undefined;
     const event = await this.eventRepository.findOne({ where: { id: dto.eventId } });
     if (!event) {
       throw new NotFoundException('Event not found');
     }
-    await this.eventService.assertEventOperavel(event);
 
     const isMember = await this.eventUserRepository.findOne({
       where: { event: { id: event.id }, user: { id: user.id } },
@@ -53,119 +55,255 @@ export class OrderService {
       throw new ForbiddenException('Não pertence a este evento');
     }
 
-    const savedOrder = await this.dataSource.transaction(async (manager) => {
-      const products = dto.items.length
-        ? await manager.find(ProductEntity, {
-            where: { id: In(dto.items.map((item) => item.productId)) },
-            relations: { event: true },
-          })
-        : [];
-      if (products.length !== dto.items.length) {
-        throw new NotFoundException('Um ou mais produtos não encontrados');
+    // Um retry confirmado devolve o pedido original mesmo depois do fecho
+    // operacional do evento; não volta a debitar saldo nem a baixar stock.
+    if (idempotencyKey) {
+      const existente = await this.buscarPedidoIdempotente(event.id, user.id, idempotencyKey);
+      if (existente) {
+        this.assertHashPedido(existente, requestHash!);
+        return this.finalizarCriacao(existente, event.id, true);
       }
-      const productById = new Map(products.map((product) => [product.id, product]));
+    }
 
-      // Relock só os produtos com controlo de stock (stock != null). O read
-      // inicial não é seguro para vender: duas encomendas concorrentes podiam
-      // ler o mesmo número e vender a mesma unidade. O lock pessimista
-      // serializa a venda e devolve o valor atual, que é o usado para validar
-      // e para decrementar.
-      const trackedIds = dto.items
-        .map((item) => productById.get(item.productId))
-        .filter((product) => product?.stock != null)
-        .map((product) => product!.id);
-      const lockedById = new Map<string, ProductEntity>();
-      if (trackedIds.length > 0) {
-        const locked = await manager.find(ProductEntity, {
-          where: { id: In(trackedIds) },
-          lock: { mode: 'pessimistic_write' },
+    if (!idempotencyKey) {
+      await this.eventService.assertEventOperavel(event);
+    }
+
+    let savedOrder: OrderEntity;
+    let replayed = false;
+    try {
+      savedOrder = await this.dataSource.transaction(async (manager) => {
+        if (idempotencyKey) {
+          // Serializa a mesma chave no PostgreSQL. Um retry concorrente só
+          // consulta o pedido vencedor depois de a primeira transação terminar.
+          await manager.query(
+            'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+            [`${event.id}:${user.id}`, idempotencyKey],
+          );
+          const existente = await manager.findOne(OrderEntity, {
+            where: { event: { id: event.id }, createdById: user.id, idempotencyKey },
+          });
+          if (existente) {
+            this.assertHashPedido(existente, requestHash!);
+            replayed = true;
+            return existente;
+          }
+          await this.eventService.assertEventOperavel(event);
+        }
+
+        const productIds = [...new Set(dto.items.map((item) => item.productId))];
+        const products = productIds.length
+          ? await manager.find(ProductEntity, {
+              where: { id: In(productIds) },
+              relations: { event: true },
+            })
+          : [];
+        if (products.length !== productIds.length) {
+          throw new NotFoundException('Um ou mais produtos não encontrados');
+        }
+        const productById = new Map(products.map((product) => [product.id, product]));
+
+        // Relock só os produtos com controlo de stock (stock != null). O read
+        // inicial não é seguro para vender: duas encomendas concorrentes podiam
+        // ler o mesmo número e vender a mesma unidade. O lock pessimista
+        // serializa a venda e devolve o valor atual, que é o usado para validar
+        // e para decrementar.
+        const trackedIds = productIds
+          .map((productId) => productById.get(productId))
+          .filter((product) => product?.stock != null)
+          .map((product) => product!.id);
+        const lockedById = new Map<string, ProductEntity>();
+        if (trackedIds.length > 0) {
+          const locked = await manager.find(ProductEntity, {
+            where: { id: In(trackedIds) },
+            // Todas as transações bloqueiam produtos pela mesma ordem,
+            // independentemente da ordem dos artigos enviada pelo cliente.
+            order: { id: 'ASC' },
+            lock: { mode: 'pessimistic_write' },
+          });
+          for (const product of locked) {
+            lockedById.set(product.id, product);
+          }
+          if (lockedById.size !== trackedIds.length) {
+            throw new NotFoundException('Um ou mais produtos deixaram de estar disponíveis');
+          }
+        }
+
+        const quantityByProductId = new Map<string, number>();
+        for (const item of dto.items) {
+          quantityByProductId.set(
+            item.productId,
+            (quantityByProductId.get(item.productId) ?? 0) + item.quantity,
+          );
+        }
+
+        let total = 0;
+        for (const item of dto.items) {
+          const product = productById.get(item.productId);
+          if (!product) {
+            throw new NotFoundException(`Produto não encontrado: ${item.productId}`);
+          }
+          if (product.event?.id !== event.id) {
+            throw new BadRequestException(`Produto indisponível neste evento: ${item.productId}`);
+          }
+          if (!product.isActive) {
+            throw new BadRequestException(`Produto indisponível: ${item.productId}`);
+          }
+          total = centavos(total + item.quantity * centavos(Number(product.price)));
+        }
+
+        for (const [productId, quantity] of quantityByProductId) {
+          const product = productById.get(productId)!;
+          const locked = lockedById.get(productId);
+          const stock = locked ? locked.stock : product.stock;
+          if (stock != null && quantity > Number(stock)) {
+            throw new BadRequestException(`Stock insuficiente para: ${productId}`);
+          }
+        }
+
+        const balanceUsed = centavos(Math.min(dto.balanceUsed || 0, total));
+        if (balanceUsed > 0 && !dto.balanceId) {
+          throw new ForbiddenException('Usar saldo requer balanceId');
+        }
+        if (dto.paymentMethod === 'balance') {
+          if (!dto.balanceId) {
+            throw new ForbiddenException('Pagamento com saldo requer balanceId');
+          }
+          if (balanceUsed < total) {
+            throw new ForbiddenException('Saldo insuficiente para cobrir o pedido');
+          }
+        }
+        const order = manager.create(OrderEntity, {
+          source: dto.source,
+          event,
+          status: 'received',
+          tableNumber: dto.tableNumber,
+          station: dto.station,
+          balanceId: dto.balanceId,
+          paymentMethod: dto.paymentMethod,
+          total,
+          balanceUsed,
+          createdById: user.id,
+          idempotencyKey,
+          requestHash,
         });
-        for (const product of locked) {
-          lockedById.set(product.id, product);
-        }
-      }
+        const createdOrder = await manager.save(OrderEntity, order);
 
-      let total = 0;
-      for (const item of dto.items) {
-        const product = productById.get(item.productId);
-        if (!product) {
-          throw new NotFoundException(`Produto não encontrado: ${item.productId}`);
+        for (const item of dto.items) {
+          const product = productById.get(item.productId);
+          const unitPrice = centavos(Number(product.price));
+          const orderItem = manager.create(OrderItemEntity, {
+            order: createdOrder,
+            product,
+            quantity: item.quantity,
+            unitPrice,
+            subtotal: centavos(item.quantity * unitPrice),
+            notes: item.notes,
+          });
+          await manager.save(OrderItemEntity, orderItem);
         }
-        if (product.event?.id !== event.id) {
-          throw new BadRequestException(`Produto indisponível neste evento: ${item.productId}`);
-        }
-        if (!product.isActive) {
-          throw new BadRequestException(`Produto indisponível: ${item.productId}`);
-        }
-        const stock = lockedById.get(item.productId)?.stock ?? product.stock;
-        if (stock != null && item.quantity > Number(stock)) {
-          throw new BadRequestException(`Stock insuficiente para: ${item.productId}`);
-        }
-        total = centavos(total + item.quantity * centavos(Number(product.price)));
-      }
 
-      const balanceUsed = centavos(Math.min(dto.balanceUsed || 0, total));
-      if (dto.paymentMethod === 'balance') {
-        if (!dto.balanceId) {
-          throw new ForbiddenException('Pagamento com saldo requer balanceId');
+        // Decrementar o stock só nos produtos com controlo (stock != null).
+        // Quem não tem controlo (menu aberto) fica intocável.
+        for (const [productId, quantity] of quantityByProductId) {
+          const locked = lockedById.get(productId);
+          if (locked?.stock != null) {
+            locked.stock = Number(locked.stock) - quantity;
+            await manager.save(ProductEntity, locked);
+          }
         }
-        if (balanceUsed < total) {
-          throw new ForbiddenException('Saldo insuficiente para cobrir o pedido');
+
+        if (dto.balanceId && balanceUsed > 0) {
+          await this.consumeBalanceInTransaction(manager, user, dto.balanceId, balanceUsed, createdOrder.id, event.id);
         }
-      }
-      const order = manager.create(OrderEntity, {
-        source: dto.source,
-        event: event,
-        status: 'received',
-        tableNumber: dto.tableNumber,
-        station: dto.station,
-        balanceId: dto.balanceId,
-        paymentMethod: dto.paymentMethod,
-        total,
-        balanceUsed,
+
+        return createdOrder;
       });
-      const createdOrder = await manager.save(OrderEntity, order);
-
-      for (const item of dto.items) {
-        const product = productById.get(item.productId);
-        const unitPrice = centavos(Number(product.price));
-        const orderItem = manager.create(OrderItemEntity, {
-          order: createdOrder,
-          product,
-          quantity: item.quantity,
-          unitPrice,
-          subtotal: centavos(item.quantity * unitPrice),
-          notes: item.notes,
-        });
-        await manager.save(OrderItemEntity, orderItem);
-      }
-
-      // Decrementar o stock só nos produtos com controlo (stock != null).
-      // Quem não tem controlo (menu aberto) fica intocável.
-      for (const item of dto.items) {
-        const locked = lockedById.get(item.productId);
-        if (locked?.stock != null) {
-          locked.stock = Number(locked.stock) - item.quantity;
-          await manager.save(ProductEntity, locked);
+    } catch (error) {
+      // A restrição UNIQUE parcial arbitra retries concorrentes. Depois do
+      // rollback, a segunda chamada recupera o pedido vencedor.
+      if (idempotencyKey && this.ehViolacaoUnica(error)) {
+        const existente = await this.buscarPedidoIdempotente(event.id, user.id, idempotencyKey);
+        if (existente) {
+          this.assertHashPedido(existente, requestHash!);
+          return this.finalizarCriacao(existente, event.id, true);
         }
       }
+      throw error;
+    }
 
-      if (dto.balanceId && balanceUsed > 0) {
-        await this.consumeBalanceInTransaction(manager, user, dto.balanceId, balanceUsed, createdOrder.id, event.id);
-      }
+    return this.finalizarCriacao(savedOrder, event.id, replayed);
+  }
 
-      return createdOrder;
+  private validarChaveIdempotencia(value?: string): string | undefined {
+    if (value === undefined) return undefined;
+    const key = value.trim();
+    if (key.length < 8 || key.length > 128 || !/^[\x21-\x7E]+$/.test(key)) {
+      throw new BadRequestException('Idempotency-Key inválida (8 a 128 caracteres ASCII visíveis)');
+    }
+    return key;
+  }
+
+  private hashPedido(userId: string, dto: CreateOrderDto): string {
+    const payload = {
+      userId,
+      eventId: dto.eventId,
+      source: dto.source,
+      tableNumber: dto.tableNumber ?? null,
+      station: dto.station ?? null,
+      balanceId: dto.balanceId ?? null,
+      paymentMethod: dto.paymentMethod ?? 'balance',
+      balanceUsed: centavos(dto.balanceUsed ?? 0),
+      items: dto.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        notes: item.notes ?? null,
+      })),
+    };
+    return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+  }
+
+  private async buscarPedidoIdempotente(
+    eventId: string,
+    userId: string,
+    idempotencyKey: string,
+  ): Promise<OrderEntity | null> {
+    return this.orderRepository.findOne({
+      where: { event: { id: eventId }, createdById: userId, idempotencyKey },
     });
+  }
 
-    // Generate QR code for the order
+  private assertHashPedido(order: OrderEntity, requestHash: string): void {
+    if (!order.requestHash || order.requestHash !== requestHash) {
+      throw new ConflictException('Idempotency-Key já utilizada com outro conteúdo');
+    }
+  }
+
+  private ehViolacaoUnica(error: unknown): boolean {
+    const err = error as {
+      code?: string;
+      constraint?: string;
+      driverError?: { code?: string; constraint?: string };
+    };
+    const driverError = err?.driverError ?? err;
+    return (
+      driverError?.code === '23505' &&
+      driverError?.constraint === 'UQ_orders_idempotency'
+    );
+  }
+
+  private async finalizarCriacao(
+    savedOrder: OrderEntity,
+    eventId: string,
+    replayed: boolean,
+  ): Promise<any> {
+    // O evento de estado pode ser repetido sem efeitos financeiros. Se a
+    // primeira resposta falhou depois do commit, o retry volta a acordar o POS/KDS.
+    this.orderGateway.emitOrderUpdate(savedOrder.id, savedOrder.status, eventId);
     const qrCode = await this.qrCodeService.generateOrderQRCode(savedOrder.id);
-
-    // Emit WebSocket event for real-time updates
-    this.orderGateway.emitOrderUpdate(savedOrder.id, savedOrder.status, event.id);
-
-    // Send notification for new order
-    await this.notificationService.notifyNewOrder(savedOrder.id);
-
+    if (!replayed) {
+      await this.notificationService.notifyNewOrder(savedOrder.id);
+    }
     const result = await this.findOne(savedOrder.id);
     return { ...result, qrCode };
   }
@@ -190,8 +328,10 @@ export class OrderService {
     if (isClient && balanceCtx.user?.id !== user.id) {
       throw new ForbiddenException('Não pode usar o saldo de outro utilizador');
     }
-    if (balanceCtx.event?.id && balanceCtx.event.id !== eventId) {
-      throw new ForbiddenException('Saldo não pertence a este evento');
+    // Saldos são sempre scoped por evento. Um saldo legado sem eventId não
+    // pode ser consumido em qualquer evento (nem contornar a separação de caixa).
+    if (!balanceCtx.event?.id || balanceCtx.event.id !== eventId) {
+      throw new ForbiddenException('Saldo não pertence a este evento ou não tem evento associado');
     }
 
     const balance = await manager.findOne(BalanceEntity, {
@@ -326,11 +466,8 @@ export class OrderService {
     if (!order) {
       throw new NotFoundException('Pedido não encontrado');
     }
-    if (order.status === 'delivered') {
-      throw new ForbiddenException('Pedido entregue não pode ser cancelado');
-    }
-    if (order.status === 'cancelled') {
-      throw new ForbiddenException('Pedido já cancelado');
+    if (!['received', 'preparing'].includes(order.status)) {
+      throw new ForbiddenException('Pedido não pode ser cancelado neste estado');
     }
 
     const isStaff = user?.role !== 'client';
@@ -341,6 +478,7 @@ export class OrderService {
       const balance = await this.balanceRepository.findOne({
         where: { id: order.balanceId },
         relations: { user: true },
+        withDeleted: true,
       });
       if (!balance || balance.user?.id !== user.id) {
         throw new ForbiddenException('Não pode cancelar o pedido de outro utilizador');
@@ -364,9 +502,23 @@ export class OrderService {
       if (!currentOrder) {
         throw new NotFoundException('Pedido não encontrado');
       }
-      if (currentOrder.status === 'delivered' || currentOrder.status === 'cancelled') {
-        throw new ForbiddenException('Pedido já não pode ser cancelado');
+      if (!['received', 'preparing'].includes(currentOrder.status)) {
+        throw new ForbiddenException('Pedido não pode ser cancelado neste estado');
       }
+
+      // A associação do utilizador já foi verificada antes da transação.
+      // A verificação final do saldo (com lock) ocorre depois dos locks de
+      // produto para manter a ordem global produtos -> saldo.
+      if (user?.role !== 'client' && user?.role !== 'superadmin') {
+        const membership = await manager.findOne(EventUserEntity, {
+          where: { event: { id: order.event?.id }, user: { id: user?.id } },
+          lock: { mode: 'pessimistic_read' },
+        });
+        if (!membership) {
+          throw new ForbiddenException('Não pertence a este evento');
+        }
+      }
+
       if (temSaldoParaReembolsar(currentOrder)) {
         assertPodeMexerEmSaldo(user);
       }
@@ -374,8 +526,26 @@ export class OrderService {
       currentOrder.status = 'cancelled';
       const updatedOrder = await manager.save(OrderEntity, currentOrder);
 
-      await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
+      // Ordem global de locks: pedido -> produtos (ID ascendente) -> saldo.
+      // Mantém a ordem compatível com a criação de encomendas (produtos -> saldo).
       await reporStockEmTransacao(manager, currentOrder.id);
+
+      // Para clientes, revalidar a titularidade com lock só depois dos locks
+      // de produto. Assim a ordem continua pedido -> produtos -> saldo.
+      if (user?.role === 'client') {
+        const balance = currentOrder.balanceId
+          ? await manager.findOne(BalanceEntity, {
+              where: { id: currentOrder.balanceId, user: { id: user.id } },
+              lock: { mode: 'pessimistic_write' },
+              withDeleted: true,
+            })
+          : null;
+        if (!balance || balance.user?.id !== user.id) {
+          throw new ForbiddenException('Não pode cancelar o pedido de outro utilizador');
+        }
+      }
+
+      await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
 
       return updatedOrder;
     });
@@ -430,6 +600,15 @@ export class OrderService {
       if (!currentOrder || currentOrder.status !== order.status) {
         throw new ForbiddenException('Pedido mudou de estado, tente novamente');
       }
+      if (user && user.role !== 'superadmin') {
+        const membership = await manager.findOne(EventUserEntity, {
+          where: { event: { id: order.event?.id }, user: { id: user.id } },
+          lock: { mode: 'pessimistic_read' },
+        });
+        if (!membership) {
+          throw new ForbiddenException('Não pertence a este evento');
+        }
+      }
       if (status === 'cancelled' && temSaldoParaReembolsar(currentOrder)) {
         assertPodeMexerEmSaldo(user);
       }
@@ -440,8 +619,9 @@ export class OrderService {
         if (temSaldoParaReembolsar(currentOrder)) {
           assertPodeMexerEmSaldo(user);
         }
-        await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
+        // Ordem global de locks: pedido -> produtos (ID ascendente) -> saldo.
         await reporStockEmTransacao(manager, currentOrder.id);
+        await reembolsarSaldoEmTransacao(manager, currentOrder, user?.id);
       }
 
       return updated;

@@ -5,8 +5,8 @@ import {
   Logger,
   NestInterceptor,
 } from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { from, Observable, throwError } from 'rxjs';
+import { catchError, concatMap, map } from 'rxjs/operators';
 import { Request, Response } from 'express';
 import { AuditService } from '../../modules/audit/audit.service';
 
@@ -152,53 +152,54 @@ export class AuditInterceptor implements NestInterceptor {
     const { acao, entity, entityId, eventId: eventIdBase } = this.descreverPedido(req, metodo);
 
     return next.handle().pipe(
-      tap({
-        next: (data) => {
-          const ator = this.resolverAtor(req, acao, data);
-          const eventId = this.eventoEfetivo(req, eventIdBase);
-          void this.auditService.record({
-            action: acao,
-            entity,
-            entityId: this.entidadeEfetiva(req, entityId),
-            eventId,
-            actorId: ator.id,
-            actorRole: ator.role,
-            before: this.resumoResposta((req as any)[AUDIT_BEFORE]),
-            after: this.resumoResposta(data),
-            details: {
-              method: metodo,
-              url: this.caminho(req),
-              statusCode: res.statusCode,
-              params: req.params,
-              ...this.detalhesExtras(req),
-            },
-            ip: req.ip,
-            userAgent: req.headers['user-agent'],
-          });
-        },
-        error: (error) => {
-          const ator = this.resolverAtor(req, acao, undefined);
-          const statusCode = (error as { status?: number })?.status ?? 500;
-          const eventId = this.eventoEfetivo(req, eventIdBase);
-          void this.auditService.record({
-            action: metodo === 'POST' && acao === 'LOGIN' ? 'LOGIN_FAILED' : acao,
-            entity,
-            entityId,
-            eventId,
-            actorId: ator.id,
-            actorRole: ator.role,
-            details: {
-              method: metodo,
-              url: this.caminho(req),
-              statusCode,
-              erro: (error as Error)?.message,
-              params: req.params,
-              ...this.detalhesExtras(req),
-            },
-            ip: req.ip,
-            userAgent: req.headers['user-agent'],
-          });
-        },
+      // Espera pela tentativa de persistência antes de devolver a resposta.
+      // Antes era fire-and-forget (void record), o que podia perder logs no
+      // encerramento do processo ou deixar a resposta à frente da auditoria.
+      concatMap((data) => {
+        const ator = this.resolverAtor(req, acao, data);
+        const eventId = this.eventoEfetivo(req, eventIdBase);
+        return from(this.auditService.record({
+          action: acao,
+          entity,
+          entityId: this.entidadeEfetiva(req, entityId),
+          eventId,
+          actorId: ator.id,
+          actorRole: ator.role,
+          before: this.resumoResposta((req as any)[AUDIT_BEFORE]),
+          after: this.resumoResposta(data),
+          details: {
+            method: metodo,
+            url: this.caminho(req),
+            statusCode: res.statusCode,
+            params: req.params,
+            ...this.detalhesExtras(req),
+          },
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+        })).pipe(map(() => data));
+      }),
+      catchError((error) => {
+        const ator = this.resolverAtor(req, acao, undefined);
+        const statusCode = (error as { status?: number })?.status ?? 500;
+        const eventId = this.eventoEfetivo(req, eventIdBase);
+        return from(this.auditService.record({
+          action: metodo === 'POST' && acao === 'LOGIN' ? 'LOGIN_FAILED' : acao,
+          entity,
+          entityId,
+          eventId,
+          actorId: ator.id,
+          actorRole: ator.role,
+          details: {
+            method: metodo,
+            url: this.caminho(req),
+            statusCode,
+            erro: (error as Error)?.message,
+            params: req.params,
+            ...this.detalhesExtras(req),
+          },
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+        })).pipe(concatMap(() => throwError(() => error)));
       }),
     );
   }
