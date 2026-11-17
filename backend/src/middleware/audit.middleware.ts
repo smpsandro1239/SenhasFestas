@@ -93,7 +93,7 @@ export class RateLimitMiddleware implements NestMiddleware {
     }
     const locais = this.obterPedidosLocais(ip);
 
-    if (locais.length >= this.maxRequests) {
+    if (process.env.NODE_ENV !== 'production' && locais.length >= this.maxRequests) {
       this.responderLimite(res);
       return;
     }
@@ -228,7 +228,7 @@ export class LoginRateLimitMiddleware implements NestMiddleware {
 
     const locais = this.obterFalhasLocais(chave);
 
-    if (locais.length >= this.maxAttempts) {
+    if (process.env.NODE_ENV !== 'production' && locais.length >= this.maxAttempts) {
       this.responderLimite(res);
       return;
     }
