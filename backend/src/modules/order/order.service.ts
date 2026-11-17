@@ -569,8 +569,11 @@ export class OrderService {
           where: { event: { id: order.event?.id }, user: { id: user?.id } },
           lock: { mode: 'pessimistic_read' },
         });
-        if (!membership || (membership.role && membership.role !== roleEfetiva)) {
-          throw new ForbiddenException('Membership ou permissões alteradas; tente novamente');
+        if (!membership) {
+          throw new ForbiddenException('Não pertence a este evento');
+        }
+        if (membership.role && membership.role !== roleEfetiva) {
+          throw new ForbiddenException('As permissões neste evento foram alteradas; tente novamente');
         }
       }
 
