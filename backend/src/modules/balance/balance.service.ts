@@ -53,7 +53,7 @@ export class BalanceService {
   }
 
   private hashOperacaoFinanceira(
-    operation: 'load' | 'deduct',
+    operation: 'load' | 'deduct' | 'reverse-load' | 'transfer',
     actorId: string,
     userId: string,
     eventId: string,
@@ -67,7 +67,7 @@ export class BalanceService {
   private async lockOperationKey(
     manager: import('typeorm').EntityManager,
     actorId: string,
-    operation: 'load' | 'deduct',
+    operation: 'load' | 'deduct' | 'reverse-load' | 'transfer',
     idempotencyKey: string,
   ): Promise<void> {
     await manager.query(
@@ -143,12 +143,14 @@ export class BalanceService {
     actor?: any,
     dto?: ReverseLoadDto,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
+    rawIdempotencyKey?: string,
   ): Promise<{
     balance: { id: string; currentBalance: number };
     movement: BalanceMovementEntity;
     reversedMovementId: string;
     eventId?: string;
   }> {
+    const idempotencyKey = this.validarChaveIdempotencia(rawIdempotencyKey, actor);
     const resultado = await this.dataSource.transaction(async (manager) => {
       const movement = await manager.findOne(BalanceMovementEntity, {
         where: { id: movementId },
@@ -166,17 +168,58 @@ export class BalanceService {
         throw new ForbiddenException('Apenas carregamentos podem ser estornados');
       }
 
-      // Autorização scoped pelo evento REAL do movimento (não pelo eventId da query)
+      const eventId = (movement.balance as any)?.event?.id as string | undefined;
+
+      // Autorização scoped pelo evento REAL do movimento (não pelo eventId da query).
       if (actor && actor.role !== 'superadmin') {
-        const eventoMovimento = (movement.balance as any)?.event?.id as string | undefined;
-        if (!eventoMovimento) {
+        if (!eventId) {
           throw new ForbiddenException('Movimento sem evento associado');
         }
         const membro = await manager.findOne(EventUserEntity, {
-          where: { user: { id: actor.id }, event: { id: eventoMovimento } },
+          where: { user: { id: actor.id }, event: { id: eventId } },
         });
         if (!membro) {
           throw new ForbiddenException('Não pertence a este evento');
+        }
+      }
+
+      const requestHash = idempotencyKey
+        ? this.hashOperacaoFinanceira('reverse-load', actor.id, userId, eventId ?? '', {
+            movementId,
+            amount: dto?.amount !== undefined ? centavos(Number(dto.amount)) : null,
+          })
+        : undefined;
+
+      if (idempotencyKey) {
+        await this.lockOperationKey(manager, actor.id, 'reverse-load', idempotencyKey);
+        const anterior = await manager.findOne(BalanceMovementEntity, {
+          where: {
+            createdById: actor.id,
+            idempotencyKey,
+            type: MovementType.CANCEL,
+            reversedOfId: movementId,
+          },
+          relations: { balance: true },
+          withDeleted: true,
+        });
+        if (anterior) {
+          this.assertHashOperacao(anterior, requestHash!);
+          const saldoAnterior = await manager.findOne(BalanceEntity, {
+            where: { id: anterior.balance.id },
+            withDeleted: true,
+          });
+          if (!saldoAnterior) {
+            throw new NotFoundException('Saldo do estorno não encontrado');
+          }
+          return {
+            balance: {
+              id: saldoAnterior.id,
+              currentBalance: Number(saldoAnterior.currentBalance),
+            },
+            movement: anterior,
+            reversedMovementId: movementId,
+            eventId,
+          };
         }
       }
 
@@ -221,7 +264,7 @@ export class BalanceService {
 
       arquivar?.({
         antes: { currentBalance: saldoAtual },
-        eventId: (movement.balance as any)?.event?.id as string | undefined,
+        eventId,
       });
 
       locked.reversedAmount = centavos(jaEstornado + estorno);
@@ -239,6 +282,8 @@ export class BalanceService {
         description: estorno >= montanteOriginal - 0.005 ? 'Estorno de carregamento' : 'Estorno parcial de carregamento',
         reversedOfId: locked.id,
         createdById: actor?.id,
+        idempotencyKey,
+        requestHash,
       });
       const savedReversal = await manager.save(BalanceMovementEntity, reversal);
 
@@ -246,7 +291,7 @@ export class BalanceService {
         balance: { id: savedBalance.id, currentBalance: Number(savedBalance.currentBalance) },
         movement: savedReversal,
         reversedMovementId: locked.id,
-        eventId: (movement.balance as any)?.event?.id as string | undefined,
+        eventId,
       };
     });
 
@@ -669,6 +714,7 @@ export class BalanceService {
     dto: TransferBalanceDto,
     actor?: any,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
+    rawIdempotencyKey?: string,
   ): Promise<{
     balance: { id: string; currentBalance: number };
     originBalance: { id: string; currentBalance: number };
@@ -679,7 +725,19 @@ export class BalanceService {
     if (dto.fromEventId === dto.toEventId) {
       throw new ForbiddenException('Origem e destino têm de ser eventos diferentes');
     }
-    const toEvent = await this.eventService.assertEventOperavelById(dto.toEventId);
+    const idempotencyKey = this.validarChaveIdempotencia(rawIdempotencyKey, actor);
+    const requestHash = idempotencyKey
+      ? this.hashOperacaoFinanceira('transfer', actor.id, userId, dto.fromEventId, {
+          toEventId: dto.toEventId,
+          amount: centavos(dto.amount),
+        })
+      : undefined;
+
+    // Em retries, a resposta original deve ser recuperada mesmo que o evento
+    // de destino tenha entretanto sido fechado.
+    const toEventInicial = idempotencyKey
+      ? undefined
+      : await this.eventService.assertEventOperavelById(dto.toEventId);
     const fromEvent = await this.eventRepository.findOne({
       where: { id: dto.fromEventId },
     });
@@ -693,6 +751,67 @@ export class BalanceService {
 
     const montante = centavos(dto.amount);
     const resultado = await this.dataSource.transaction(async (manager) => {
+      if (idempotencyKey) {
+        await this.lockOperationKey(manager, actor.id, 'transfer', idempotencyKey);
+        const [anteriorOrigem, anteriorDestino] = await Promise.all([
+          manager.findOne(BalanceMovementEntity, {
+            where: {
+              createdById: actor.id,
+              idempotencyKey,
+              type: MovementType.CANCEL,
+            },
+            relations: { balance: true },
+            withDeleted: true,
+          }),
+          manager.findOne(BalanceMovementEntity, {
+            where: {
+              createdById: actor.id,
+              idempotencyKey,
+              type: MovementType.LOAD,
+            },
+            relations: { balance: true },
+            withDeleted: true,
+          }),
+        ]);
+
+        if (anteriorOrigem || anteriorDestino) {
+          if (!anteriorOrigem || !anteriorDestino) {
+            throw new ConflictException('Chave de idempotência já utilizada por outra operação');
+          }
+          this.assertHashOperacao(anteriorOrigem, requestHash!);
+          this.assertHashOperacao(anteriorDestino, requestHash!);
+          const [saldoOrigem, saldoDestino] = await Promise.all([
+            manager.findOne(BalanceEntity, {
+              where: { id: anteriorOrigem.balance.id },
+              withDeleted: true,
+            }),
+            manager.findOne(BalanceEntity, {
+              where: { id: anteriorDestino.balance.id },
+              withDeleted: true,
+            }),
+          ]);
+          if (!saldoOrigem || !saldoDestino) {
+            throw new NotFoundException('Saldos da transferência não encontrados');
+          }
+          return {
+            balance: {
+              id: saldoDestino.id,
+              currentBalance: Number(saldoDestino.currentBalance),
+            },
+            originBalance: {
+              id: saldoOrigem.id,
+              currentBalance: Number(saldoOrigem.currentBalance),
+            },
+            movement: anteriorDestino,
+            fromEventId: dto.fromEventId,
+            toEventId: dto.toEventId,
+          };
+        }
+      }
+
+      const toEvent = toEventInicial ??
+        await this.eventService.assertEventOperavelById(dto.toEventId);
+
       // Todas as transferências bloqueiam os saldos pela mesma ordem de evento.
       // Sem isto, A→B e B→A podem bloquear origem/destino em ordem inversa.
       const saldosPorEvento = new Map<string, BalanceEntity>();
@@ -754,6 +873,8 @@ export class BalanceService {
         amount: montante,
         description: `Transferência para ${toEvent.name}`,
         createdById: actor?.id,
+        idempotencyKey,
+        requestHash,
       });
       await manager.save(BalanceMovementEntity, movOrigem);
 
@@ -763,6 +884,8 @@ export class BalanceService {
         amount: montante,
         description: `Transferência de ${fromEvent.name}`,
         createdById: actor?.id,
+        idempotencyKey,
+        requestHash,
       });
       await manager.save(BalanceMovementEntity, movDestino);
 
