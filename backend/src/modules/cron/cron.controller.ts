@@ -97,13 +97,13 @@ export class CronController {
   }
 
   /**
-   * Compara segredos sem revelar o comprimento através de uma saída antecipada.
-   * Os hashes têm sempre 32 bytes, pelo que timingSafeEqual nunca recebe
-   * buffers de comprimentos diferentes.
+   * Comparação em tempo constante para evitar ataques de temporização (timing attacks).
+   * O hash SHA-256 garante buffers de tamanho idêntico (32 bytes), evitando fuga
+   * do comprimento do segredo através do tempo de resposta.
    */
   private safeEqual(a: string, b: string): boolean {
-    const hashA = createHash('sha256').update(a, 'utf8').digest();
-    const hashB = createHash('sha256').update(b, 'utf8').digest();
+    const hashA = createHash('sha256').update(a).digest();
+    const hashB = createHash('sha256').update(b).digest();
     return timingSafeEqual(hashA, hashB);
   }
 }
