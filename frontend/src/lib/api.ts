@@ -240,11 +240,43 @@ export async function getOrdersByEvent(eventId: string): Promise<any> {
   return apiRequest(`/orders/event/${eventId}`);
 }
 
-export async function createOrder(data: any): Promise<any> {
-  return apiRequest('/orders', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
+export async function createOrder(data: any, idempotencyKey?: string): Promise<any> {
+  // Mantém a mesma chave em retries após timeout/erro de rede. Depois de uma
+  // resposta bem-sucedida, remove-a para permitir pedidos legítimos idênticos.
+  const fingerprint = JSON.stringify(data);
+  const storageKey = `senhasfestas:order-idempotency:${fingerprint}`;
+  let key = idempotencyKey;
+  if (!key && typeof window !== 'undefined') {
+    try {
+      key = window.sessionStorage.getItem(storageKey) ?? undefined;
+      if (!key) {
+        key = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        window.sessionStorage.setItem(storageKey, key);
+      }
+    } catch {
+      key = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+  }
+
+  try {
+    const result = await apiRequest('/orders', {
+      method: 'POST',
+      headers: key ? { 'Idempotency-Key': key } : undefined,
+      body: JSON.stringify(data),
+    });
+    if (!idempotencyKey && typeof window !== 'undefined') {
+      try { window.sessionStorage.removeItem(storageKey); } catch { /* storage opcional */ }
+    }
+    return result;
+  } catch (error) {
+    // 4xx definitivos não precisam de reutilizar a chave; 0/5xx podem ter
+    // ocorrido depois do commit e mantêm-na para uma repetição segura.
+    if (!idempotencyKey && typeof window !== 'undefined' && error instanceof ApiError &&
+        error.status >= 400 && error.status < 500 && error.status !== 409) {
+      try { window.sessionStorage.removeItem(storageKey); } catch { /* storage opcional */ }
+    }
+    throw error;
+  }
 }
 
 export async function updateOrderStatus(orderId: string, status: string): Promise<any> {
