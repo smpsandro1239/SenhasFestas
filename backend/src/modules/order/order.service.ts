@@ -239,8 +239,16 @@ export class OrderService {
   }
 
   private ehViolacaoUnica(error: unknown): boolean {
-    const err = error as { code?: string; driverError?: { code?: string } };
-    return err?.driverError?.code === '23505' || err?.code === '23505';
+    const err = error as {
+      code?: string;
+      constraint?: string;
+      driverError?: { code?: string; constraint?: string };
+    };
+    const driverError = err?.driverError ?? err;
+    return (
+      driverError?.code === '23505' &&
+      driverError?.constraint === 'UQ_orders_idempotency'
+    );
   }
 
   private async finalizarCriacao(
@@ -248,9 +256,11 @@ export class OrderService {
     eventId: string,
     replayed: boolean,
   ): Promise<any> {
+    // O evento de estado pode ser repetido sem efeitos financeiros. Se a
+    // primeira resposta falhou depois do commit, o retry volta a acordar o POS/KDS.
+    this.orderGateway.emitOrderUpdate(savedOrder.id, savedOrder.status, eventId);
     const qrCode = await this.qrCodeService.generateOrderQRCode(savedOrder.id);
     if (!replayed) {
-      this.orderGateway.emitOrderUpdate(savedOrder.id, savedOrder.status, eventId);
       await this.notificationService.notifyNewOrder(savedOrder.id);
     }
     const result = await this.findOne(savedOrder.id);
