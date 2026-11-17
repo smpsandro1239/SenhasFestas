@@ -979,7 +979,7 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
     const origem = { id: 'b-origem', currentBalance: 100 };
     const destino = { id: 'b-destino', currentBalance: 20 };
     const manager = {
-      findOne: vi.fn().mockResolvedValueOnce(origem).mockResolvedValueOnce(destino),
+      findOne: vi.fn().mockResolvedValueOnce(destino).mockResolvedValueOnce(origem),
       save: vi.fn().mockImplementation((_e: any, d: any) => Promise.resolve(d)),
       create: vi.fn().mockImplementation((_e: any, d: any) => d),
     };
