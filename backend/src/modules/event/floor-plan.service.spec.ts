@@ -6,10 +6,19 @@ import {
 } from '@nestjs/common';
 import { FloorPlanService } from './floor-plan.service';
 
+const mockUpdateQuery = {
+  update: vi.fn().mockReturnThis(),
+  set: vi.fn().mockReturnThis(),
+  where: vi.fn().mockReturnThis(),
+  andWhere: vi.fn().mockReturnThis(),
+  execute: vi.fn().mockResolvedValue({ affected: 1 }),
+};
+
 const mockFloorPlanRepository = {
   find: vi.fn(),
   findOne: vi.fn(),
   create: vi.fn(),
+  createQueryBuilder: vi.fn(() => mockUpdateQuery),
   save: vi.fn(),
   remove: vi.fn(),
   count: vi.fn(),
@@ -240,7 +249,7 @@ describe('FloorPlanService — obter/guardar (optimistic locking)', () => {
         version: 4,
       }),
     );
-    expect(mockFloorPlanRepository.save).toHaveBeenCalled();
+    expect(mockUpdateQuery.execute).toHaveBeenCalled();
   });
 
   it('guardar aceita payload sem zonas (compatibilidade)', async () => {
@@ -354,10 +363,11 @@ describe('FloorPlanService — obter/guardar (optimistic locking)', () => {
     } as any);
 
     expect(resultado.dimensoes).toEqual({ larguraM: 20.5, alturaM: 12 });
-    expect(mockFloorPlanRepository.save.mock.calls[0][0].documento.dimensoes).toEqual({
-      larguraM: 20.5,
-      alturaM: 12,
-    });
+    expect(mockUpdateQuery.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documento: expect.objectContaining({ dimensoes: { larguraM: 20.5, alturaM: 12 } }),
+      }),
+    );
   });
 
   it('guardar sem dimensões preserva as existentes', async () => {
