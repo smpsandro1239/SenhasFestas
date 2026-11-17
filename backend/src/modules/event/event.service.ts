@@ -226,13 +226,14 @@ export class EventService {
     userId: string,
     eventCode: string,
     replace: boolean,
-  ): Promise<{ eventId: string; eventName: string; replaces: number }> {
+  ): Promise<{ eventId: string; eventName: string; replaces: number; replacedEventIds: string[] }> {
     const evento = await this.findByCode(eventCode);
     const membroAtual = await this.eventUserRepository.findOne({
       where: { event: { id: evento.id }, user: { id: userId } },
     });
 
     let replaces = 0;
+    let replacedEventIds: string[] = [];
     if (replace) {
       const saldoNoutroEvento = await this.balanceRepository.findOne({
         where: {
@@ -249,7 +250,11 @@ export class EventService {
       }
       const anteriores = await this.eventUserRepository.find({
         where: { user: { id: userId }, event: { id: Not(evento.id) } },
+        relations: { event: true },
       });
+      replacedEventIds = anteriores
+        .map((membership) => membership.event?.id)
+        .filter((eventId): eventId is string => Boolean(eventId));
       if (anteriores.length > 0) {
         await this.eventUserRepository.remove(anteriores);
         replaces = anteriores.length;
@@ -260,9 +265,8 @@ export class EventService {
       await this.addUserRole(evento.id, userId, 'client');
     }
 
-    return { eventId: evento.id, eventName: evento.name, replaces };
+    return { eventId: evento.id, eventName: evento.name, replaces, replacedEventIds };
   }
-
   private validarShortCode(valor: string): string {
     const normalizado = normalizarShortCode(valor);
     if (!FORMATO_SHORT_CODE.test(normalizado)) {

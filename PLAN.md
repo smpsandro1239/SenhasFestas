@@ -387,6 +387,7 @@ como `D<n>`). Não confundir com os itens numerados do roadmap (no `TODO.md` com
 - Acertos com motivo → audit `STOCK_ADJUST`.
 
 ### Autenticação
+- `POST /auth/enter-event` com `replace=true` revoga também as rooms WebSocket dos eventos de membership substituídos; os IDs usados para a invalidação são internos e não integram a resposta HTTP.
 - Access token em memória, refresh token em cookie httpOnly same-origin.
 - Roles efectivas derivadas de `EventUserEntity` (event-role) dentro do evento;
   `superadmin` global é imune.

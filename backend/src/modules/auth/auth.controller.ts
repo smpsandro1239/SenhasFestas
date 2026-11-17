@@ -1,6 +1,7 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
+import { OrderGateway } from '../../websocket/order.gateway';
 import { IsString, IsEmail, MinLength, MaxLength, IsByteLength, IsOptional, IsIn, IsBoolean } from 'class-validator';
 import { Request, Response } from 'express';
 
@@ -99,7 +100,10 @@ export class RefreshTokenDto {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly orderGateway: OrderGateway,
+  ) {}
 
   private refreshTokenDe(req: Request, dto?: RefreshTokenDto): string {
     const cookie = (req.cookies as Record<string, string> | undefined)?.[REFRESH_COOKIE];
@@ -135,7 +139,15 @@ export class AuthController {
   @Post('enter-event')
   @HttpCode(HttpStatus.OK)
   async enterEvent(@Req() req: any, @Body() dto: EnterEventDto) {
-    return this.authService.entrar(req.user, dto.eventCode, dto.replace ?? false);
+    const resultado = await this.authService.entrar(req.user, dto.eventCode, dto.replace ?? false);
+    for (const eventId of resultado.replacedEventIds) {
+      this.orderGateway.revogarAcessoEvento(req.user.id, eventId);
+    }
+    return {
+      eventId: resultado.eventId,
+      eventName: resultado.eventName,
+      replaces: resultado.replaces,
+    };
   }
 
   @Post('refresh')

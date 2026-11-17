@@ -1,3 +1,22 @@
+## 2026-11-17 — T44: revogação no fluxo enter-event com replace=true
+
+**Problema confirmado**
+- `EventService.entrar()` removia memberships antigas quando `replace=true`, mas não comunicava os eventos afectados ao gateway. Sockets já ligados continuavam nas rooms de pedidos/planta.
+
+**Alterações**
+- `EventService.entrar()` carrega as relações dos memberships removidos e devolve internamente `replacedEventIds`.
+- `AuthService.entrar()` propaga esse resultado ao controller.
+- `AuthController.enterEvent()` chama `OrderGateway.revogarAcessoEvento()` para cada evento substituído.
+- A resposta HTTP mantém o contrato público anterior (`eventId`, `eventName`, `replaces`); os IDs internos nunca são expostos.
+- Criados testes para os IDs devolvidos pelo serviço e para a revogação/contrato da resposta no controller.
+
+**Validação**
+- A CI do commit `c9a23ed` passou em backend, frontend, Browser E2E, documentação e CodeQL.
+- Security continua bloqueado por 4 alertas altos transitivos de `picomatch` (GHSA-fc5q-39xc-vjpf); não foi aplicado downgrade major de TypeORM.
+- Esta nova alteração aguarda validação CI. Não declarar T44 concluída.
+
+---
+
 ## 2026-11-17 — T44: revogação imediata de rooms WebSocket
 
 **Problema confirmado**

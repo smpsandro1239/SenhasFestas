@@ -436,7 +436,7 @@ describe('EventService — entrar no evento (eventCode)', () => {
   it('sem replace cria o vínculo e devolve {eventId, eventName, replaces: 0}', async () => {
     const r = await service.entrar('user1', 'festa', false);
 
-    expect(r).toEqual({ eventId: 'evt2', eventName: 'Festa', replaces: 0 });
+    expect(r).toEqual({ eventId: 'evt2', eventName: 'Festa', replaces: 0, replacedEventIds: [] });
     expect(mockEventUserRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({ role: 'client' }),
     );
@@ -448,7 +448,7 @@ describe('EventService — entrar no evento (eventCode)', () => {
 
     const r = await service.entrar('user1', 'festa', false);
 
-    expect(r).toEqual({ eventId: 'evt2', eventName: 'Festa', replaces: 0 });
+    expect(r).toEqual({ eventId: 'evt2', eventName: 'Festa', replaces: 0, replacedEventIds: [] });
     expect(mockEventUserRepository.create).not.toHaveBeenCalled();
     expect(mockEventUserRepository.save).not.toHaveBeenCalled();
   });
@@ -469,13 +469,19 @@ describe('EventService — entrar no evento (eventCode)', () => {
   });
 
   it('replace sem saldo remove os memberships anteriores e devolve replaces', async () => {
-    const anteriores = [{ id: 'eu-old1' }, { id: 'eu-old2' }];
+    const anteriores = [
+      { id: 'eu-old1', event: { id: 'evt-old1' } },
+      { id: 'eu-old2', event: { id: 'evt-old2' } },
+    ];
     mockEventUserRepository.find.mockResolvedValue(anteriores);
 
     const r = await service.entrar('user1', 'festa', true);
 
-    expect(r).toEqual({ eventId: 'evt2', eventName: 'Festa', replaces: 2 });
+    expect(r).toEqual({ eventId: 'evt2', eventName: 'Festa', replaces: 2, replacedEventIds: ['evt-old1', 'evt-old2'] });
     expect(mockBalanceRepository.findOne).toHaveBeenCalled();
+    expect(mockEventUserRepository.find).toHaveBeenCalledWith(
+      expect.objectContaining({ relations: { event: true } }),
+    );
     expect(mockEventUserRepository.remove).toHaveBeenCalledWith(anteriores);
     expect(mockEventUserRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({ role: 'client' }),

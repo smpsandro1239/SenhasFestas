@@ -259,7 +259,7 @@ export class AuthService {
     user: UserEntity,
     eventCode: string,
     replace: boolean,
-  ): Promise<{ eventId: string; eventName: string; replaces: number }> {
+  ): Promise<{ eventId: string; eventName: string; replaces: number; replacedEventIds: string[] }> {
     return this.eventService.entrar(user.id, eventCode, replace);
   }
 
