@@ -2,6 +2,8 @@
 // Cookies ficam host-only no domínio do frontend — sem Domain, sem CORS, sem PSL.
 const API_BASE = '/api';
 
+import { clearOrderIdempotencyContext, getOrderIdempotencyContext } from './order-idempotency';
+
 const TIMEOUT_MS = 10000;
 
 const USER_KEY = 'user';
@@ -241,31 +243,10 @@ export async function getOrdersByEvent(eventId: string): Promise<any> {
 }
 
 export async function createOrder(data: any, idempotencyKey?: string): Promise<any> {
-  // Mantém a mesma chave em retries após timeout/erro de rede. Depois de uma
-  // resposta bem-sucedida, remove-a para permitir pedidos legítimos idênticos.
-  let storageKey: string | undefined;
-  let key = idempotencyKey;
-  if (!key && typeof window !== 'undefined') {
-    try {
-      // O fingerprint é SHA-256: não guardar o conteúdo do pedido (notas,
-      // quantidades ou dados do cliente) no nome de uma chave de storage.
-      const bytes = new TextEncoder().encode(JSON.stringify(data));
-      const digest = await window.crypto.subtle.digest('SHA-256', bytes);
-      const fingerprint = Array.from(new Uint8Array(digest))
-        .map((value) => value.toString(16).padStart(2, '0'))
-        .join('');
-      storageKey = `senhasfestas:order-idempotency:${fingerprint}`;
-      key = window.sessionStorage.getItem(storageKey) ?? undefined;
-      if (!key) {
-        key = window.crypto.randomUUID();
-        window.sessionStorage.setItem(storageKey, key);
-      }
-    } catch {
-      // Sem WebCrypto/storage, a chamada continua protegida no servidor para
-      // retries que reutilizem explicitamente a chave.
-      key = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    }
-  }
+  const context = !idempotencyKey && typeof window !== 'undefined'
+    ? await getOrderIdempotencyContext(data)
+    : undefined;
+  const key = idempotencyKey ?? context?.key;
 
   try {
     const result = await apiRequest('/orders', {
@@ -273,16 +254,14 @@ export async function createOrder(data: any, idempotencyKey?: string): Promise<a
       headers: key ? { 'Idempotency-Key': key } : undefined,
       body: JSON.stringify(data),
     });
-    if (!idempotencyKey && storageKey && typeof window !== 'undefined') {
-      try { window.sessionStorage.removeItem(storageKey); } catch { /* storage opcional */ }
-    }
+    if (context) clearOrderIdempotencyContext(context);
     return result;
   } catch (error) {
-    // 4xx definitivos não precisam de reutilizar a chave; 0/5xx podem ter
-    // ocorrido depois do commit e mantêm-na para uma repetição segura.
-    if (!idempotencyKey && storageKey && typeof window !== 'undefined' && error instanceof ApiError &&
-        error.status >= 400 && error.status < 500 && error.status !== 409) {
-      try { window.sessionStorage.removeItem(storageKey); } catch { /* storage opcional */ }
+    // 429 pode ser repetido com a mesma chave; os restantes 4xx são respostas
+    // definitivas, incluindo 409 por reutilização com payload diferente.
+    if (context && error instanceof ApiError &&
+        error.status >= 400 && error.status < 500 && error.status !== 429) {
+      clearOrderIdempotencyContext(context);
     }
     throw error;
   }
