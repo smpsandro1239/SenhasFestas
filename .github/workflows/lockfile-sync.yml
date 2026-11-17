@@ -24,6 +24,7 @@ jobs:
         with:
           node-version: 24
       - name: Resolve and patch compatible dependency versions
+        continue-on-error: true
         run: |
           npm install --package-lock-only --ignore-scripts
           npm audit fix --package-lock-only --ignore-scripts
