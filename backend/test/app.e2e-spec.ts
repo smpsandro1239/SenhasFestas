@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { Client } from 'pg';
 import request from 'supertest';
@@ -21,6 +21,12 @@ const PROBE_TIMEOUT_MS = 5000;
  * que gera códigos.
  */
 let contadorAccessCode = 100000;
+
+function chaveSaldoArmazenada(operation: 'reverse-load' | 'transfer', key: string): string {
+  return createHash('sha256')
+    .update(`senhasfestas:${operation}:${key}`)
+    .digest('hex');
+}
 
 function proximoAccessCode(): string {
   contadorAccessCode += 1;
@@ -547,7 +553,7 @@ describe('App e2e (Postgres + Redis)', () => {
       await dataSource.getRepository(BalanceMovementEntity).count({
         where: {
           createdById: caixa.user.id,
-          idempotencyKey: keyEstorno,
+          idempotencyKey: chaveSaldoArmazenada('reverse-load', keyEstorno),
           type: MovementType.CANCEL,
           reversedOfId: movimento.id,
         },
@@ -623,14 +629,14 @@ describe('App e2e (Postgres + Redis)', () => {
     expect(await movements.count({
       where: {
         createdById: caixa.user.id,
-        idempotencyKey: keyTransferencia,
+        idempotencyKey: chaveSaldoArmazenada('transfer', keyTransferencia),
         type: MovementType.CANCEL,
       },
     })).toBe(1);
     expect(await movements.count({
       where: {
         createdById: caixa.user.id,
-        idempotencyKey: keyTransferencia,
+        idempotencyKey: chaveSaldoArmazenada('transfer', keyTransferencia),
         type: MovementType.LOAD,
       },
     })).toBe(1);
