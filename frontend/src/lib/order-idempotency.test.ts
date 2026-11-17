@@ -86,4 +86,40 @@ describe('chaves de idempotência do POS', () => {
 
     expect(first.key).not.toBe(second.key);
   });
+  it('partilha uma chave quando duas chamadas concorrentes pedem o mesmo payload', async () => {
+    let sequence = 0;
+    let resolveDigest!: (value: ArrayBuffer) => void;
+    const digestPromise = new Promise<ArrayBuffer>((resolve) => {
+      resolveDigest = resolve;
+    });
+    const digest = vi.fn(() => digestPromise);
+    Object.defineProperty(window, 'crypto', {
+      configurable: true,
+      value: {
+        subtle: { digest },
+        randomUUID: vi.fn(() => `order-key-${++sequence}`),
+      },
+    });
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      value: {
+        getItem: vi.fn(() => null),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+      },
+    });
+
+    const payload = { eventId: 'event-1', items: [{ productId: 'p1', quantity: 1 }] };
+    const firstPromise = getOrderIdempotencyContext(payload);
+    const secondPromise = getOrderIdempotencyContext(payload);
+    resolveDigest(new ArrayBuffer(32));
+
+    const [first, second] = await Promise.all([firstPromise, secondPromise]);
+    contexts.push(first, second);
+
+    expect(first.key).toBe(second.key);
+    expect(digest).toHaveBeenCalledTimes(1);
+    expect(sequence).toBe(1);
+  });
+
 });
