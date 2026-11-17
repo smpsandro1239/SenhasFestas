@@ -574,9 +574,13 @@ describe('OrderService — cancelamento repõe stock (B1c)', () => {
   }
 
   function makeManager(produto: any) {
-    const itens = [{ quantity: 2, product: produto }];
+    const itens = [{ quantity: 2, product: { id: produto.id } }];
     return {
-      find: vi.fn().mockResolvedValue(itens),
+      find: vi.fn().mockImplementation((entity: any) =>
+        entity === OrderItemEntity ? Promise.resolve(itens) :
+        entity === ProductEntity ? Promise.resolve([produto]) :
+        Promise.resolve([]),
+      ),
       findOne: vi.fn().mockImplementation((entity: any) =>
         entity === EventUserEntity
           ? Promise.resolve({ id: 'm1' })
