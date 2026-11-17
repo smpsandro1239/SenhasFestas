@@ -161,14 +161,14 @@ jobs:
       FRONTEND_URL: http://localhost:3001
       RATE_LIMIT_MAX: 1000
       BOOTSTRAP_ADMIN_EMAIL: admin@senhasfestas.com
-      BOOTSTRAP_ADMIN_PASSWORD: admin123
+      BOOTSTRAP_ADMIN_PASSWORD: SenhasFestas-CI-2026!
       NEXT_PUBLIC_API_URL: http://localhost:3000
       NEXT_PUBLIC_WS_URL: ws://localhost:3000
       E2E_BASE_URL: http://localhost:3001
       E2E_API_URL: http://localhost:3000/api
       E2E_CHANNEL: chromium
       E2E_ADMIN_EMAIL: admin@senhasfestas.com
-      E2E_ADMIN_PASSWORD: admin123
+      E2E_ADMIN_PASSWORD: SenhasFestas-CI-2026!
     steps:
       - uses: actions/checkout@v4
 
