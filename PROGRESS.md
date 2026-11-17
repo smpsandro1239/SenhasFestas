@@ -13,6 +13,29 @@
 
 ---
 
+## 2026-11-17 — Hardening de rate limit e segurança dos E2E (T36/T37)
+
+**Objectivo**: fechar duas falhas de segurança identificadas no último estado do repositório: rate limit que podia falhar aberto com Redis indisponível e testes E2E capazes de executar operações destrutivas numa BD remota.
+
+**Feito na branch `codex/autonomous-hardening-2026-11`**
+- Redis: adicionados `getStrict` e `incrementWithTtlStrict`; as APIs tolerantes existentes mantêm o comportamento de degradação para consumidores não críticos.
+- Rate limit global: passa a usar o incremento estrito; qualquer falha Redis segue para o contador local.
+- Rate limit de login: usa leitura/incremento estritos; falhas Redis são contabilizadas localmente, incluindo falha ocorrida depois de a resposta 401 ser enviada. O contador local continua a ser verificado após recuperação do Redis.
+- E2E: criado `backend/test/e2e-database-safety.ts`; exige `E2E_ALLOW_SCHEMA_RESET=true`, host loopback e base de dados com sufixo `_test` ou `_e2e`. O helper também respeita `DB_SSL` e `sslmode`.
+- Os specs `app.e2e-spec.ts` e `rate-limit.e2e-spec.ts` validam o destino antes de inicializar a aplicação; o CI declara explicitamente o opt-in nos jobs E2E.
+- Adicionados testes unitários para indisponibilidade Redis, fallback local e bloqueio de destinos E2E remotos/não descartáveis.
+
+**Gates e limitações**
+- **Ainda não executados**: `tsc`, Vitest, build e lint do backend; gates do frontend.
+- O ambiente desta sessão não tem checkout local nem conectividade de rede para clonar o repositório. As alterações estão na branch remota; a validação completa terá de ser feita pelo CI da pull request antes de qualquer merge.
+- Não foi executado qualquer E2E contra a BD configurada. A nova barreira foi desenhada para bloquear hosts remotos e exige opt-in explícito.
+
+**Pendente**
+- Abrir/validar PR draft e analisar os resultados do CI.
+- Corrigir eventuais falhas de typecheck/testes reveladas pelo CI antes de considerar T36/T37 concluídos.
+
+---
+
 ## 2026-10-22 — Corrigir o que o CI real revelou (T31/T32/T33)
 
 **Objectivo**: corrigir as três causas que o primeiro CI real deixou veridas
