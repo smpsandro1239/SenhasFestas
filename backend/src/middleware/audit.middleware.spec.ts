@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Logger } from '@nestjs/common';
 import { RateLimitMiddleware, LoginRateLimitMiddleware, RequestLogMiddleware } from './audit.middleware';
 
-function fakeReq(ip = '1.2.3.4', email?: string) {
-  return { ip, body: email ? { email } : {} } as any;
+function fakeReq(ip = '1.2.3.4', email?: string, path = '/api/test') {
+  return { ip, path, body: email ? { email } : {} } as any;
 }
 
 function fakeRes() {
@@ -29,9 +29,11 @@ describe('RateLimitMiddleware — fallback local quando Redis falha', () => {
 
   let middleware: RateLimitMiddleware;
   const limiteOriginal = process.env.RATE_LIMIT_MAX;
+  const nodeEnvOriginal = process.env.NODE_ENV;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    redisService.isEnabled = true;
     process.env.RATE_LIMIT_MAX = '2';
     middleware = new RateLimitMiddleware(redisService as any);
   });
@@ -39,7 +41,51 @@ describe('RateLimitMiddleware — fallback local quando Redis falha', () => {
   afterEach(() => {
     if (limiteOriginal === undefined) delete process.env.RATE_LIMIT_MAX;
     else process.env.RATE_LIMIT_MAX = limiteOriginal;
+    if (nodeEnvOriginal === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = nodeEnvOriginal;
   });
+
+  it('falha fechado em produção quando Redis não está configurado', async () => {
+    process.env.NODE_ENV = 'production';
+    redisService.isEnabled = false;
+    const res = fakeRes();
+    const next = vi.fn();
+
+    await middleware.use(fakeReq(), res, next);
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '30');
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('falha fechado em produção quando Redis deixa de responder', async () => {
+    process.env.NODE_ENV = 'production';
+    redisService.incrementWithTtlStrict.mockRejectedValue(new Error('ECONNREFUSED'));
+    const res = fakeRes();
+    const next = vi.fn();
+
+    await middleware.use(fakeReq(), res, next);
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '30');
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it.each(['/api/health', '/api/health/ready', '/api/health/live'])(
+    'mantém o endpoint %s acessível quando Redis não está configurado em produção',
+    async (path) => {
+      process.env.NODE_ENV = 'production';
+      redisService.isEnabled = false;
+      const res = fakeRes();
+      const next = vi.fn();
+
+      await middleware.use(fakeReq('1.2.3.4', undefined, path), res, next);
+
+      expect(next).toHaveBeenCalledOnce();
+      expect(res.status).not.toHaveBeenCalled();
+      expect(redisService.incrementWithTtlStrict).not.toHaveBeenCalled();
+    },
+  );
 
   it('usa o incremento Redis estrito e atómico quando disponível', async () => {
     redisService.incrementWithTtlStrict.mockResolvedValue(2);
