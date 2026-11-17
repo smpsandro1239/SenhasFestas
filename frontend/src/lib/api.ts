@@ -1,8 +1,8 @@
+import { clearOrderIdempotencyContext, getOrderIdempotencyContext } from './order-idempotency';
+
 // Sessão same-origin: o Next rewrite /api/:path* encaminha para a API.
 // Cookies ficam host-only no domínio do frontend — sem Domain, sem CORS, sem PSL.
 const API_BASE = '/api';
-
-import { clearOrderIdempotencyContext, getOrderIdempotencyContext } from './order-idempotency';
 
 const TIMEOUT_MS = 10000;
 
