@@ -257,7 +257,26 @@ describe('CatalogService', () => {
         1,
         20,
         expect.objectContaining({ includeInactive: false }),
+        undefined,
       );
+    });
+  });
+
+  describe('findCategories', () => {
+    it('filtra categorias pelos eventos da membership', async () => {
+      mockCategoryRepository.find.mockResolvedValue([]);
+
+      await service.findCategories(['e1', 'e2']);
+
+      expect(mockCategoryRepository.find).toHaveBeenCalledWith({
+        where: { isActive: true, event: { id: In(['e1', 'e2']) } },
+        order: { sortOrder: 'ASC', name: 'ASC' },
+      });
+    });
+
+    it('não consulta categorias sem memberships', async () => {
+      await expect(service.findCategories([])).resolves.toEqual([]);
+      expect(mockCategoryRepository.find).not.toHaveBeenCalled();
     });
   });
 
