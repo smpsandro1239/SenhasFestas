@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi } from 'vitest';
 import { KitchenService } from './kitchen.service';
-import { BalanceMovementEntity, MovementType } from '../../entities';
+import { BalanceMovementEntity, MovementType, OrderItemEntity, ProductEntity } from '../../entities';
 
 describe('KitchenService — cancelamento via atualizarEstado deve reembolsar saldo (B1-kitchen)', () => {
   it('reembolsa o saldo consumido quando cancela por status (RED)', async () => {
@@ -69,10 +69,19 @@ describe('KitchenService — cancelar repõe o stock físico (melhoria #6)', () 
     const produtoSalvo = vi.fn();
     orderRepository.manager.transaction = vi.fn().mockImplementation(async (fn: any) =>
       fn({
-        find: vi.fn().mockResolvedValue([
-          { quantity: 2, product: { id: 'p1', stock: 3 } },
-          { quantity: 1, product: { id: 'p2', stock: null } },
-        ]),
+        find: vi.fn().mockImplementation((entity: any) =>
+          entity === OrderItemEntity
+            ? Promise.resolve([
+                { quantity: 2, product: { id: 'p1' } },
+                { quantity: 1, product: { id: 'p2' } },
+              ])
+            : entity === ProductEntity
+              ? Promise.resolve([
+                  { id: 'p1', stock: 3 },
+                  { id: 'p2', stock: null },
+                ])
+              : Promise.resolve([]),
+        ),
         findOne: vi.fn().mockResolvedValue({
           id: 'o1',
           status: 'preparing',
