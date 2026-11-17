@@ -1,7 +1,12 @@
+export type OrderIdempotencyOutcome = 'success' | 'definitive-error' | 'ambiguous-error';
+
 export interface OrderIdempotencyContext {
   key: string;
   memoryKey: string;
   storageKey?: string;
+  inFlight: number;
+  successObserved: boolean;
+  ambiguousFailure: boolean;
 }
 
 const inMemoryKeys = new Map<string, OrderIdempotencyContext | Promise<OrderIdempotencyContext>>();
@@ -21,10 +26,6 @@ function createRandomKey(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
-/**
- * Reutiliza uma chave entre retries do mesmo payload.
- * O payload só existe como chave de Map em memória; nunca é persistido no storage.
- */
 async function criarContexto(serialized: string, memoryKey: string): Promise<OrderIdempotencyContext> {
   let storageKey: string | undefined;
   let key: string | undefined;
@@ -47,7 +48,14 @@ async function criarContexto(serialized: string, memoryKey: string): Promise<Ord
   }
 
   if (!key) key = createRandomKey();
-  const context: OrderIdempotencyContext = { key, memoryKey, storageKey };
+  const context: OrderIdempotencyContext = {
+    key,
+    memoryKey,
+    storageKey,
+    inFlight: 0,
+    successObserved: false,
+    ambiguousFailure: false,
+  };
 
   if (storageKey && typeof window !== 'undefined') {
     try {
@@ -60,13 +68,18 @@ async function criarContexto(serialized: string, memoryKey: string): Promise<Ord
   return context;
 }
 
-/** Reutiliza a mesma chave mesmo quando várias submissões começam em paralelo. */
+/**
+ * Reutiliza a mesma chave entre retries do mesmo payload, incluindo submissões
+ * concorrentes. O payload só existe como chave do Map em memória.
+ */
 export async function getOrderIdempotencyContext(data: unknown): Promise<OrderIdempotencyContext> {
   const serialized = JSON.stringify(data) ?? 'null';
   const memoryKey = serialized;
   const cached = inMemoryKeys.get(memoryKey);
   if (cached) {
-    return cached instanceof Promise ? cached : Promise.resolve(cached);
+    const context = await cached;
+    context.inFlight += 1;
+    return context;
   }
 
   const pending = criarContexto(serialized, memoryKey).then((context) => {
@@ -82,14 +95,14 @@ export async function getOrderIdempotencyContext(data: unknown): Promise<OrderId
   });
 
   inMemoryKeys.set(memoryKey, pending);
-  return pending;
+  const context = await pending;
+  context.inFlight += 1;
+  return context;
 }
 
 export function clearOrderIdempotencyContext(context: OrderIdempotencyContext): void {
   const current = inMemoryKeys.get(context.memoryKey);
-  if (current && !(current instanceof Promise) && current.key === context.key) {
-    inMemoryKeys.delete(context.memoryKey);
-  }
+  if (current === context) inMemoryKeys.delete(context.memoryKey);
 
   if (context.storageKey && typeof window !== 'undefined') {
     try {
@@ -99,5 +112,26 @@ export function clearOrderIdempotencyContext(context: OrderIdempotencyContext): 
     } catch {
       /* O storage é opcional; não pode impedir o tratamento da resposta da API. */
     }
+  }
+}
+
+/**
+ * Só limpa a chave quando todas as tentativas concorrentes terminaram.
+ * Um erro ambíguo mantém a chave disponível para retry, salvo se outra tentativa
+ * com a mesma chave já confirmou o pedido.
+ */
+export function releaseOrderIdempotencyContext(
+  context: OrderIdempotencyContext,
+  outcome: OrderIdempotencyOutcome,
+): void {
+  if (context.inFlight > 0) context.inFlight -= 1;
+  if (outcome === 'success') context.successObserved = true;
+  if (outcome === 'ambiguous-error') context.ambiguousFailure = true;
+
+  if (
+    context.inFlight === 0 &&
+    (context.successObserved || !context.ambiguousFailure)
+  ) {
+    clearOrderIdempotencyContext(context);
   }
 }
