@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { OrderService } from './order.service';
 import { EventService } from '../event/event.service';
-import { BalanceMovementEntity, BalanceEntity, EventUserEntity, MovementType, OrderEntity, ProductEntity } from '../../entities';
+import { BalanceMovementEntity, BalanceEntity, EventUserEntity, MovementType, OrderEntity, OrderItemEntity, ProductEntity } from '../../entities';
 
 describe('OrderService — guard de janela operacional', () => {
   const eventService = {
