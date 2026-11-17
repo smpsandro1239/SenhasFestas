@@ -417,3 +417,11 @@ como `D<n>`). Não confundir com os itens numerados do roadmap (no `TODO.md` com
 
 Ver `REVIEW.md`. Resumo: PT europeu, helpers puros testáveis (FIRST), gates
 completos antes de commit, commits atómicos, push só com autorização.
+
+## T39 — Governação de segurança do repositório
+- Adicionar política de divulgação responsável em `SECURITY.md`.
+- Activar Dependabot para dependências npm/workspaces e GitHub Actions.
+- Adicionar análise estática CodeQL para JavaScript/TypeScript.
+- Definir permissões mínimas por omissão no workflow CI (`contents: read`).
+- Corrigir instruções de contribuição para usar npm workspaces, instalar uma única vez na raiz e executar gates relevantes.
+- Validar os workflows e a documentação pelo GitHub Actions antes de considerar concluído.
