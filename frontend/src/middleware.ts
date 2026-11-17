@@ -27,8 +27,16 @@ function matchesGate(pathname: string): string | null {
 function criarPoliticaCsp(request: NextRequest): { headers: Headers; policy: string } {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   const nonce = btoa(String.fromCharCode(...bytes));
-  const apiOrigin = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\\/+$/, '').replace(/\\/api$/, '');
-  const wsOrigin = (process.env.NEXT_PUBLIC_WS_URL || '').replace(/\\/+$/, '');
+  const originOf = (value: string | undefined): string => {
+    if (!value) return '';
+    try {
+      return new URL(value).origin;
+    } catch {
+      return '';
+    }
+  };
+  const apiOrigin = originOf(process.env.NEXT_PUBLIC_API_URL);
+  const wsOrigin = originOf(process.env.NEXT_PUBLIC_WS_URL);
   const connectSrc = ["'self'", apiOrigin, wsOrigin].filter(Boolean).join(' ');
   const scriptSrc =
     process.env.NODE_ENV === 'production'
@@ -116,7 +124,7 @@ export async function middleware(request: NextRequest) {
     }
     const loginUrl = new URL('/auth/login', request.url);
     loginUrl.searchParams.set('from', pathname);
-    return NextResponse.redirect(loginUrl);
+    return redirecionar(loginUrl);
   }
 
   const gate = matchesGate(pathname);
@@ -129,12 +137,9 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // `/auth`, `/publico`, `/api`, `/entrar` e `/mesa` não precisam do
-    // middleware: são públicas por definição (ver PUBLIC_PATHS). Excluí-las
-    // aqui evita instanciar o `jose` e percorrer o middleware em cada pedido
-    // de quem só está a ver o ecrã público — a rota de maior tráfego, num
-    // evento cheio de clientes. O QR da mesa (rota turbilhão de tráfego na
-    // entrada dos eventos) fica acessível a quem não tem sessão.
+    // Páginas públicas também passam pelo middleware para receber CSP nonce.
+    // Só API e assets estáticos são excluídos; as páginas de autenticação,
+    // público e QR continuam sem exigir sessão via isPublic().
     '/((?!_next/static|_next/image|favicon.ico|api(?:/|$)|.*\\.(?:png|jpg|jpeg|svg|webp|gif|ico|css|js|txt|xml|woff2?|map|json|webmanifest)$).*)',
   ],
 };
