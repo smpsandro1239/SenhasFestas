@@ -39,6 +39,7 @@ O registo executável de migrations está em `backend/src/database/migrations/in
 | `1790400000000` | `AddEventFloorPlan` | Adiciona documento JSONB e versão da planta de mesas aos eventos. |
 | `1790500000000` | `FloorPlanZonas` | Normaliza o formato legado da planta para documento com mesas e zonas. |
 | `1790600000000` | `CreateFloorPlans` | Cria plantas múltiplas por evento, com documento JSONB, versão, FK com cascade, índices e backfill da planta Principal; remove o armazenamento legado de `events`. |
+| `1794860000000` | `AddOrderIdempotency` | Acrescenta criador, chave de idempotência e hash do payload aos pedidos; índice único parcial por evento/utilizador/chave para impedir pedidos duplicados em retries concorrentes. |
 
 ---
 
@@ -52,7 +53,7 @@ O registo executável de migrations está em `backend/src/database/migrations/in
 4. **EventUserEntity** — `event_users`: junção `event`+`user` (+índice único por par), `role`.
 5. **CategoryEntity** — `categories`: `event` (+índice), `name`, `description`, `sortOrder`, `isActive`.
 6. **ProductEntity** — `products`: `event`, `category` (+índices), `name`, `description`, `price` (decimal 10,2), `availability` (enum), `stock`, `imageUrl`, `isActive`, `options`/`modifiers` (jsonb), `kitchenName`, `deletedAt`.
-7. **OrderEntity** — `orders`: `event` (+índice com `createdAt`), itens em cascata, `source` (`qr`/`pos`), `status` (enum recebido→preparar→pronto→entregue/cancelado), `tableNumber`, `station`, `paymentMethod`, `total`, `balanceUsed`.
+7. **OrderEntity** — `orders`: `event` (+índice com `createdAt`), itens em cascata, `source` (`qr`/`pos`), `status` (enum recebido→preparar→pronto→entregue/cancelado), `tableNumber`, `station`, `paymentMethod`, `total`, `balanceUsed`, `createdById`, `idempotencyKey` e `requestHash` (idempotência de criação).
 8. **OrderItemEntity** — `order_items`: `order` (cascata), `product`, `quantity`, `unitPrice`, `subtotal`, `notes`.
 9. **BalanceEntity** — `balances`: `user`+`event` (único por par), `currentBalance`, `archivedAt`, `extendedUntil`, `notifiedAt`, `deletedAt`.
 10. **BalanceMovementEntity** — `balance_movements`: `balance` (+índice com `createdAt`), `type` (enum `load`/`consume`/`refund`/`cancel`), `amount`, `description`, `orderId`, `reversed`, `reversedAt`, `reversedOfId`, `createdById`.
