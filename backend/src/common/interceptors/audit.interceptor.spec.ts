@@ -194,6 +194,7 @@ describe('AuditInterceptor — before/after', () => {
   });
 
   it('classifica importações, duplicações e alterações de membros com acções específicas', async () => {
+    const USER_ID = 'c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f';
     await correr(fazerReq('POST', '/api/products/import'), { imported: 2 });
     await correr(fazerReq('POST', `/api/products/${EVENT_ID}/duplicate`), { id: EVENT_ID });
     await correr(fazerReq('DELETE', `/api/events/${EVENT_ID}/members/${USER_ID}`), { ok: true });
