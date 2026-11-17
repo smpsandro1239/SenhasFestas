@@ -724,14 +724,36 @@ describe('OrderService — snapshot anterior para auditoria (arquivar)', () => {
 
   it('updateStatus arquiva o estado anterior e o evento', async () => {
     const orderRepo = {
-      findOne: vi.fn().mockResolvedValue({ id: 'o1', status: 'received', event: { id: 'evt1' } }),
+      findOne: vi.fn().mockResolvedValue({
+        id: 'o1',
+        status: 'received',
+        total: 12.5,
+        balanceUsed: 0,
+        paymentMethod: 'cash',
+        balanceId: null,
+        event: { id: 'evt1' },
+      }),
     };
     const svc = svcCom(orderRepo, managerBase());
     const arquivar = vi.fn();
 
     await svc.updateStatus('o1', 'cancelled', { id: 'u1', role: 'superadmin' }, arquivar);
 
-    expect(arquivar).toHaveBeenCalledWith({ antes: { status: 'received' }, eventId: 'evt1' });
+    expect(arquivar).toHaveBeenCalledWith({
+      antes: {
+        status: 'received',
+        total: 12.5,
+        balanceUsed: 0,
+        paymentMethod: 'cash',
+        balanceId: null,
+      },
+      eventId: 'evt1',
+      extras: {
+        transition: 'received -> cancelled',
+        stockRestorationProcessed: true,
+        refundAmount: 0,
+      },
+    });
   });
 
   it('cancelOrder arquiva o estado anterior e o evento', async () => {
@@ -743,7 +765,20 @@ describe('OrderService — snapshot anterior para auditoria (arquivar)', () => {
 
     await svc.cancelOrder('o1', { id: 'u1', role: 'superadmin' }, arquivar);
 
-    expect(arquivar).toHaveBeenCalledWith({ antes: { status: 'received' }, eventId: 'evt1' });
+    expect(arquivar).toHaveBeenCalledWith({
+      antes: {
+        status: 'received',
+        total: 12.5,
+        balanceUsed: 0,
+        paymentMethod: 'cash',
+        balanceId: null,
+      },
+      eventId: 'evt1',
+      extras: {
+        stockRestorationProcessed: true,
+        refundAmount: 0,
+      },
+    });
   });
 });
 
