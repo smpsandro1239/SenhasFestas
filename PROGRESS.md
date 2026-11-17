@@ -49,7 +49,7 @@
 - T38/D19 registado no plano e TODO.
 
 **Gates**
-- O CI do commit anterior reportou 498/500 testes backend: dois testes recém-adicionados falharam por ambiente DB_SSL herdado e por o teste não validar correctamente a transição do fallback local. A branch foi corrigida; o teste SSL passa explicitamente `DB_SSL=false` no cenário local.
+- O CI do commit anterior reportou 498/500 testes backend: dois testes recém-adicionados falharam por ambiente DB_SSL herdado e por o teste não validar correctamente a transição do fallback local. A branch foi corrigida; o teste SSL passa explicitamente `DB_SSL=false` no cenário local. Foi ainda fechado o caso mais perigoso: URL remota escondida em `.env.development`/`.env`, carregando os mesmos ficheiros antes do bootstrap Nest.
 - O run do commit com o isolamento SSL foi colocado em fila. As alterações PWA e a auditoria geraram novos commits depois desse SHA; o CI do HEAD mais recente ainda tem de ser confirmado.
 - Não foi executado teste browser local nem operação contra BD de produção.
 
