@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Redis } from 'ioredis';
-import { EventUserEntity } from '../entities';
+import { EventUserEntity, UserEntity } from '../entities';
 import { RedisService } from '../common/redis/redis.service';
 import { MembershipService } from '../common/membership.service';
 import { MANAGEMENT_ROLES } from '../common/roles';
@@ -60,6 +60,8 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     private readonly membershipService: MembershipService,
     @InjectRepository(EventUserEntity)
     private readonly eventUserRepository: Repository<EventUserEntity>,
+    @InjectRepository(UserEntity)
+    private readonly userRepository: Repository<UserEntity>,
   ) {
     this.setupDistributedSubscriber();
     this.cleanupTimer = setInterval(() => this.limparMemoria(), 60_000);
@@ -131,17 +133,41 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       if (!rawToken || typeof rawToken !== 'string') {
         throw new Error('token em falta');
       }
-      const payload = this.jwtService.verify<{ sub: string; role: string }>(rawToken, {
+      const payload = this.jwtService.verify<{ sub: string; role: string; exp?: number }>(rawToken, {
         algorithms: ['HS256'],
         issuer: 'senhasfestas-api',
         audience: 'senhasfestas-app',
       });
-      if (!payload?.sub) {
-        throw new Error('token inválido');
+      const tokenExp = payload?.exp;
+      if (
+        !payload?.sub ||
+        typeof tokenExp !== 'number' ||
+        !Number.isInteger(tokenExp) ||
+        tokenExp * 1000 <= Date.now()
+      ) {
+        throw new Error('token inválido ou sem expiração');
       }
-      client.data.user = { id: payload.sub, role: payload.role };
 
-      const ok = await this.registarSocket(payload.sub, client.id);
+      // O socket não é automaticamente encerrado pelo Socket.IO quando o JWT
+      // expira. Forçamos a desconexão no instante da expiração do access token.
+      const authTimeout = setTimeout(
+        () => client.disconnect(true),
+        Math.max(0, tokenExp * 1000 - Date.now()),
+      );
+      authTimeout.unref?.();
+      client.data.authTimeout = authTimeout;
+
+      // A role do JWT pode estar desatualizada (ex.: utilizador despromovido).
+      // A identidade e o estado ativo são sempre confirmados na BD.
+      const utilizador = await this.userRepository.findOne({
+        where: { id: payload.sub, isActive: true },
+      });
+      if (!utilizador) {
+        throw new Error('utilizador inexistente ou inativo');
+      }
+      client.data.user = { id: utilizador.id, role: utilizador.role };
+
+      const ok = await this.registarSocket(utilizador.id, client.id);
       if (!ok) {
         this.logger.warn(`Limite de sockets por utilizador excedido: ${payload.sub}`);
         client.disconnect(true);
@@ -153,6 +179,11 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
   }
 
   async handleDisconnect(client: Socket) {
+    const authTimeout = client.data?.authTimeout as NodeJS.Timeout | undefined;
+    if (authTimeout) {
+      clearTimeout(authTimeout);
+      delete client.data.authTimeout;
+    }
     const user = client.data?.user as { id?: string } | undefined;
     if (user?.id) {
       await this.removerSocket(user.id, client.id);
@@ -265,9 +296,17 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       client.emit('error', { message: 'Demasiados pedidos, aguarde um pouco' });
       return;
     }
-    if (user.role !== 'superadmin') {
+    const utilizadorAtual = await this.userRepository.findOne({
+      where: { id: user.id, isActive: true },
+    });
+    if (!utilizadorAtual) {
+      client.disconnect(true);
+      return;
+    }
+    client.data.user = { id: utilizadorAtual.id, role: utilizadorAtual.role };
+    if (utilizadorAtual.role !== 'superadmin') {
       const membership = await this.eventUserRepository.findOne({
-        where: { event: { id: eventId }, user: { id: user.id } },
+        where: { event: { id: eventId }, user: { id: utilizadorAtual.id } },
       });
       if (!membership) {
         client.emit('error', { message: 'Não pertence a este evento' });
@@ -294,9 +333,18 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       client.emit('error', { message: 'eventId inválido' });
       return;
     }
+    const utilizadorAtual = await this.userRepository.findOne({
+      where: { id: user.id, isActive: true },
+    });
+    if (!utilizadorAtual) {
+      client.disconnect(true);
+      return;
+    }
+    client.data.user = { id: utilizadorAtual.id, role: utilizadorAtual.role };
+
     let role: string;
     try {
-      role = await this.membershipService.roleEfetiva(user, eventId);
+      role = await this.membershipService.roleEfetiva(client.data.user, eventId);
     } catch {
       client.emit('error', { message: 'Não pertence a este evento' });
       return;
