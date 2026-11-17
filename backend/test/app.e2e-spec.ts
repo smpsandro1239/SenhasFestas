@@ -761,4 +761,70 @@ describe('App e2e (Postgres + Redis)', () => {
     ).toBe(1);
   });
 
+
+  it('reembolsa e repõe stock uma única vez quando dois fluxos cancelam a mesma encomenda', async () => {
+    const dataSource = app.get(DataSource);
+    const caixa = await criarCaixaComEvento('cancel-race');
+    const { email } = await criarUtilizadorTeste(`order-cancel-race-${randomUUID()}@example.com`);
+    const cliente = await dataSource.getRepository(UserEntity).findOneByOrFail({ email });
+    const eventUsers = dataSource.getRepository(EventUserEntity);
+    await eventUsers.save(eventUsers.create({
+      event: caixa.event,
+      user: cliente,
+      role: 'client',
+    }));
+
+    const balanceRepository = dataSource.getRepository(BalanceEntity);
+    const saldoInicial = await balanceRepository.save(
+      balanceRepository.create({
+        user: cliente,
+        event: caixa.event,
+        currentBalance: 50,
+      }),
+    );
+    const products = dataSource.getRepository(ProductEntity);
+    const product = await products.save(
+      products.create({
+        event: caixa.event,
+        name: 'E2E Produto cancelamento concorrente',
+        price: 10,
+        stock: 2,
+        isActive: true,
+      }),
+    );
+
+    const orderService = app.get(OrderService);
+    const order = await orderService.create(cliente, {
+      eventId: caixa.event.id,
+      source: 'pos',
+      paymentMethod: 'balance',
+      balanceId: saldoInicial.id,
+      balanceUsed: 10,
+      items: [{ productId: product.id, quantity: 1 }],
+    } as any);
+
+    const resultados = await Promise.allSettled([
+      orderService.cancelOrder(order.id, caixa.user),
+      orderService.updateStatus(order.id, 'cancelled', caixa.user),
+    ]);
+    expect(resultados.filter((resultado) => resultado.status === 'fulfilled')).toHaveLength(1);
+    expect(resultados.filter((resultado) => resultado.status === 'rejected')).toHaveLength(1);
+
+    const pedidoFinal = await dataSource.getRepository(OrderEntity).findOneByOrFail({ id: order.id });
+    const saldoFinal = await balanceRepository.findOneByOrFail({ id: saldoInicial.id });
+    const produtoFinal = await products.findOneByOrFail({ id: product.id });
+    const movements = dataSource.getRepository(BalanceMovementEntity);
+
+    expect(pedidoFinal.status).toBe('cancelled');
+    expect(Number(saldoFinal.currentBalance)).toBe(50);
+    expect(Number(produtoFinal.stock)).toBe(2);
+    expect(await movements.count({
+      where: { orderId: order.id, type: MovementType.CONSUME },
+    })).toBe(1);
+    expect(await movements.count({
+      where: { orderId: order.id, type: MovementType.REFUND },
+    })).toBe(1);
+  });
+
+
 });
