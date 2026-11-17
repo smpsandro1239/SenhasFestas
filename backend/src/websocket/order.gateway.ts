@@ -1,4 +1,4 @@
-import { WebSocketGateway, WebSocketServer, SubscribeMessage, OnGatewayConnection, OnGatewayDisconnect, MessageBody, ConnectedSocket } from '@nestjs/websockets';
+import { WebSocketGateway, WebSocketServer, SubscribeMessage, Ack, OnGatewayConnection, OnGatewayDisconnect, MessageBody, ConnectedSocket } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger, OnModuleDestroy } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -282,18 +282,26 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
   }
 
   @SubscribeMessage(MENSAGENS_ENTRADA.evento)
-  async handleJoinEvent(@ConnectedSocket() client: Socket, @MessageBody() eventId: string) {
+  async handleJoinEvent(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() eventId: string,
+    @Ack() ack?: (resultado: { ok: boolean; message?: string }) => void,
+  ) {
+    const rejeitar = (message: string) => {
+      client.emit('error', { message });
+      ack?.({ ok: false, message });
+    };
     const user = client.data?.user;
     if (!user) {
-      client.emit('error', { message: 'Não autenticado' });
+      rejeitar('Não autenticado');
       return;
     }
     if (!eventId || typeof eventId !== 'string') {
-      client.emit('error', { message: 'eventId inválido' });
+      rejeitar('eventId inválido');
       return;
     }
     if (!(await this.contarJoin(user.id))) {
-      client.emit('error', { message: 'Demasiados pedidos, aguarde um pouco' });
+      rejeitar('Demasiados pedidos, aguarde um pouco');
       return;
     }
     const utilizadorAtual = await this.userRepository.findOne({
@@ -301,6 +309,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     });
     if (!utilizadorAtual) {
       client.disconnect(true);
+      ack?.({ ok: false, message: 'Utilizador inativo' });
       return;
     }
     client.data.user = { id: utilizadorAtual.id, role: utilizadorAtual.role };
@@ -309,11 +318,12 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
         where: { event: { id: eventId }, user: { id: utilizadorAtual.id } },
       });
       if (!membership) {
-        client.emit('error', { message: 'Não pertence a este evento' });
+        rejeitar('Não pertence a este evento');
         return;
       }
     }
-    client.join(roomEvento(eventId));
+    await client.join(roomEvento(eventId));
+    ack?.({ ok: true });
   }
 
   /**
@@ -323,14 +333,22 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
    * cozinha) receberia metadados de planta que não pode obter por HTTP.
    */
   @SubscribeMessage(MENSAGENS_ENTRADA.planta)
-  async handleJoinEventPlanta(@ConnectedSocket() client: Socket, @MessageBody() eventId: string) {
+  async handleJoinEventPlanta(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() eventId: string,
+    @Ack() ack?: (resultado: { ok: boolean; message?: string }) => void,
+  ) {
+    const rejeitar = (message: string) => {
+      client.emit('error', { message });
+      ack?.({ ok: false, message });
+    };
     const user = client.data?.user;
     if (!user) {
-      client.emit('error', { message: 'Não autenticado' });
+      rejeitar('Não autenticado');
       return;
     }
     if (!eventId || typeof eventId !== 'string') {
-      client.emit('error', { message: 'eventId inválido' });
+      rejeitar('eventId inválido');
       return;
     }
     const utilizadorAtual = await this.userRepository.findOne({
@@ -338,6 +356,7 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     });
     if (!utilizadorAtual) {
       client.disconnect(true);
+      ack?.({ ok: false, message: 'Utilizador inativo' });
       return;
     }
     client.data.user = { id: utilizadorAtual.id, role: utilizadorAtual.role };
@@ -346,18 +365,19 @@ export class OrderGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     try {
       role = await this.membershipService.roleEfetiva(client.data.user, eventId);
     } catch {
-      client.emit('error', { message: 'Não pertence a este evento' });
+      rejeitar('Não pertence a este evento');
       return;
     }
     if (!MANAGEMENT_ROLES.includes(role)) {
-      client.emit('error', { message: 'Sem permissão para a planta deste evento' });
+      rejeitar('Sem permissão para a planta deste evento');
       return;
     }
     if (!(await this.contarJoin(user.id))) {
-      client.emit('error', { message: 'Demasiados pedidos, aguarde um pouco' });
+      rejeitar('Demasiados pedidos, aguarde um pouco');
       return;
     }
-    client.join(roomPlanta(eventId));
+    await client.join(roomPlanta(eventId));
+    ack?.({ ok: true });
   }
 
   /**
