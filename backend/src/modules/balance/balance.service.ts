@@ -563,7 +563,7 @@ export class BalanceService {
     if (dto.fromEventId === dto.toEventId) {
       throw new ForbiddenException('Origem e destino têm de ser eventos diferentes');
     }
-    await this.eventService.assertEventOperavelById(dto.toEventId);
+    const toEvent = await this.eventService.assertEventOperavelById(dto.toEventId);
     const fromEvent = await this.eventRepository.findOne({
       where: { id: dto.fromEventId },
     });
@@ -631,7 +631,7 @@ export class BalanceService {
         balance: origemSalva,
         type: MovementType.CANCEL,
         amount: montante,
-        description: `Transferência para ${fromEvent.name}`,
+        description: `Transferência para ${toEvent.name}`,
         createdById: actor?.id,
       });
       await manager.save(BalanceMovementEntity, movOrigem);
