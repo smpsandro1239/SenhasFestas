@@ -1,11 +1,13 @@
 import { INestApplication } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { Client } from 'pg';
 import request from 'supertest';
 import * as bcrypt from 'bcryptjs';
 import { criarAplicacao } from '../src/app.setup';
-import { UserEntity, ProductEntity, OrderEntity, OrderItemEntity } from '../src/entities';
+import { UserEntity, ProductEntity, OrderEntity, OrderItemEntity, EventEntity, EventUserEntity } from '../src/entities';
 import { CatalogService } from '../src/modules/catalog/catalog.service';
+import { OrderService } from '../src/modules/order/order.service';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { configuracaoBaseDadosE2e } from './e2e-database-safety';
 
@@ -230,4 +232,77 @@ describe('App e2e (Postgres + Redis)', () => {
       candidatoB.id,
     ]);
   });
+  it('cria uma única encomenda e baixa stock uma vez em retries concorrentes', async () => {
+    const dataSource = app.get(DataSource);
+    const { email } = await criarUtilizadorTeste('order-idempotency@example.com');
+    const user = await dataSource.getRepository(UserEntity).findOneByOrFail({ email });
+    const eventRepository = dataSource.getRepository(EventEntity);
+    const eventUsers = dataSource.getRepository(EventUserEntity);
+    const products = dataSource.getRepository(ProductEntity);
+    const orders = dataSource.getRepository(OrderEntity);
+    const orderService = app.get(OrderService);
+
+    const event = await eventRepository.save(
+      eventRepository.create({
+        name: 'E2E Idempotência',
+        shortCode: `IDEM-${randomUUID().slice(0, 8)}`,
+        startDate: new Date(Date.now() - 60 * 60 * 1000),
+        endDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        status: 'active',
+      }),
+    );
+    await eventUsers.save(
+      eventUsers.create({ event, user, role: 'organizer' }),
+    );
+    const product = await products.save(
+      products.create({
+        event,
+        name: 'E2E Produto com stock',
+        price: 2.5,
+        stock: 10,
+        isActive: true,
+      }),
+    );
+
+    const idempotencyKey = randomUUID();
+    const payload = {
+      eventId: event.id,
+      source: 'pos',
+      paymentMethod: 'cash',
+      items: [{ productId: product.id, quantity: 2 }],
+    };
+
+    const [first, second] = await Promise.all([
+      orderService.create(user, payload as any, idempotencyKey),
+      orderService.create(user, payload as any, idempotencyKey),
+    ]);
+
+    expect(first.id).toBe(second.id);
+    expect(
+      await orders.count({
+        where: {
+          event: { id: event.id },
+          createdById: user.id,
+          idempotencyKey,
+        },
+      }),
+    ).toBe(1);
+
+    const afterConcurrentRetry = await products.findOneByOrFail({ id: product.id });
+    expect(Number(afterConcurrentRetry.stock)).toBe(8);
+
+    const replay = await orderService.create(user, payload as any, idempotencyKey);
+    expect(replay.id).toBe(first.id);
+    const afterReplay = await products.findOneByOrFail({ id: product.id });
+    expect(Number(afterReplay.stock)).toBe(8);
+
+    await expect(
+      orderService.create(
+        user,
+        { ...payload, items: [{ productId: product.id, quantity: 3 }] } as any,
+        idempotencyKey,
+      ),
+    ).rejects.toThrow('Idempotency-Key já utilizada com outro conteúdo');
+  });
+
 });
