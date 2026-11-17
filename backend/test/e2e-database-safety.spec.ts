@@ -60,7 +60,7 @@ describe('configuracaoBaseDadosE2e — barreira contra BD remota', () => {
         E2E_ALLOW_SCHEMA_RESET: 'true',
       });
       expect(ambiente.DATABASE_URL).toContain('@localhost');
-      expect(configuracaoBaseDadosE2e(ambiente).database).toBe('senhasfestas_test');
+      expect(configuracaoBaseDadosE2e(ambiente).connectionString).toBe(ambiente.DATABASE_URL);
     } finally {
       rmSync(diretorio, { recursive: true, force: true });
     }
