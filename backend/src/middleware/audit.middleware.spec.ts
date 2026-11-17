@@ -100,6 +100,20 @@ describe('RateLimitMiddleware — fallback local quando Redis falha', () => {
     expect(next).toHaveBeenCalled();
   });
 
+  it('não reutiliza contadores locais quando muda para produção com Redis disponível', async () => {
+    process.env.NODE_ENV = 'development';
+    redisService.incrementWithTtlStrict.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    await middleware.use(fakeReq(), fakeRes(), vi.fn());
+
+    process.env.NODE_ENV = 'production';
+    redisService.incrementWithTtlStrict.mockResolvedValue(1);
+    const next = vi.fn();
+    await middleware.use(fakeReq(), fakeRes(), next);
+
+    expect(redisService.incrementWithTtlStrict).toHaveBeenCalledTimes(2);
+    expect(next).toHaveBeenCalledOnce();
+  });
+
   it('bloqueia acima do limite Redis', async () => {
     redisService.incrementWithTtlStrict.mockResolvedValue(3);
     const next = vi.fn();
@@ -205,6 +219,22 @@ describe('LoginRateLimitMiddleware — reservas concorrentes e fallback local', 
     expect(redisService.incrementWithTtlStrict).not.toHaveBeenCalled();
     expect(next).not.toHaveBeenCalled();
     redisService.isEnabled = true;
+  });
+
+  it('não reutiliza fallback local quando produção tem Redis disponível', async () => {
+    process.env.NODE_ENV = 'development';
+    redisService.incrementWithTtlStrict.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    const primeira = fakeRes();
+    primeira.statusCode = 401;
+    await middleware.use(fakeReq('1.2.3.4', 'transicao@b.com'), primeira, vi.fn());
+
+    process.env.NODE_ENV = 'production';
+    redisService.incrementWithTtlStrict.mockResolvedValue(1);
+    const next = vi.fn();
+    await middleware.use(fakeReq('1.2.3.4', 'transicao@b.com'), fakeRes(), next);
+
+    expect(redisService.incrementWithTtlStrict).toHaveBeenCalledTimes(2);
+    expect(next).toHaveBeenCalledOnce();
   });
 
   it('não expõe o email em claro na chave Redis', async () => {
