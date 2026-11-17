@@ -38,10 +38,13 @@ export class HealthController {
       database: (await this.checkDatabase()) ? 'healthy' : 'unhealthy',
       redis: this.checkRedis(),
     };
-    // A base de dados é obrigatória; o Redis é opcional (degradação segura quando
-    // não configurado), mas se estiver configurado e não estiver pronto a aplicação
-    // não pode garantir os fluxos que dependem dele (rate limit, sockets).
-    const ready = dependencies.database === 'healthy' && dependencies.redis !== 'unhealthy';
+    // Em produção, Redis é obrigatório para rate limiting partilhado e realtime.
+    // Em desenvolvimento/testes pode permanecer desactivado sem impedir readiness.
+    const redisObrigatorio = this.configService.get<string>('NODE_ENV') === 'production';
+    const ready =
+      dependencies.database === 'healthy' &&
+      dependencies.redis !== 'unhealthy' &&
+      (!redisObrigatorio || dependencies.redis === 'healthy');
     if (!ready) {
       res.status(HttpStatus.SERVICE_UNAVAILABLE);
     }
