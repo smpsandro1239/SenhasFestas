@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ProductEntity, CategoryEntity, UserEntity, EventEntity, OrderEntity, OrderItemEntity } from '../../entities';
+import { ProductEntity, CategoryEntity, UserEntity, EventEntity, OrderItemEntity } from '../../entities';
 import { In, ILike } from 'typeorm';
 import { CreateProductDto, UpdateProductDto, AdjustStockDto } from './dto';
 import { MembershipService } from '../../common/membership.service';
@@ -16,8 +16,6 @@ export class CatalogService {
     private readonly categoryRepository: Repository<CategoryEntity>,
     @InjectRepository(EventEntity)
     private readonly eventRepository: Repository<EventEntity>,
-    @InjectRepository(OrderEntity)
-    private readonly orderRepository: Repository<OrderEntity>,
     @InjectRepository(OrderItemEntity)
     private readonly orderItemRepository: Repository<OrderItemEntity>,
     private readonly membershipService: MembershipService,
