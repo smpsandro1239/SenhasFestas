@@ -31,11 +31,6 @@ const mockEventRepository = {
   find: vi.fn(),
 };
 
-const mockOrderRepository = {
-  find: vi.fn(),
-  findOne: vi.fn(),
-};
-
 const mockOrderItemRepository = {
   find: vi.fn(),
   findOne: vi.fn(),
@@ -82,7 +77,6 @@ describe('CatalogService', () => {
       mockProductRepository as any,
       mockCategoryRepository as any,
       mockEventRepository as any,
-      mockOrderRepository as any,
       mockOrderItemRepository as any,
       mockMembershipService as any,
     );
