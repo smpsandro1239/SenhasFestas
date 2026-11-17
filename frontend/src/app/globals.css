@@ -12,6 +12,7 @@
     --color-text: #e0e2ef;
     --color-text-muted: #a1a4b8;
     --color-brand: #2563eb;
+    --color-brand-contrast: #ffffff;
     --color-success: #10b981;
     --color-warning: #f59e0b;
     --color-danger: #ef4444;
@@ -93,7 +94,7 @@
 
   /* Status glow effects */
   .glow-amber {
-    box-shadow: 0 0 20px rgba(59,130,246,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+    box-shadow: 0 0 20px rgba(245,158,11,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
   }
   .glow-green {
     box-shadow: 0 0 20px rgba(34,197,94,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
@@ -174,6 +175,26 @@
   }
   .animate-fade-in {
     animation: fade-in 0.3s ease-out both;
+  }
+}
+
+/* Respeita a preferência do sistema para reduzir movimento. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Mantém o foco visível em ambientes de alto contraste do sistema operativo. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid CanvasText;
+    outline-offset: 3px;
   }
 }
 
