@@ -663,7 +663,7 @@ describe('BalanceService — lista de saldos pendentes com estado de arquivo/avi
 });
 describe('BalanceService — transferência entre eventos (melhoria #8)', () => {
   const eventService = {
-    assertEventOperavelById: vi.fn().mockResolvedValue(undefined),
+    assertEventOperavelById: vi.fn().mockResolvedValue({ id: 'atual', name: 'Atual' }),
     vincularCliente: vi.fn().mockResolvedValue(undefined),
   } as unknown as EventService;
 
@@ -721,7 +721,7 @@ describe('BalanceService — transferência entre eventos (melhoria #8)', () => 
       expect.objectContaining({
         type: MovementType.CANCEL,
         amount: 30,
-        description: 'Transferência para Magusto',
+        description: 'Transferência para Atual',
       }),
     );
     expect(eventService.vincularCliente).toHaveBeenCalledWith('u1', 'atual');
@@ -801,7 +801,7 @@ describe('BalanceService — transferência entre eventos (melhoria #8)', () => 
 
 describe('BalanceService — snapshot anterior para auditoria (arquivar)', () => {
   const eventService = {
-    assertEventOperavelById: vi.fn().mockResolvedValue(undefined),
+    assertEventOperavelById: vi.fn().mockResolvedValue({ id: 'atual', name: 'Atual' }),
     vincularCliente: vi.fn().mockResolvedValue(undefined),
   } as unknown as EventService;
 
