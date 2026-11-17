@@ -333,6 +333,10 @@ export class BalanceMovementEntity {
 
 @Entity('orders')
 @Index(['event', 'createdAt'])
+@Index('UQ_orders_idempotency', ['event', 'createdById', 'idempotencyKey'], {
+  unique: true,
+  where: '"idempotencyKey" IS NOT NULL AND "createdById" IS NOT NULL',
+})
 export class OrderEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -364,6 +368,17 @@ export class OrderEntity {
 
   @Column({ type: 'uuid', nullable: true })
   balanceId?: string;
+
+  // Chave opcional de idempotência enviada pelo POS/QR; a restrição parcial
+  // impede pedidos duplicados sem afectar pedidos legados sem chave.
+  @Column({ type: 'uuid', nullable: true })
+  createdById?: string;
+
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  idempotencyKey?: string;
+
+  @Column({ type: 'char', length: 64, nullable: true })
+  requestHash?: string;
 
   @Column({
     type: 'enum',
