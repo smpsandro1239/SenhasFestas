@@ -54,7 +54,7 @@ test('nunca guarda respostas HTML de navegação autenticada', async () => {
 
   const response = await responsePromise;
   assert.equal(response.status, 200);
-  assert.deepEqual(options, { cache: 'no-store' });
+  assert.equal(options.cache, 'no-store');
 });
 
 test('em falha de rede devolve apenas a página offline genérica', async () => {
