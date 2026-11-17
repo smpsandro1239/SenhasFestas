@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { CashClosureEntity } from '../../entities';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { Repository, DataSource } from 'typeorm';
+import { CashClosureEntity, EventUserEntity } from '../../entities';
 import { MembershipService } from '../../common/membership.service';
 import { EventService } from '../event/event.service';
 import { CreateCashClosureDto, CloseCashClosureDto } from './dto';
@@ -15,6 +15,7 @@ export class CashClosureService {
     private readonly cashClosureRepository: Repository<CashClosureEntity>,
     private readonly membershipService: MembershipService,
     private readonly eventService: EventService,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
   async abrirCaixa(
@@ -45,7 +46,18 @@ export class CashClosureService {
       notes: dto.notes,
       status: 'open',
     });
-    const salvo = await this.cashClosureRepository.save(novoFecho);
+    let salvo: CashClosureEntity;
+    try {
+      salvo = await this.cashClosureRepository.save(novoFecho);
+    } catch (error) {
+      // O índice parcial único fecha a corrida entre duas aberturas
+      // simultâneas; converter a violação em conflito de domínio (409).
+      const codigo = (error as any)?.code ?? (error as any)?.driverError?.code;
+      if (codigo === '23505') {
+        throw new ConflictException('Já existe uma caixa aberta neste evento');
+      }
+      throw error;
+    }
     arquivar?.({
       entidadeId: salvo.id,
       eventId: dto.eventId,
@@ -60,44 +72,58 @@ export class CashClosureService {
     dto: CloseCashClosureDto,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<CashClosureEntity> {
-    const fecho = await this.cashClosureRepository.findOne({ where: { id } });
-    if (!fecho) {
-      throw new NotFoundException('Caixa não encontrado');
-    }
-    await this.membershipService.assertMember(utilizador, fecho.eventId);
+    return this.dataSource.transaction(async (manager) => {
+      // Lock pessimista: duas requisições concorrentes não podem fechar a mesma
+      // caixa com totais diferentes nem substituir o operador responsável.
+      const fecho = await manager.findOne(CashClosureEntity, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!fecho) {
+        throw new NotFoundException('Caixa não encontrado');
+      }
 
-    // A9: quem abriu é o responsável normal do fecho, mas o dinheiro é do
-    // evento. Se ele ficar doente, sair ou perder o browser, o superadmin
-    // fecha. Não é qualquer FINANCE — isso destruiria a responsabilidade.
-    const fechoPorSuperadmin = utilizador?.role === 'superadmin' && fecho.openedById !== operadorId;
-    if (fecho.openedById !== operadorId && !fechoPorSuperadmin) {
-      throw new ForbiddenException('Só o operador que abriu ou um superadmin pode fechar a caixa');
-    }
-    if (fecho.status === 'closed') {
-      throw new ConflictException('Caixa já está fechado');
-    }
+      // A autorização é verificada dentro da mesma transação e contra a
+      // membership actual do evento, evitando uma revogação concorrente entre
+      // a verificação e a gravação do fecho.
+      if (utilizador?.role !== 'superadmin') {
+        const membro = await manager.findOne(EventUserEntity, {
+          where: { event: { id: fecho.eventId }, user: { id: utilizador?.id } },
+        });
+        if (!membro) {
+          throw new ForbiddenException('Não pertence a este evento');
+        }
+      }
 
-    const antes = {
-      status: fecho.status,
-      closedAt: fecho.closedAt ?? null,
-      closingBalance: fecho.closingBalance ?? null,
-      closedById: fecho.closedById ?? null,
-    };
+      const fechoPorSuperadmin = utilizador?.role === 'superadmin' && fecho.openedById !== operadorId;
+      if (fecho.openedById !== operadorId && !fechoPorSuperadmin) {
+        throw new ForbiddenException('Só o operador que abriu ou um superadmin pode fechar a caixa');
+      }
+      if (fecho.status === 'closed') {
+        throw new ConflictException('Caixa já está fechado');
+      }
 
-    arquivar?.({
-      antes,
-      eventId: fecho.eventId,
-      extras: { abertoPor: fecho.openedById, fechoPorSuperadmin },
+      const antes = {
+        status: fecho.status,
+        closedAt: fecho.closedAt ?? null,
+        closingBalance: fecho.closingBalance ?? null,
+        closedById: fecho.closedById ?? null,
+      };
+
+      arquivar?.({
+        antes,
+        eventId: fecho.eventId,
+        extras: { abertoPor: fecho.openedById, fechoPorSuperadmin },
+      });
+
+      fecho.closedAt = new Date();
+      fecho.closingBalance = centavos(dto.totalActual);
+      fecho.status = 'closed';
+      fecho.closedById = operadorId;
+      if (dto.notes) fecho.notes = dto.notes;
+
+      return manager.save(CashClosureEntity, fecho);
     });
-
-    fecho.closedAt = new Date();
-    fecho.closingBalance = centavos(dto.totalActual);
-    fecho.status = 'closed';
-    fecho.closedById = operadorId;
-    if (dto.notes) fecho.notes = dto.notes;
-
-    const salvo = await this.cashClosureRepository.save(fecho);
-    return salvo;
   }
 
   async listarPorEvento(eventoId: string, utilizador: any): Promise<CashClosureEntity[]> {

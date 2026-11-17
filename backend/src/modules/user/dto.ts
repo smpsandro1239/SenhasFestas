@@ -4,9 +4,9 @@ export class CreateUserDto {
   @IsEmail()
   email: string;
 
-  // Segurança (A5/DoS): bcrypt processa apenas os primeiros 72 bytes.
+  // Passwords novas: mínimo 12 caracteres; bcrypt aceita no máximo 72 bytes.
   @IsString()
-  @MinLength(6)
+  @MinLength(12)
   @MaxLength(72)
   password: string;
 

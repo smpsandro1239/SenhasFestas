@@ -41,11 +41,22 @@ describe('DTOs de Autenticação — Validação de Password (Proteção DoS Bcr
     it('aceita password válida com tamanho <= 72 caracteres', async () => {
       const dto = new RegisterDto();
       dto.email = 'novo@exemplo.pt';
-      dto.password = 'segredo123';
+      dto.password = 'segredo-seguro';
       dto.name = 'Novo Utilizador';
 
       const erros = await validate(dto);
       expect(erros).toHaveLength(0);
+    });
+
+    it('rejeita passwords novas com menos de 12 caracteres', async () => {
+      const dto = new RegisterDto();
+      dto.email = 'novo@exemplo.pt';
+      dto.password = 'a'.repeat(11);
+      dto.name = 'Novo Utilizador';
+
+      const erros = await validate(dto);
+      const erroPassword = erros.find((e) => e.property === 'password');
+      expect(erroPassword?.constraints).toHaveProperty('minLength');
     });
 
     it('rejeita password com mais de 72 caracteres no registo', async () => {
@@ -65,7 +76,7 @@ describe('DTOs de Autenticação — Validação de Password (Proteção DoS Bcr
     it('aceita password válida com tamanho <= 72 caracteres', async () => {
       const dto = new CreateUserDto();
       dto.email = 'admin@exemplo.pt';
-      dto.password = 'c'.repeat(72);
+      dto.password = 'c'.repeat(12);
       dto.name = 'Administrador';
       dto.role = 'organizer';
 

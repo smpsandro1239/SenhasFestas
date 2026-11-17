@@ -4,6 +4,17 @@ import { ForbiddenException, ConflictException } from '@nestjs/common';
 import { CashClosureService } from './cash-closure.service';
 import { EventService } from '../event/event.service';
 
+function criarDataSource(repository: any) {
+  const manager = {
+    findOne: vi.fn(async (_entity: any, options: any) => repository.findOne(options)),
+    save: vi.fn(async (_entity: any, value: any) => repository.save(value)),
+  };
+  const dataSource = {
+    transaction: vi.fn(async (callback: any) => callback(manager)),
+  };
+  return { dataSource, manager };
+}
+
 function criarServico(overrides: { jaAberta?: any } = {}) {
   const eventService = {
     assertEventOperavelById: vi.fn(),
@@ -19,10 +30,13 @@ function criarServico(overrides: { jaAberta?: any } = {}) {
     save: vi.fn().mockImplementation(async (v) => ({ id: 'c1', ...v })),
   } as any;
 
+  const { dataSource, manager } = criarDataSource(repository);
+
   return {
-    service: new CashClosureService(repository, membershipService, eventService),
+    service: new CashClosureService(repository, membershipService, eventService, dataSource as any),
     repository,
     eventService,
+    manager,
   };
 }
 
@@ -31,12 +45,17 @@ describe('CashClosureService — guard de janela operacional', () => {
     assertEventOperavelById: vi.fn(),
   } as unknown as EventService;
 
+  const repository = {
+    findOne: vi.fn().mockResolvedValue(null),
+    create: vi.fn(),
+    save: vi.fn(),
+  } as any;
+  const { dataSource } = criarDataSource(repository);
   const cashClosureService = new CashClosureService(
-    { findOne: vi.fn().mockResolvedValue(null), create: vi.fn(), save: vi.fn() } as any,
-    {
-      assertMember: vi.fn().mockResolvedValue(undefined),
-    } as any,
+    repository,
+    { assertMember: vi.fn().mockResolvedValue(undefined) } as any,
     eventService,
+    dataSource as any,
   );
 
   beforeEach(() => vi.clearAllMocks());
@@ -94,6 +113,15 @@ describe('A9 — unicidade de caixa aberta por evento', () => {
     );
   });
 
+  it('converte a violação do índice único em HTTP 409 quando duas aberturas correm em simultâneo', async () => {
+    const { service, repository } = criarServico();
+    repository.save.mockRejectedValue({ code: '23505' });
+
+    await expect(
+      service.abrirCaixa('op1', { id: 'op1', role: 'cashier' }, { eventId: 'evt1' } as any),
+    ).rejects.toThrow(ConflictException);
+  });
+
   it('obterCaixaAberta ordena por openedAt DESC (determinístico mesmo com duplicados legados)', async () => {
     const { service, repository } = criarServico();
 
@@ -135,6 +163,7 @@ describe('A9 — fecho: operador que abriu OU superadmin', () => {
     expect(resultado.status).toBe('closed');
     expect(resultado.closedById).toBe('op1');
     expect(repository.save).toHaveBeenCalledTimes(1);
+    expect((service as any).dataSource.transaction).toHaveBeenCalledOnce();
   });
 
   it('outro cashier NÃO pode fechar a caixa de outro operador', async () => {
