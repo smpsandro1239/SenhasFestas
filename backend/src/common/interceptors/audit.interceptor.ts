@@ -157,11 +157,11 @@ export class AuditInterceptor implements NestInterceptor {
       // encerramento do processo ou deixar a resposta à frente da auditoria.
       concatMap((data) => {
         const ator = this.resolverAtor(req, acao, data);
-        const eventId = this.eventoEfetivo(req, eventIdBase);
+        const eventId = this.eventoEfetivo(req, eventIdBase, data, entity);
         return from(this.auditService.record({
           action: acao,
           entity,
-          entityId: this.entidadeEfetiva(req, entityId),
+          entityId: this.entidadeEfetiva(req, entityId, data),
           eventId,
           actorId: ator.id,
           actorRole: ator.role,
@@ -185,8 +185,8 @@ export class AuditInterceptor implements NestInterceptor {
         return from(this.auditService.record({
           action: metodo === 'POST' && acao === 'LOGIN' ? 'LOGIN_FAILED' : acao,
           entity,
-          entityId,
-          eventId,
+          entityId: this.entidadeEfetiva(req, entityId),
+          eventId: this.eventoEfetivo(req, eventIdBase),
           actorId: ator.id,
           actorRole: ator.role,
           details: this.sanitizarValor({
@@ -212,14 +212,38 @@ export class AuditInterceptor implements NestInterceptor {
     return ((req as any)[AUDIT_DETAILS_EXTRAS] as Record<string, unknown>) ?? {};
   }
 
-  private eventoEfetivo(req: Request, base?: string): string | undefined {
+  private eventoEfetivo(
+    req: Request,
+    base?: string,
+    data?: any,
+    entity?: string,
+  ): string | undefined {
     const override = (req as any)[AUDIT_EVENT_ID] as string | undefined;
-    return override ?? base;
+    if (override ?? base) {
+      return override ?? base;
+    }
+
+    // Criações não têm eventId no path/body. O evento criado é o próprio id;
+    // nos restantes recursos aproveitamos apenas relações explicitamente
+    // devolvidas pela operação, nunca um id genérico.
+    const candidato =
+      entity === 'event'
+        ? data?.id
+        : data?.eventId ?? data?.event?.id ?? data?.order?.event?.id ?? data?.balance?.event?.id;
+    return typeof candidato === 'string' && UUID_REGEX.test(candidato)
+      ? candidato
+      : undefined;
   }
 
-  private entidadeEfetiva(req: Request, base?: string): string | undefined {
+  private entidadeEfetiva(req: Request, base?: string, data?: any): string | undefined {
     const override = (req as any)[AUDIT_ENTITY_ID] as string | undefined;
-    return override ?? base;
+    if (override ?? base) {
+      return override ?? base;
+    }
+    const candidato = data?.id ?? data?.order?.id ?? data?.balance?.id ?? data?.movement?.id;
+    return typeof candidato === 'string' && UUID_REGEX.test(candidato)
+      ? candidato
+      : undefined;
   }
 
   private descreverPedido(
@@ -245,6 +269,12 @@ export class AuditInterceptor implements NestInterceptor {
     // PLANTA, igual ao /planta legado.
     if (segmentos.includes('plantas')) {
       acao = 'PLANTA';
+    } else if (segmentos.includes('members')) {
+      acao = 'MEMBER';
+    } else if (segmentos.includes('import')) {
+      acao = 'IMPORT';
+    } else if (segmentos.includes('duplicate')) {
+      acao = 'DUPLICATE';
     }
 
     const entityId = segmentos.find((segmento) => UUID_REGEX.test(segmento));
