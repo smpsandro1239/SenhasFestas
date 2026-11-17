@@ -37,7 +37,6 @@ export class BalanceController {
     if (req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
-    this.assertStaffEventScope(req.user, dto.eventId);
     return this.balanceService.loadBalance(userId, dto, req.user, arquivarAuditoria(req), idempotencyKey);
   }
 
@@ -51,7 +50,6 @@ export class BalanceController {
     @Body() dto?: ReverseLoadDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    this.assertStaffEventScope(req.user, eventId);
     if (eventId && req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, eventId);
     }
@@ -69,7 +67,6 @@ export class BalanceController {
     if (req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
-    this.assertStaffEventScope(req.user, dto.eventId);
     return this.balanceService.deductBalance(userId, dto, req.user, arquivarAuditoria(req), idempotencyKey);
   }
 
@@ -100,7 +97,6 @@ export class BalanceController {
     @Request() req: any,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    this.assertStaffEventScope(req.user, dto.toEventId);
     if (req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, dto.toEventId);
     }
@@ -117,7 +113,6 @@ export class BalanceController {
     if (req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
-    this.assertStaffEventScope(req.user, dto.eventId);
     return this.balanceService.extendBalance(userId, dto, arquivarAuditoria(req));
   }
 
@@ -131,7 +126,6 @@ export class BalanceController {
     if (req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
-    this.assertStaffEventScope(req.user, dto.eventId);
     return this.balanceService.unarchiveBalance(userId, dto.eventId, arquivarAuditoria(req));
   }
 
@@ -145,7 +139,6 @@ export class BalanceController {
     if (req.user.role !== 'superadmin') {
       await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
     }
-    this.assertStaffEventScope(req.user, dto.eventId);
     return this.balanceService.markNotified(userId, dto.eventId, arquivarAuditoria(req));
   }
 
