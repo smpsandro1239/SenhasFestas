@@ -651,14 +651,18 @@ describe('CatalogService', () => {
       expect(result.source).toBe('cooccurrence');
       expect(result.items).toEqual([{ id: 'p2' }, { id: 'p3' }]);
       expect(mockOrderItemRepository.createQueryBuilder).toHaveBeenCalledWith('item');
-      expect(mockCooccurrenceQueryBuilder.innerJoin).toHaveBeenNthCalledWith(1, 'item.order', 'order');
+      expect(mockCooccurrenceQueryBuilder.innerJoin).toHaveBeenNthCalledWith(1, 'item.order', 'purchase');
       expect(mockCooccurrenceQueryBuilder.innerJoin).toHaveBeenNthCalledWith(2, 'item.product', 'product');
+      expect(mockCooccurrenceQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'purchase.id IN (SELECT target_item."orderId" FROM order_items target_item WHERE target_item."productId" = :targetProductId)',
+        { targetProductId: 'p1' },
+      );
       expect(mockCooccurrenceQueryBuilder.where).toHaveBeenCalledWith(
-        'order.status IN (:...statuses)',
+        'purchase.status IN (:...statuses)',
         { statuses: ['received', 'preparing', 'ready', 'delivered'] },
       );
       expect(mockCooccurrenceQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'order.eventId = :eventId',
+        'purchase.eventId = :eventId',
         { eventId: 'e1' },
       );
       expect(mockCooccurrenceQueryBuilder.groupBy).toHaveBeenCalledWith('product.id');
