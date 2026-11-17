@@ -9,7 +9,7 @@ const viewports = [
 
 test.describe('Design system — autenticação responsiva', () => {
   for (const viewport of viewports) {
-    test(`login sem overflow horizontal em ${viewport.width}px`, async ({ page }) => {
+    test(`login sem overflow horizontal em ${viewport.width}px`, async ({ page }, testInfo) => {
       await page.setViewportSize(viewport);
       await page.goto('/auth/login', { waitUntil: 'networkidle' });
 
@@ -25,6 +25,11 @@ test.describe('Design system — autenticação responsiva', () => {
         dimensions.document,
         `overflow horizontal: documento=${dimensions.document}px, viewport=${dimensions.viewport}px`,
       ).toBeLessThanOrEqual(dimensions.viewport + 1);
+
+      await page.screenshot({
+        path: testInfo.outputPath(`login-${viewport.width}x${viewport.height}.png`),
+        fullPage: true,
+      });
     });
   }
 
