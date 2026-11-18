@@ -7,6 +7,7 @@ import { EventService } from '../event/event.service';
 import { CreateCashClosureDto, CloseCashClosureDto } from './dto';
 import { centavos } from '../../common/money';
 import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';
+import { FINANCE_ROLES } from '../../common/roles';
 
 @Injectable()
 export class CashClosureService {
@@ -18,51 +19,68 @@ export class CashClosureService {
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
+  private async assertFinanceMembershipInTransaction(
+    manager: import('typeorm').EntityManager,
+    utilizador: any,
+    eventId: string,
+  ): Promise<void> {
+    if (!utilizador?.id) {
+      throw new ForbiddenException('Não autenticado');
+    }
+    if (utilizador.role === 'superadmin') {
+      return;
+    }
+    const membership = await manager.findOne(EventUserEntity, {
+      where: { event: { id: eventId }, user: { id: utilizador.id } },
+      lock: { mode: 'pessimistic_read' },
+    });
+    if (!membership) {
+      throw new ForbiddenException('Não pertence a este evento');
+    }
+    if (typeof membership.role === 'string' && !FINANCE_ROLES.includes(membership.role)) {
+      throw new ForbiddenException('A tua função neste evento não permite operações de caixa');
+    }
+  }
+
   async abrirCaixa(
     operadorId: string,
     utilizador: any,
     dto: CreateCashClosureDto,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<CashClosureEntity> {
-    await this.membershipService.assertMember(utilizador, dto.eventId);
-    await this.eventService.assertEventOperavelById(dto.eventId);
+    return this.dataSource.transaction(async (manager) => {
+      await this.assertFinanceMembershipInTransaction(manager, utilizador, dto.eventId);
+      await this.eventService.assertEventOperavelById(dto.eventId);
 
-    // A9: uma caixa aberta por evento. Duas caixas abertas é erro humano
-    // (dois operadores a clicar, ou recarregar a página e clicar outra vez),
-    // não um estado legítimo. A corrida verdadeira é fechada pelo partial
-    // unique index na migração; esta validação dá a mensagem clara.
-    const jaAberta = await this.cashClosureRepository.findOne({
-      where: { eventId: dto.eventId, status: 'open' },
-    });
-    if (jaAberta) {
-      throw new ConflictException('Já existe uma caixa aberta neste evento');
-    }
-
-    const novoFecho = this.cashClosureRepository.create({
-      eventId: dto.eventId,
-      openedById: operadorId,
-      openingBalance: dto.openingBalance === undefined ? 0 : centavos(dto.openingBalance),
-      openedAt: new Date(),
-      notes: dto.notes,
-      status: 'open',
-    });
-    let salvo: CashClosureEntity;
-    try {
-      salvo = await this.cashClosureRepository.save(novoFecho);
-    } catch (error) {
-      // O índice parcial único fecha a corrida entre duas aberturas
-      // simultâneas; converter a violação em conflito de domínio (409).
-      const codigo = (error as any)?.code ?? (error as any)?.driverError?.code;
-      if (codigo === '23505') {
+      // O lock da membership mantém a autorização estável até à criação.
+      const jaAberta = await manager.findOne(CashClosureEntity, {
+        where: { eventId: dto.eventId, status: 'open' },
+      });
+      if (jaAberta) {
         throw new ConflictException('Já existe uma caixa aberta neste evento');
       }
-      throw error;
-    }
-    arquivar?.({
-      entidadeId: salvo.id,
-      eventId: dto.eventId,
+
+      const novoFecho = this.cashClosureRepository.create({
+        eventId: dto.eventId,
+        openedById: operadorId,
+        openingBalance: dto.openingBalance === undefined ? 0 : centavos(dto.openingBalance),
+        openedAt: new Date(),
+        notes: dto.notes,
+        status: 'open',
+      });
+      let salvo: CashClosureEntity;
+      try {
+        salvo = await manager.save(CashClosureEntity, novoFecho);
+      } catch (error) {
+        const codigo = (error as any)?.code ?? (error as any)?.driverError?.code;
+        if (codigo === '23505') {
+          throw new ConflictException('Já existe uma caixa aberta neste evento');
+        }
+        throw error;
+      }
+      arquivar?.({ entidadeId: salvo.id, eventId: dto.eventId });
+      return salvo;
     });
-    return salvo;
   }
 
   async fecharCaixa(
@@ -83,17 +101,8 @@ export class CashClosureService {
         throw new NotFoundException('Caixa não encontrado');
       }
 
-      // A autorização é verificada dentro da mesma transação e contra a
-      // membership actual do evento, evitando uma revogação concorrente entre
-      // a verificação e a gravação do fecho.
-      if (utilizador?.role !== 'superadmin') {
-        const membro = await manager.findOne(EventUserEntity, {
-          where: { event: { id: fecho.eventId }, user: { id: utilizador?.id } },
-        });
-        if (!membro) {
-          throw new ForbiddenException('Não pertence a este evento');
-        }
-      }
+      // A role e a membership actuais ficam bloqueadas até à gravação do fecho.
+      await this.assertFinanceMembershipInTransaction(manager, utilizador, fecho.eventId);
 
       const fechoPorSuperadmin = utilizador?.role === 'superadmin' && fecho.openedById !== operadorId;
       if (fecho.openedById !== operadorId && !fechoPorSuperadmin) {

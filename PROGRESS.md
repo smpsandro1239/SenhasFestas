@@ -1,3 +1,20 @@
+## 2026-11-18 — T44: revalidar permissões em caixa, cozinha e entrega
+
+**Problema confirmado**
+- Abertura/fecho de caixa, transições de pedidos na cozinha e entrega pelo ecrã público dependiam da role verificada antes do início da transacção. Em algumas rotas, a transacção voltava a confirmar apenas a existência da membership, não a role actual.
+
+**Alterações**
+- Caixa: abertura e fecho passam a bloquear a membership, validar FINANCE_ROLES e executar a escrita na mesma transacção.
+- Cozinha: a transição bloqueia a membership e valida KITCHEN_ROLES; a permissão de reembolso usa a event-role actual, não a role global do JWT.
+- Ecrã público: a entrega bloqueia a membership e confirma STAFF_ROLES antes de actualizar o pedido.
+- Testes acrescentados para downgrade de role entre a validação inicial e a escrita.
+
+**Validação**
+- Alterações ainda não integradas nem validadas pela CI.
+- T44 permanece aberta.
+
+---
+
 ## 2026-11-18 — T44: revalidar operações de saldo na transacção
 
 **Problema confirmado**
@@ -10,7 +27,7 @@
 - Testes cobrem o lock da membership/saldo e a rejeição quando a role foi reduzida para cliente antes da escrita, incluindo o helper usado pelas operações financeiras existentes; os testes de auditoria continuam a verificar snapshots before/after.
 
 **Validação**
-- Alteração ainda não integrada nem validada pela CI. Não declarar concluída.
+- O commit `8d15d95` passou backend (lint, testes unitários, build e E2E PostgreSQL/Redis) e frontend (lint, typecheck, Vitest e build). Browser E2E ainda estava a instalar Chromium; CodeQL e Security estavam em execução. As alterações desta entrada ainda aguardam CI.
 - T44 permanece aberta.
 
 ---

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi } from 'vitest';
 import { PublicScreenService } from './public-screen.service';
+import { EventUserEntity } from '../../entities';
 
 function queryBuilderMock(resultado: any[]) {
   const qb: any = {
@@ -74,6 +75,32 @@ describe('PublicScreenService — A7: ecrã público não expõe dados financeir
     expect(camposSelecionados).toContain('pedido.tableNumber');
   });
 });
+
+  it('recusa entrega se a event-role actual já foi reduzida para client', async () => {
+    const manager = {
+      findOne: vi.fn()
+        .mockResolvedValueOnce({ id: 'o1', status: 'ready', event: { id: 'evt1' } })
+        .mockResolvedValueOnce({ id: 'membership-1', role: 'client' }),
+      save: vi.fn(),
+    };
+    const service = new PublicScreenService(
+      {} as any,
+      {} as any,
+      {} as any,
+      { transaction: vi.fn().mockImplementation(async (fn: any) => fn(manager)) } as any,
+      { emitOrderUpdate: vi.fn() } as any,
+    );
+
+    await expect(
+      service.marcarEntregue('o1', { id: 'u1', role: 'organizer' }),
+    ).rejects.toThrow('A tua função neste evento não permite entregar pedidos');
+
+    expect(manager.findOne).toHaveBeenLastCalledWith(
+      EventUserEntity,
+      expect.objectContaining({ lock: { mode: 'pessimistic_read' } }),
+    );
+    expect(manager.save).not.toHaveBeenCalled();
+  });
 
 describe('PublicScreenService — snapshot anterior para auditoria (arquivar)', () => {
   it('marcarEntregue arquiva o estado anterior e o evento', async () => {

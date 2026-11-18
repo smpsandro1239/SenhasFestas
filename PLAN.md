@@ -377,7 +377,7 @@ como `D<n>`). Não confundir com os itens numerados do roadmap (no `TODO.md` com
 - Carregamento/desconto exigem `eventId` (evita saldo sem scope).
 - Transferência entre eventos: origem `CANCEL`, destino `LOAD`, numa transação.
 - Arquivamento: saldo inutilizável mas visível; soft-delete 30 dias depois.
-- Só `FINANCE_ROLES` mexe em saldo. Carregamento, desconto, estorno, transferência, extensão, desarquivamento e notificação revalidam a event-role com lock da membership e bloqueiam o saldo na mesma transacção da escrita.
+- Só `FINANCE_ROLES` mexe em saldo. Carregamento, desconto, estorno, transferência, extensão, desarquivamento e notificação revalidam a event-role com lock da membership e bloqueiam o saldo na mesma transacção da escrita. Abertura/fecho de caixa, transições de cozinha e entrega pública também revalidam a role efectiva dentro da transacção.
 
 ### Stock
 - `stock: null` = sem controlo; número = controlo (abate a cada pedido, repõe no

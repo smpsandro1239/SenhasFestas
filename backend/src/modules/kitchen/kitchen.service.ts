@@ -9,6 +9,7 @@ import { reporStockEmTransacao } from '../../common/order-stock';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { KitchenQueryDto } from './dto';
 import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';
+import { KITCHEN_ROLES } from '../../common/roles';
 
 @Injectable()
 export class KitchenService {
@@ -21,6 +22,31 @@ export class KitchenService {
 
   private async obterEventosDoUtilizador(utilizador: any): Promise<string[] | null> {
     return this.membershipService.eventIdsFor(utilizador);
+  }
+
+  private async roleEfetivaNaTransacao(
+    manager: import('typeorm').EntityManager,
+    utilizador: any,
+    eventId: string,
+  ): Promise<string> {
+    if (!utilizador?.id) {
+      throw new ForbiddenException('Não autenticado');
+    }
+    if (utilizador.role === 'superadmin') {
+      return 'superadmin';
+    }
+    const membership = await manager.findOne(EventUserEntity, {
+      where: { event: { id: eventId }, user: { id: utilizador.id } },
+      lock: { mode: 'pessimistic_read' },
+    });
+    if (!membership) {
+      throw new ForbiddenException('Não pertence a este evento');
+    }
+    const role = membership.role ?? utilizador.role;
+    if (typeof role === 'string' && !KITCHEN_ROLES.includes(role)) {
+      throw new ForbiddenException('A tua função neste evento não permite operações de cozinha');
+    }
+    return role;
   }
 
   async obterPedidos(filtros: KitchenQueryDto, utilizador: any): Promise<{
@@ -105,21 +131,14 @@ export class KitchenService {
       if (!atual || atual.status !== pedido.status) {
         throw new BadRequestException('Pedido mudou de estado, tente novamente');
       }
+      // Revalidar e bloquear a event-role actual antes de qualquer escrita.
+      const roleEfetiva = await this.roleEfetivaNaTransacao(
+        manager,
+        utilizador,
+        pedido.event?.id as string,
+      );
       if (novoEstado === 'cancelled' && temSaldoParaReembolsar(atual)) {
-        assertPodeMexerEmSaldo(utilizador);
-      }
-
-      // Revalidar a associação dentro da mesma transação e depois de bloquear
-      // a encomenda. Uma revogação concorrente não pode deixar uma sessão
-      // previamente autorizada alterar o pedido.
-      if (utilizador?.role !== 'superadmin') {
-        const membership = await manager.findOne(EventUserEntity, {
-          where: { event: { id: pedido.event?.id }, user: { id: utilizador?.id } },
-          lock: { mode: 'pessimistic_read' },
-        });
-        if (!membership) {
-          throw new ForbiddenException('Não pertence a este evento');
-        }
+        assertPodeMexerEmSaldo({ ...utilizador, role: roleEfetiva });
       }
 
       atual.status = novoEstado;

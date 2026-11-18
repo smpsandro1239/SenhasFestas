@@ -4,6 +4,7 @@ import { Repository, DataSource } from 'typeorm';
 import { OrderEntity, EventUserEntity, EventEntity } from '../../entities';
 import { OrderGateway } from '../../websocket/order.gateway';
 import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';
+import { STAFF_ROLES } from '../../common/roles';
 
 // Campos do ecrã público. A7: total e itens.notes removidos — o ecrã nunca os
 // renderiza (mostra só nº do pedido, tempo, mesa, estado) mas servia-os sem
@@ -103,16 +104,23 @@ const pedidoCtx = await manager.findOne(OrderEntity, {
       throw new NotFoundException('Pedido não encontrado');
     }
 
-    if (utilizador?.role !== 'superadmin') {
-      const eventId = pedidoCtx.event?.id;
-      if (!eventId) {
-        throw new ForbiddenException('Pedido sem evento associado');
-      }
+    const eventId = pedidoCtx.event?.id;
+    if (!eventId) {
+      throw new ForbiddenException('Pedido sem evento associado');
+    }
+    if (!utilizador?.id) {
+      throw new ForbiddenException('Não autenticado');
+    }
+    if (utilizador.role !== 'superadmin') {
       const membro = await manager.findOne(EventUserEntity, {
-        where: { event: { id: eventId }, user: { id: utilizador?.id } },
+        where: { event: { id: eventId }, user: { id: utilizador.id } },
+        lock: { mode: 'pessimistic_read' },
       });
       if (!membro) {
         throw new ForbiddenException('Não pertence a este evento');
+      }
+      if (typeof membro.role === 'string' && !STAFF_ROLES.includes(membro.role)) {
+        throw new ForbiddenException('A tua função neste evento não permite entregar pedidos');
       }
     }
 

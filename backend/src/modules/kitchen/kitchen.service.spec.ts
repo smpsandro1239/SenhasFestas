@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi } from 'vitest';
 import { KitchenService } from './kitchen.service';
-import { BalanceMovementEntity, MovementType, OrderItemEntity, ProductEntity } from '../../entities';
+import { BalanceMovementEntity, MovementType, OrderItemEntity, ProductEntity, EventUserEntity } from '../../entities';
 
 describe('KitchenService — cancelamento via atualizarEstado deve reembolsar saldo (B1-kitchen)', () => {
   it('reembolsa o saldo consumido quando cancela por status (RED)', async () => {
@@ -153,7 +153,7 @@ describe('KitchenService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
     ).rejects.toThrow('A tua função não permite operações de saldo. Contacta o caixa ou o organizador.');
   });
 
-  it('cashier pode cancelar pedido com saldo via atualizarEstado', async () => {
+  it('organizer pode cancelar pedido com saldo via atualizarEstado', async () => {
     const orderRepository = {
       findOne: vi.fn().mockResolvedValue({
         id: 'o1',
@@ -172,7 +172,7 @@ describe('KitchenService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
         findOne: vi
           .fn()
           .mockResolvedValueOnce({ id: 'o1', status: 'received', balanceId: 'b1', balanceUsed: 10 })
-          .mockResolvedValueOnce({ id: 'membership-1' })
+          .mockResolvedValueOnce({ id: 'membership-1', role: 'organizer' })
           .mockResolvedValueOnce(null)
           .mockResolvedValueOnce({ id: 'b1', currentBalance: 5 }),
         save: vi.fn().mockImplementation((_entity: any, data: any) => {
@@ -183,7 +183,7 @@ describe('KitchenService — 1A: só FINANCE_ROLES mexe em saldo (B2)', () => {
       }),
     );
 
-    await criarSvc(orderRepository as any).atualizarEstado('o1', 'cancelled', { id: 'u1', role: 'cashier' });
+    await criarSvc(orderRepository as any).atualizarEstado('o1', 'cancelled', { id: 'u1', role: 'organizer' });
 
     expect(balanceSave).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'b1', currentBalance: 15 }),
@@ -229,6 +229,40 @@ describe('KitchenService — revalidação de membership na transação', () => 
     expect(manager.save).not.toHaveBeenCalled();
   });
 });
+
+  it('recusa alteração se a event-role foi reduzida para client depois da validação inicial', async () => {
+    const order = { id: 'o1', status: 'received', event: { id: 'evt1' } };
+    const manager = {
+      findOne: vi.fn()
+        .mockResolvedValueOnce({ ...order })
+        .mockResolvedValueOnce({ id: 'membership-1', role: 'client' }),
+      save: vi.fn(),
+    };
+    const membershipService = {
+      assertMember: vi.fn().mockResolvedValue(undefined),
+      eventIdsFor: vi.fn().mockResolvedValue(null),
+      eventColumnFor: vi.fn().mockReturnValue(null),
+    };
+    const orderRepository = {
+      findOne: vi.fn().mockResolvedValue(order),
+      manager: { transaction: vi.fn().mockImplementation(async (fn: any) => fn(manager)) },
+    };
+    const service = new KitchenService(
+      orderRepository as any,
+      membershipService as any,
+      { emitOrderUpdate: vi.fn() } as any,
+    );
+
+    await expect(
+      service.atualizarEstado('o1', 'preparing', { id: 'u1', role: 'kitchen' }),
+    ).rejects.toThrow('A tua função neste evento não permite operações de cozinha');
+
+    expect(manager.findOne).toHaveBeenLastCalledWith(
+      EventUserEntity,
+      expect.objectContaining({ lock: { mode: 'pessimistic_read' } }),
+    );
+    expect(manager.save).not.toHaveBeenCalled();
+  });
 
 describe('KitchenService — A12: KDS mostra os pedidos mais recentes (ordem DESC, sem corte a 20)', () => {
   const criarPedidos = (n: number) =>

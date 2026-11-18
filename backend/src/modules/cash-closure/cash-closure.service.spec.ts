@@ -3,10 +3,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenException, ConflictException } from '@nestjs/common';
 import { CashClosureService } from './cash-closure.service';
 import { EventService } from '../event/event.service';
+import { EventUserEntity } from '../../entities';
 
-function criarDataSource(repository: any) {
+function criarDataSource(repository: any, membershipRole = 'cashier') {
   const manager = {
-    findOne: vi.fn(async (_entity: any, options: any) => repository.findOne(options)),
+    findOne: vi.fn(async (entity: any, options: any) =>
+      entity === EventUserEntity ? { id: 'membership', role: membershipRole } : repository.findOne(options),
+    ),
     save: vi.fn(async (_entity: any, value: any) => repository.save(value)),
   };
   const dataSource = {
@@ -15,7 +18,7 @@ function criarDataSource(repository: any) {
   return { dataSource, manager };
 }
 
-function criarServico(overrides: { jaAberta?: any } = {}) {
+function criarServico(overrides: { jaAberta?: any } = {}, membershipRole = 'cashier') {
   const eventService = {
     assertEventOperavelById: vi.fn(),
   } as unknown as EventService;
@@ -30,7 +33,7 @@ function criarServico(overrides: { jaAberta?: any } = {}) {
     save: vi.fn().mockImplementation(async (v) => ({ id: 'c1', ...v })),
   } as any;
 
-  const { dataSource, manager } = criarDataSource(repository);
+  const { dataSource, manager } = criarDataSource(repository, membershipRole);
 
   return {
     service: new CashClosureService(repository, membershipService, eventService, dataSource as any),
@@ -91,6 +94,20 @@ describe('A9 — unicidade de caixa aberta por evento', () => {
     await expect(
       service.abrirCaixa('op2', { id: 'op2', role: 'cashier' }, { eventId: 'evt1' } as any),
     ).rejects.toThrow(ConflictException);
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+
+  it('recusa abrir caixa quando a event-role actual já foi reduzida para client', async () => {
+    const { service, repository, manager } = criarServico({}, 'client');
+
+    await expect(
+      service.abrirCaixa('op1', { id: 'op1', role: 'cashier' }, { eventId: 'evt1' } as any),
+    ).rejects.toThrow('A tua função neste evento não permite operações de caixa');
+
+    expect(manager.findOne).toHaveBeenCalledWith(
+      EventUserEntity,
+      expect.objectContaining({ lock: { mode: 'pessimistic_read' } }),
+    );
     expect(repository.save).not.toHaveBeenCalled();
   });
 
@@ -172,6 +189,20 @@ describe('A9 — fecho: operador que abriu OU superadmin', () => {
     await expect(
       service.fecharCaixa('c1', 'op2', { id: 'op2', role: 'cashier' }, { totalActual: 100 } as any),
     ).rejects.toThrow(ForbiddenException);
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+
+  it('recusa fechar caixa quando a event-role actual já foi reduzida para client', async () => {
+    const { service, repository, manager } = criarServico({ jaAberta: caixaAberta() }, 'client');
+
+    await expect(
+      service.fecharCaixa('c1', 'op1', { id: 'op1', role: 'cashier' }, { totalActual: 100 } as any),
+    ).rejects.toThrow('A tua função neste evento não permite operações de caixa');
+
+    expect(manager.findOne).toHaveBeenCalledWith(
+      EventUserEntity,
+      expect.objectContaining({ lock: { mode: 'pessimistic_read' } }),
+    );
     expect(repository.save).not.toHaveBeenCalled();
   });
 
