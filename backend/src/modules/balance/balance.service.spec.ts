@@ -31,6 +31,24 @@ describe('BalanceService — guard de janela operacional', () => {
 
   beforeEach(() => vi.clearAllMocks());
 
+  it('rejeita operações financeiras quando a event-role actual é client', async () => {
+    const manager = {
+      findOne: vi.fn().mockResolvedValue({ id: 'membership', role: 'client' }),
+    };
+
+    await expect(
+      (balanceService as any).assertMemberEventInTransaction(manager, 'staff', 'evt1'),
+    ).rejects.toThrow('A tua função neste evento não permite esta operação');
+
+    expect(manager.findOne).toHaveBeenCalledWith(
+      EventUserEntity,
+      expect.objectContaining({
+        where: { user: { id: 'staff' }, event: { id: 'evt1' } },
+        lock: { mode: 'pessimistic_read' },
+      }),
+    );
+  });
+
   it('NÃO depende do OrderGateway (A4: saldo não emite no canal de pedidos)', () => {
     expect((balanceService as any).orderGateway).toBeUndefined();
   });

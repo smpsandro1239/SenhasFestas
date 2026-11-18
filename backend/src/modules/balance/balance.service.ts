@@ -103,6 +103,9 @@ export class BalanceService {
     if (!membership) {
       throw new ForbiddenException('Não pertence a este evento');
     }
+    if (typeof membership.role === 'string' && !FINANCE_ROLES.includes(membership.role)) {
+      throw new ForbiddenException('A tua função neste evento não permite esta operação');
+    }
   }
 
   private async assertFinanceMembershipInTransaction(
@@ -116,17 +119,8 @@ export class BalanceService {
     if (actor.role === 'superadmin') {
       return;
     }
-    const membership = await manager.findOne(EventUserEntity, {
-      where: { user: { id: actor.id }, event: { id: eventId } },
-      // A role e a membership ficam estáveis até a escrita terminar.
-      lock: { mode: 'pessimistic_read' },
-    });
-    if (!membership) {
-      throw new ForbiddenException('Não pertence a este evento');
-    }
-    if (!FINANCE_ROLES.includes(membership.role)) {
-      throw new ForbiddenException('A tua função neste evento não permite esta operação');
-    }
+    // O helper comum bloqueia a membership e confirma a event-role actual.
+    await this.assertMemberEventInTransaction(manager, actor.id, eventId);
   }
 
   async assertMemberEvent(userId: string, eventId: string): Promise<void> {

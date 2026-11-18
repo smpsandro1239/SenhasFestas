@@ -5,9 +5,9 @@
 
 **Alterações**
 - O controller passa o actor autenticado ao serviço; a autorização deixa de depender apenas da verificação anterior do guard.
-- O serviço verifica a membership actual e a event-role dentro da transacção, com lock partilhado na membership; apenas FINANCE_ROLES ou superadmin podem prosseguir.
+- O helper transaccional comum verifica a membership actual e a event-role sob lock partilhado, cobrindo carregamento, desconto, estorno, transferência, extensão, desarquivamento e notificação; apenas FINANCE_ROLES ou superadmin podem prosseguir.
 - A linha do saldo é bloqueada com pessimistic_write e a alteração é guardada na mesma transacção.
-- Testes cobrem o lock da membership/saldo e a rejeição quando a role foi reduzida para cliente antes da escrita; os testes de auditoria continuam a verificar snapshots before/after.
+- Testes cobrem o lock da membership/saldo e a rejeição quando a role foi reduzida para cliente antes da escrita, incluindo o helper usado pelas operações financeiras existentes; os testes de auditoria continuam a verificar snapshots before/after.
 
 **Validação**
 - Alteração ainda não integrada nem validada pela CI. Não declarar concluída.
