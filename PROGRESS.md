@@ -10,8 +10,8 @@
 - Testes acrescentados para downgrade de role entre a validação inicial e a escrita.
 
 **Validação**
-- Alterações ainda não integradas nem validadas pela CI.
-- T44 permanece aberta.
+- CI do commit `6a08d72`: 626 testes unitários passaram e lint não reportou erros; o build backend falhou por TS2345 no uso de `STAFF_ROLES.includes(string)`. Frontend passou lint, typecheck, Vitest e build. Documentação passou; Browser E2E foi cancelado pela execução seguinte. CodeQL passou; Security falhou apenas pelo advisory transitivo de `picomatch`.
+- Corrigida a comparação de roles com `STAFF_ROLES.some(...)`; nova CI aguarda validação. T44 permanece aberta.
 
 ---
 

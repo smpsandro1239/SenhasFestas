@@ -128,7 +128,7 @@ const pedidoCtx = await manager.findOne(OrderEntity, {
       if (!membro) {
         throw new ForbiddenException('Não pertence a este evento');
       }
-      if (typeof membro.role === 'string' && !STAFF_ROLES.includes(membro.role)) {
+      if (typeof membro.role === 'string' && !STAFF_ROLES.some((role) => role === membro.role)) {
         throw new ForbiddenException('A tua função neste evento não permite entregar pedidos');
       }
     }
