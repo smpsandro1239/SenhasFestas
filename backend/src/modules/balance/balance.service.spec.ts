@@ -393,30 +393,16 @@ describe('BalanceService — guard de janela operacional', () => {
       };
     }
 
-    function serviceCom(balanceRepository: any, membershipRole = 'cashier') {
-      const queryBuilder = {
-        leftJoinAndSelect: vi.fn().mockReturnThis(),
-        innerJoin: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        andWhere: vi.fn().mockReturnThis(),
-        withDeleted: vi.fn().mockReturnThis(),
-        setLock: vi.fn().mockReturnThis(),
-        getOne: vi.fn().mockImplementation(() => balanceRepository.findOne({
-          withDeleted: queryBuilder.withDeleted.mock.calls.length > 0,
-        })),
-      };
-      const manager = {
-        findOne: vi.fn().mockImplementation((entity: any) =>
-          entity === EventUserEntity ? Promise.resolve({ id: 'membership', role: membershipRole }) : Promise.resolve(null),
-        ),
-        createQueryBuilder: vi.fn().mockReturnValue(queryBuilder),
-        save: vi.fn().mockImplementation((_entity: any, balance: any) => balanceRepository.save(balance)),
-      };
-      const dataSource = { transaction: vi.fn().mockImplementation(async (callback: any) => callback(manager)) };
-      const service = new BalanceService(balanceRepository, {} as any, {} as any, {} as any, {} as any, dataSource as any, eventService);
-      (service as any).__manager = manager;
-      (service as any).__queryBuilder = queryBuilder;
-      return service;
+    function serviceCom(balanceRepository: any) {
+      return new BalanceService(
+        balanceRepository,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        { transaction: vi.fn() } as any,
+        eventService,
+      );
     }
 
     it('deductBalance RECUSA consumo de saldo arquivado → 409', async () => {
@@ -620,16 +606,30 @@ describe('BalanceService — guard de janela operacional', () => {
   describe('extensão, desarquivamento e notificação (Parte 3)', () => {
     const evento = { id: 'evt1', endDate: '2026-10-10', balanceGraceDays: 3 };
 
-    function serviceCom(balanceRepository: any) {
-      return new BalanceService(
-        balanceRepository,
-        {} as any,
-        {} as any,
-        {} as any,
-        {} as any,
-        { transaction: vi.fn() } as any,
-        eventService,
-      );
+    function serviceCom(balanceRepository: any, membershipRole = 'cashier') {
+      const queryBuilder = {
+        leftJoinAndSelect: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        andWhere: vi.fn().mockReturnThis(),
+        withDeleted: vi.fn().mockReturnThis(),
+        setLock: vi.fn().mockReturnThis(),
+        getOne: vi.fn().mockImplementation(() => balanceRepository.findOne({
+          withDeleted: queryBuilder.withDeleted.mock.calls.length > 0,
+        })),
+      };
+      const manager = {
+        findOne: vi.fn().mockImplementation((entity: any) =>
+          entity === EventUserEntity ? Promise.resolve({ id: 'membership', role: membershipRole }) : Promise.resolve(null),
+        ),
+        createQueryBuilder: vi.fn().mockReturnValue(queryBuilder),
+        save: vi.fn().mockImplementation((_entity: any, balance: any) => balanceRepository.save(balance)),
+      };
+      const dataSource = { transaction: vi.fn().mockImplementation(async (callback: any) => callback(manager)) };
+      const service = new BalanceService(balanceRepository, {} as any, {} as any, {} as any, {} as any, dataSource as any, eventService);
+      (service as any).__manager = manager;
+      (service as any).__queryBuilder = queryBuilder;
+      return service;
     }
 
     function repoCom(balance: any) {
