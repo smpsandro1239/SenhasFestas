@@ -76,10 +76,12 @@ describe('PublicScreenService — A7: ecrã público não expõe dados financeir
   });
 });
 
+describe('PublicScreenService — autorização transaccional', () => {
   it('recusa entrega se a event-role actual já foi reduzida para client', async () => {
     const manager = {
       findOne: vi.fn()
         .mockResolvedValueOnce({ id: 'o1', status: 'ready', event: { id: 'evt1' } })
+        .mockResolvedValueOnce({ id: 'o1', status: 'ready' })
         .mockResolvedValueOnce({ id: 'membership-1', role: 'client' }),
       save: vi.fn(),
     };
@@ -101,6 +103,7 @@ describe('PublicScreenService — A7: ecrã público não expõe dados financeir
     );
     expect(manager.save).not.toHaveBeenCalled();
   });
+});
 
 describe('PublicScreenService — snapshot anterior para auditoria (arquivar)', () => {
   it('marcarEntregue arquiva o estado anterior e o evento', async () => {

@@ -104,6 +104,15 @@ const pedidoCtx = await manager.findOne(OrderEntity, {
       throw new NotFoundException('Pedido não encontrado');
     }
 
+    // Ordem global de locks: pedido -> membership, igual à transição da cozinha.
+    const pedido = await manager.findOne(OrderEntity, {
+      where: { id },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!pedido) {
+      throw new NotFoundException('Pedido não encontrado');
+    }
+
     const eventId = pedidoCtx.event?.id;
     if (!eventId) {
       throw new ForbiddenException('Pedido sem evento associado');
@@ -122,14 +131,6 @@ const pedidoCtx = await manager.findOne(OrderEntity, {
       if (typeof membro.role === 'string' && !STAFF_ROLES.includes(membro.role)) {
         throw new ForbiddenException('A tua função neste evento não permite entregar pedidos');
       }
-    }
-
-    const pedido = await manager.findOne(OrderEntity, {
-      where: { id },
-      lock: { mode: 'pessimistic_write' },
-    });
-    if (!pedido) {
-      throw new NotFoundException('Pedido não encontrado');
     }
 
     if (pedido.status !== 'ready') {

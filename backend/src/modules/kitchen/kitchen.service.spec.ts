@@ -230,6 +230,7 @@ describe('KitchenService — revalidação de membership na transação', () => 
   });
 });
 
+describe('KitchenService — autorização transaccional', () => {
   it('recusa alteração se a event-role foi reduzida para client depois da validação inicial', async () => {
     const order = { id: 'o1', status: 'received', event: { id: 'evt1' } };
     const manager = {
@@ -263,6 +264,7 @@ describe('KitchenService — revalidação de membership na transação', () => 
     );
     expect(manager.save).not.toHaveBeenCalled();
   });
+});
 
 describe('KitchenService — A12: KDS mostra os pedidos mais recentes (ordem DESC, sem corte a 20)', () => {
   const criarPedidos = (n: number) =>
