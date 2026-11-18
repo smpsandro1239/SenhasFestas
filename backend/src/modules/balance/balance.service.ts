@@ -226,13 +226,7 @@ export class BalanceService {
         if (!eventoMovimento) {
           throw new ForbiddenException('Movimento sem evento associado');
         }
-        const membro = await manager.findOne(EventUserEntity, {
-          where: { user: { id: actor.id }, event: { id: eventoMovimento } },
-          lock: { mode: 'pessimistic_read' },
-        });
-        if (!membro) {
-          throw new ForbiddenException('Não pertence a este evento');
-        }
+        await this.assertMemberEventInTransaction(manager, actor.id, eventoMovimento);
       }
 
       if (idempotencyKey && storedIdempotencyKey) {

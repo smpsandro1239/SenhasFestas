@@ -241,6 +241,36 @@ describe('BalanceService — guard de janela operacional', () => {
       expect(orderGateway.emitOrderUpdate).not.toHaveBeenCalled();
     });
 
+    it('rejeita estorno quando a event-role actual já foi reduzida para client', async () => {
+      const movement = {
+        id: 'mov1',
+        reversed: false,
+        amount: 10,
+        type: MovementType.LOAD,
+        balance: { id: 'b1', user: { id: 'u1' }, event: { id: 'evtA' } },
+      };
+      const manager = {
+        findOne: vi.fn().mockImplementation((entity: any) =>
+          entity === BalanceMovementEntity
+            ? Promise.resolve(movement)
+            : entity === EventUserEntity
+              ? Promise.resolve({ id: 'membership-1', role: 'client' })
+              : Promise.resolve(null),
+        ),
+        save: vi.fn(),
+      };
+      (balanceService as any).dataSource.transaction.mockImplementation(async (fn: any) => fn(manager));
+
+      await expect(
+        balanceService.reverseLoad('u1', 'mov1', { id: 'staff', role: 'cashier' }, {} as any),
+      ).rejects.toThrow('A tua função neste evento não permite esta operação');
+      expect(manager.findOne).toHaveBeenLastCalledWith(
+        EventUserEntity,
+        expect.objectContaining({ lock: { mode: 'pessimistic_read' } }),
+      );
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
     it('rejeita estorno cross-event: membro só de outro evento → 403', async () => {
       const movimento = {
         id: 'mov1',
