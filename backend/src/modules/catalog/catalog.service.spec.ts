@@ -542,6 +542,38 @@ describe('CatalogService', () => {
   });
 
   describe('create', () => {
+    it('recusa criar produto quando a event-role actual foi reduzida para cashier', async () => {
+      const manager = {
+        findOne: vi.fn(async (entity: any) =>
+          entity?.name === 'EventUserEntity' ? { id: 'membership-1', role: 'cashier' } : { id: 'evt1' },
+        ),
+        save: vi.fn(),
+      };
+      mockProductRepository.manager.transaction = vi.fn(async (fn: any) => fn(manager));
+
+      await expect(
+        service.create(MEMBRO, { name: 'Bifana', price: 3.5, eventId: 'evt1' } as any),
+      ).rejects.toThrow('A tua função neste evento não permite gerir o catálogo');
+      expect(manager.findOne).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ lock: { mode: 'pessimistic_read' } }),
+      );
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    it('recusa criar produto quando a membership foi removida antes da escrita', async () => {
+      const manager = {
+        findOne: vi.fn().mockResolvedValue(null),
+        save: vi.fn(),
+      };
+      mockProductRepository.manager.transaction = vi.fn(async (fn: any) => fn(manager));
+
+      await expect(
+        service.create(MEMBRO, { name: 'Bifana', price: 3.5, eventId: 'evt1' } as any),
+      ).rejects.toThrow('Não pertence a este evento');
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
     it('saves a new active product', async () => {
       const dto = { name: 'Cachorro', price: 5.5, categoryId: 'c1' };
       mockProductRepository.create.mockImplementation((data: any) => data);

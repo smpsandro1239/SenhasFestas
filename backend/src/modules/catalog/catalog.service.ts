@@ -1,9 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, In, ILike, Repository } from 'typeorm';
 import { ProductEntity, CategoryEntity, UserEntity, EventEntity, EventUserEntity, OrderItemEntity } from '../../entities';
 import { MANAGEMENT_ROLES } from '../../common/roles';
-import { In, ILike, EntityManager } from 'typeorm';
 import { CreateProductDto, UpdateProductDto, AdjustStockDto } from './dto';
 import { MembershipService } from '../../common/membership.service';
 import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';

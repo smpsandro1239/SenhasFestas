@@ -1,3 +1,19 @@
+## 2026-11-18 — T44: corrigir mocks e completar testes de criação de produtos
+
+**Falha da CI**
+- A execução do commit `b0fbfba` passou frontend, Browser E2E, documentação e CodeQL, mas o backend falhou num teste de isolamento: `manager.transaction` estava declarado como `null` no mock e o teste tentou chamar `mockImplementation`.
+- 628/629 testes passaram. A falha era do teste, não do serviço.
+
+**Correcção**
+- O teste cross-event passa a atribuir directamente a função mock de transacção.
+- Acrescentados testes próprios para criação de produto após downgrade da event-role para `cashier` e após remoção da membership; ambos confirmam ausência de escrita.
+- Consolidado o import de `EntityManager` com os restantes imports do TypeORM.
+
+**Validação**
+- Correcção preparada para nova CI; ainda não validada. T44 permanece aberta.
+
+---
+
 ## 2026-11-18 — T44: autorização transaccional na criação de produtos
 
 **Problema confirmado**
