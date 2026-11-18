@@ -1,3 +1,18 @@
+## 2026-11-18 — T44: validação do acerto de stock e estado dos gates
+
+**Validação do commit `4a6d1f1`**
+- CI completa com sucesso: backend (lint, testes unitários, build e E2E PostgreSQL/Redis), frontend (lint, typecheck, Vitest e build), Browser E2E e documentação.
+- CodeQL passou.
+- Gitleaks e testes de regressão de cache privado PWA passaram.
+- Security continua a falhar exclusivamente na auditoria de dependências: 4 alertas altos transitivos de `picomatch` (GHSA-fc5q-39xc-vjpf). O advisory afecta versões até 4.0.7 e não identifica versão corrigida; `npm audit fix --force` tenta uma alteração incompatível do TypeORM. Não aplicar downgrade major nem override para uma versão vulnerável.
+- O job de deploy aparece verde, mas os passos de migração e SSH foram ignorados. Não existe confirmação de deploy em produção.
+
+**Próxima revisão**
+- Continuar a auditoria dos métodos de mutação do catálogo e de operações que recebem IDs directos, com revalidação da event-role na mesma transacção da escrita.
+- T44 permanece aberta.
+
+---
+
 ## 2026-11-18 — T44: autorização transaccional no acerto de stock
 
 **Problema confirmado**
