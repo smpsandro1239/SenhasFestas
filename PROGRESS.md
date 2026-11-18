@@ -1,3 +1,22 @@
+## 2026-11-18 — T44: corrigir dependência do gateway nos testes de autenticação
+
+**Problema confirmado na CI do commit `3db5710`**
+- O job Backend executou lint com sucesso, mas 5 testes falharam em `backend/test/auth.controller.spec.ts` porque o módulo Nest de testes não registava o provider `OrderGateway`, agora injectado em `AuthController`.
+- O mock do fluxo `enter-event` também não devolvia `replacedEventIds`, campo interno iterado pelo controller.
+
+**Correcção**
+- Registado um mock explícito de `OrderGateway` no módulo de testes.
+- O cenário sem substituições devolve uma lista vazia e verifica que não há revogação.
+- Acrescentado cenário `replace=true` que verifica a revogação de cada evento substituído e confirma que os IDs internos não aparecem na resposta HTTP.
+
+**Validação**
+- A CI do commit `3db5710`: backend 614/619 testes passaram; os 5 falhados pertencem ao mesmo spec e decorrem da dependência não fornecida. Frontend, Browser E2E, documentação e CodeQL passaram.
+- A correcção seguinte aguarda execução da CI. Security mantém 4 vulnerabilidades altas transitivas de `picomatch`; não aplicar downgrade major automático.
+- Deploy Vercel bloqueado pelo limite de builds; não há deploy confirmado.
+- T44 permanece aberta.
+
+---
+
 ## 2026-11-17 — T44: revogação no fluxo enter-event com replace=true
 
 **Problema confirmado**
