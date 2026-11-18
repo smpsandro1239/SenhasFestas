@@ -9,6 +9,7 @@ import { centavos, soma, subtrai } from '../../common/money';
 import { assertSaldoUtilizavel, saldoDeadlineUtc } from '../../common/balance-guard';
 import { EventService } from '../event/event.service';
 import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';
+import { FINANCE_ROLES } from '../../common/roles';
 
 const DIA_MS = 86_400_000;
 const SOFT_DELETE_APOS_DIAS = 30;
@@ -101,6 +102,30 @@ export class BalanceService {
     });
     if (!membership) {
       throw new ForbiddenException('Não pertence a este evento');
+    }
+  }
+
+  private async assertFinanceMembershipInTransaction(
+    manager: import('typeorm').EntityManager,
+    actor: any,
+    eventId: string,
+  ): Promise<void> {
+    if (!actor?.id) {
+      throw new ForbiddenException('Não autenticado');
+    }
+    if (actor.role === 'superadmin') {
+      return;
+    }
+    const membership = await manager.findOne(EventUserEntity, {
+      where: { user: { id: actor.id }, event: { id: eventId } },
+      // A role e a membership ficam estáveis até a escrita terminar.
+      lock: { mode: 'pessimistic_read' },
+    });
+    if (!membership) {
+      throw new ForbiddenException('Não pertence a este evento');
+    }
+    if (!FINANCE_ROLES.includes(membership.role)) {
+      throw new ForbiddenException('A tua função neste evento não permite esta operação');
     }
   }
 
@@ -626,16 +651,22 @@ export class BalanceService {
     return { arquivados, removidos };
   }
 
-  private async carregarSaldoEvento(
+  private async carregarSaldoEventoEmTransacao(
+    manager: import('typeorm').EntityManager,
     userId: string,
     eventId: string,
     incluirRemovidos = false,
   ): Promise<BalanceEntity> {
-    const balance = await this.balanceRepository.findOne({
-      where: { user: { id: userId }, event: { id: eventId } } as any,
-      relations: { event: true, user: true },
-      withDeleted: incluirRemovidos,
-    });
+    const query = manager
+      .createQueryBuilder(BalanceEntity, 'saldo')
+      .leftJoinAndSelect('saldo.event', 'event')
+      .innerJoin('saldo.user', 'utilizador')
+      .where('utilizador.id = :userId', { userId })
+      .andWhere('event.id = :eventId', { eventId });
+    if (incluirRemovidos) {
+      query.withDeleted();
+    }
+    const balance = await query.setLock('pessimistic_write', undefined, ['saldo']).getOne();
     if (!balance) {
       throw new NotFoundException('Saldo não encontrado');
     }
@@ -657,61 +688,69 @@ export class BalanceService {
   async extendBalance(
     userId: string,
     dto: ExtendBalanceDto,
+    actor: any,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<SaldoEstado> {
-    const balance = await this.carregarSaldoEvento(userId, dto.eventId, true);
     const until = new Date(dto.until);
     if (Number.isNaN(until.getTime()) || until.getTime() <= Date.now()) {
       throw new BadRequestException('Data de extensão tem de ser futura');
     }
-    arquivar?.({
-      antes: { extendedUntil: balance.extendedUntil ?? null, archivedAt: balance.archivedAt ?? null },
-      eventId: dto.eventId,
-      entidadeId: balance.id,
-      extras: { extendedUntil: until.toISOString() },
+    return this.dataSource.transaction(async (manager) => {
+      await this.assertFinanceMembershipInTransaction(manager, actor, dto.eventId);
+      const balance = await this.carregarSaldoEventoEmTransacao(manager, userId, dto.eventId, true);
+      arquivar?.({
+        antes: { extendedUntil: balance.extendedUntil ?? null, archivedAt: balance.archivedAt ?? null },
+        eventId: dto.eventId,
+        entidadeId: balance.id,
+        extras: { extendedUntil: until.toISOString() },
+      });
+      balance.extendedUntil = until;
+      if (balance.archivedAt) balance.archivedAt = null;
+      balance.deletedAt = null;
+      const saved = await manager.save(BalanceEntity, balance);
+      return this.resumoSaldo(userId, saved);
     });
-    balance.extendedUntil = until;
-    if (balance.archivedAt) {
-      // Extensão para o futuro revive um saldo já arquivado.
-      balance.archivedAt = null;
-    }
-    // A extensão explícita também restaura o registo após o soft-delete de 30 dias.
-    balance.deletedAt = null;
-    const saved = await this.balanceRepository.save(balance);
-    return this.resumoSaldo(userId, saved);
   }
 
   async unarchiveBalance(
     userId: string,
     eventId: string,
+    actor: any,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<SaldoEstado> {
-    const balance = await this.carregarSaldoEvento(userId, eventId, true);
-    arquivar?.({
-      antes: { archivedAt: balance.archivedAt ?? null },
-      eventId,
-      entidadeId: balance.id,
+    return this.dataSource.transaction(async (manager) => {
+      await this.assertFinanceMembershipInTransaction(manager, actor, eventId);
+      const balance = await this.carregarSaldoEventoEmTransacao(manager, userId, eventId, true);
+      arquivar?.({
+        antes: { archivedAt: balance.archivedAt ?? null },
+        eventId,
+        entidadeId: balance.id,
+      });
+      balance.archivedAt = null;
+      balance.deletedAt = null;
+      const saved = await manager.save(BalanceEntity, balance);
+      return this.resumoSaldo(userId, saved);
     });
-    balance.archivedAt = null;
-    balance.deletedAt = null;
-    const saved = await this.balanceRepository.save(balance);
-    return this.resumoSaldo(userId, saved);
   }
 
   async markNotified(
     userId: string,
     eventId: string,
+    actor: any,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<SaldoEstado> {
-    const balance = await this.carregarSaldoEvento(userId, eventId);
-    arquivar?.({
-      antes: { notifiedAt: balance.notifiedAt ?? null },
-      eventId,
-      entidadeId: balance.id,
+    return this.dataSource.transaction(async (manager) => {
+      await this.assertFinanceMembershipInTransaction(manager, actor, eventId);
+      const balance = await this.carregarSaldoEventoEmTransacao(manager, userId, eventId);
+      arquivar?.({
+        antes: { notifiedAt: balance.notifiedAt ?? null },
+        eventId,
+        entidadeId: balance.id,
+      });
+      balance.notifiedAt = new Date();
+      const saved = await manager.save(BalanceEntity, balance);
+      return this.resumoSaldo(userId, saved);
     });
-    balance.notifiedAt = new Date();
-    const saved = await this.balanceRepository.save(balance);
-    return this.resumoSaldo(userId, saved);
   }
 
   async getBalanceHistory(

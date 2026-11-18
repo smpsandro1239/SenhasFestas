@@ -110,10 +110,7 @@ export class BalanceController {
     @Body() dto: ExtendBalanceDto,
     @Request() req: any,
   ) {
-    if (req.user.role !== 'superadmin') {
-      await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
-    }
-    return this.balanceService.extendBalance(userId, dto, arquivarAuditoria(req));
+    return this.balanceService.extendBalance(userId, dto, req.user, arquivarAuditoria(req));
   }
 
   @Post(':userId/unarchive')
@@ -123,10 +120,7 @@ export class BalanceController {
     @Body() dto: BalanceEventDto,
     @Request() req: any,
   ) {
-    if (req.user.role !== 'superadmin') {
-      await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
-    }
-    return this.balanceService.unarchiveBalance(userId, dto.eventId, arquivarAuditoria(req));
+    return this.balanceService.unarchiveBalance(userId, dto.eventId, req.user, arquivarAuditoria(req));
   }
 
   @Post(':userId/notified')
@@ -136,10 +130,7 @@ export class BalanceController {
     @Body() dto: BalanceEventDto,
     @Request() req: any,
   ) {
-    if (req.user.role !== 'superadmin') {
-      await this.balanceService.assertMemberEvent(req.user.id, dto.eventId);
-    }
-    return this.balanceService.markNotified(userId, dto.eventId, arquivarAuditoria(req));
+    return this.balanceService.markNotified(userId, dto.eventId, req.user, arquivarAuditoria(req));
   }
 
   @Get('event/:eventId/outstanding')

@@ -1,3 +1,20 @@
+## 2026-11-18 — T44: revalidar operações de saldo na transacção
+
+**Problema confirmado**
+- As rotas de extensão, desarquivamento e notificação verificavam a membership no controller e depois escreviam o saldo fora de uma transacção. Uma remoção ou alteração da role entre a verificação e a escrita podia permitir concluir uma operação após a revogação.
+
+**Alterações**
+- O controller passa o actor autenticado ao serviço; a autorização deixa de depender apenas da verificação anterior do guard.
+- O serviço verifica a membership actual e a event-role dentro da transacção, com lock partilhado na membership; apenas FINANCE_ROLES ou superadmin podem prosseguir.
+- A linha do saldo é bloqueada com pessimistic_write e a alteração é guardada na mesma transacção.
+- Testes cobrem o lock da membership/saldo e a rejeição quando a role foi reduzida para cliente antes da escrita; os testes de auditoria continuam a verificar snapshots before/after.
+
+**Validação**
+- Alteração ainda não integrada nem validada pela CI. Não declarar concluída.
+- T44 permanece aberta.
+
+---
+
 ## 2026-11-18 — T44: corrigir dependência do gateway nos testes de autenticação
 
 **Problema confirmado na CI do commit `3db5710`**
@@ -11,7 +28,7 @@
 
 **Validação**
 - A CI do commit `3db5710`: backend 614/619 testes passaram; os 5 falhados pertencem ao mesmo spec e decorrem da dependência não fornecida. Frontend, Browser E2E, documentação e CodeQL passaram.
-- A correcção seguinte aguarda execução da CI. Security mantém 4 vulnerabilidades altas transitivas de `picomatch`; não aplicar downgrade major automático.
+- O commit `800cab5` corrigiu o provider e os mocks. Backend (lint, testes unitários, build e E2E), frontend (lint, typecheck, Vitest e build), documentação e CodeQL passaram. Browser E2E ainda estava a instalar Chromium na última consulta. Security mantém 4 vulnerabilidades altas transitivas de `picomatch`; não aplicar downgrade major automático.
 - Deploy Vercel bloqueado pelo limite de builds; não há deploy confirmado.
 - T44 permanece aberta.
 

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenException, ConflictException } from '@nestjs/common';
 import { BalanceService } from './balance.service';
 import { EventService } from '../event/event.service';
-import { MovementType, BalanceMovementEntity, BalanceEntity } from '../../entities';
+import { MovementType, BalanceMovementEntity, BalanceEntity, EventUserEntity } from '../../entities';
 
 describe('BalanceService — guard de janela operacional', () => {
   const eventService = {
@@ -393,16 +393,30 @@ describe('BalanceService — guard de janela operacional', () => {
       };
     }
 
-    function serviceCom(balanceRepository: any) {
-      return new BalanceService(
-        balanceRepository,
-        {} as any,
-        {} as any,
-        {} as any,
-        {} as any,
-        { transaction: vi.fn() } as any,
-        eventService,
-      );
+    function serviceCom(balanceRepository: any, membershipRole = 'cashier') {
+      const queryBuilder = {
+        leftJoinAndSelect: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        andWhere: vi.fn().mockReturnThis(),
+        withDeleted: vi.fn().mockReturnThis(),
+        setLock: vi.fn().mockReturnThis(),
+        getOne: vi.fn().mockImplementation(() => balanceRepository.findOne({
+          withDeleted: queryBuilder.withDeleted.mock.calls.length > 0,
+        })),
+      };
+      const manager = {
+        findOne: vi.fn().mockImplementation((entity: any) =>
+          entity === EventUserEntity ? Promise.resolve({ id: 'membership', role: membershipRole }) : Promise.resolve(null),
+        ),
+        createQueryBuilder: vi.fn().mockReturnValue(queryBuilder),
+        save: vi.fn().mockImplementation((_entity: any, balance: any) => balanceRepository.save(balance)),
+      };
+      const dataSource = { transaction: vi.fn().mockImplementation(async (callback: any) => callback(manager)) };
+      const service = new BalanceService(balanceRepository, {} as any, {} as any, {} as any, {} as any, dataSource as any, eventService);
+      (service as any).__manager = manager;
+      (service as any).__queryBuilder = queryBuilder;
+      return service;
     }
 
     it('deductBalance RECUSA consumo de saldo arquivado → 409', async () => {
@@ -638,9 +652,11 @@ describe('BalanceService — guard de janela operacional', () => {
       });
       const service = serviceCom(repo);
 
-      const res = await service.extendBalance('u1', { eventId: 'evt1', until: '2099-01-01' });
+      const res = await service.extendBalance('u1', { eventId: 'evt1', until: '2099-01-01' }, { id: 'staff', role: 'cashier' });
 
-      expect(repo.findOne).toHaveBeenCalledWith(expect.objectContaining({ withDeleted: true }));
+      expect((service as any).__manager.findOne).toHaveBeenCalledWith(EventUserEntity, expect.objectContaining({ lock: { mode: 'pessimistic_read' } }));
+      expect((service as any).__queryBuilder.setLock).toHaveBeenCalledWith('pessimistic_write', undefined, ['saldo']);
+      expect((service as any).__queryBuilder.withDeleted).toHaveBeenCalledTimes(1);
       expect(repo.save).toHaveBeenCalledTimes(1);
       const guardado = repo.save.mock.calls[0][0];
       expect(guardado.extendedUntil.toISOString()).toBe('2099-01-01T00:00:00.000Z');
@@ -659,7 +675,7 @@ describe('BalanceService — guard de janela operacional', () => {
       const service = serviceCom(repo);
 
       await expect(
-        service.extendBalance('u1', { eventId: 'evt1', until: '2020-01-01' }),
+        service.extendBalance('u1', { eventId: 'evt1', until: '2020-01-01' }, { id: 'staff', role: 'cashier' }),
       ).rejects.toThrow('Data de extensão tem de ser futura');
       expect(repo.save).not.toHaveBeenCalled();
     });
@@ -677,9 +693,11 @@ describe('BalanceService — guard de janela operacional', () => {
       });
       const service = serviceCom(repo);
 
-      const res = await service.unarchiveBalance('u1', 'evt1');
+      const res = await service.unarchiveBalance('u1', 'evt1', { id: 'staff', role: 'cashier' });
 
-      expect(repo.findOne).toHaveBeenCalledWith(expect.objectContaining({ withDeleted: true }));
+      expect((service as any).__manager.findOne).toHaveBeenCalledWith(EventUserEntity, expect.objectContaining({ lock: { mode: 'pessimistic_read' } }));
+      expect((service as any).__queryBuilder.setLock).toHaveBeenCalledWith('pessimistic_write', undefined, ['saldo']);
+      expect((service as any).__queryBuilder.withDeleted).toHaveBeenCalledTimes(1);
       const guardado = repo.save.mock.calls[0][0];
       expect(guardado.archivedAt).toBeNull();
       expect(guardado.deletedAt).toBeNull();
@@ -698,11 +716,22 @@ describe('BalanceService — guard de janela operacional', () => {
       });
       const service = serviceCom(repo);
 
-      const res = await service.markNotified('u1', 'evt1');
+      const res = await service.markNotified('u1', 'evt1', { id: 'staff', role: 'cashier' });
 
       const guardado = repo.save.mock.calls[0][0];
       expect(guardado.notifiedAt).toBeInstanceOf(Date);
       expect(res.notifiedAt).toBeInstanceOf(Date);
+    });
+
+    it('recusa extensão se a role foi reduzida para client antes da escrita', async () => {
+      const repo = repoCom({ id: 'b1', currentBalance: 10, event: evento });
+      const service = serviceCom(repo, 'client');
+
+      await expect(
+        service.extendBalance('u1', { eventId: 'evt1', until: '2099-01-01' }, { id: 'staff', role: 'cashier' }),
+      ).rejects.toThrow('A tua função neste evento não permite esta operação');
+      expect(repo.save).not.toHaveBeenCalled();
+      expect((service as any).__queryBuilder.getOne).not.toHaveBeenCalled();
     });
 
     it('operações de saldo inexistente → 404', async () => {
@@ -710,7 +739,7 @@ describe('BalanceService — guard de janela operacional', () => {
       const service = serviceCom(repo);
 
       await expect(
-        service.extendBalance('u1', { eventId: 'evt1', until: '2099-01-01' }),
+        service.extendBalance('u1', { eventId: 'evt1', until: '2099-01-01' }, { id: 'staff', role: 'cashier' }),
       ).rejects.toThrow('Saldo não encontrado');
     });
 
@@ -984,16 +1013,38 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
     vincularCliente: vi.fn().mockResolvedValue(undefined),
   } as unknown as EventService;
 
-  const Novo = () =>
-    new BalanceService(
-      { find: vi.fn(), findOne: vi.fn(), save: vi.fn() } as any,
+  const Novo = () => {
+    const balanceRepository = { find: vi.fn(), findOne: vi.fn(), save: vi.fn() };
+    const eventUserRepository = { findOne: vi.fn().mockResolvedValue({ id: 'membership', role: 'cashier' }) };
+    const queryBuilder = {
+      leftJoinAndSelect: vi.fn().mockReturnThis(),
+      innerJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      withDeleted: vi.fn().mockReturnThis(),
+      setLock: vi.fn().mockReturnThis(),
+      getOne: vi.fn().mockImplementation(() => balanceRepository.findOne({
+        withDeleted: queryBuilder.withDeleted.mock.calls.length > 0,
+      })),
+    };
+    const manager = {
+      findOne: vi.fn().mockImplementation((entity: any, options: any) =>
+        entity === EventUserEntity ? eventUserRepository.findOne(options) : Promise.resolve(null),
+      ),
+      createQueryBuilder: vi.fn().mockReturnValue(queryBuilder),
+      save: vi.fn().mockImplementation((_entity: any, balance: any) => balanceRepository.save(balance)),
+    };
+    const dataSource = { transaction: vi.fn().mockImplementation(async (callback: any) => callback(manager)) };
+    return new BalanceService(
+      balanceRepository as any,
       { findOne: vi.fn(), save: vi.fn() } as any,
       {} as any,
       { findOne: vi.fn() } as any,
-      { find: vi.fn(), findOne: vi.fn() } as any,
-      { transaction: vi.fn() } as any,
+      eventUserRepository as any,
+      dataSource as any,
       eventService,
     );
+  };
 
   beforeEach(() => vi.clearAllMocks());
 
@@ -1139,6 +1190,7 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
     await svc.extendBalance(
       'u1',
       { eventId: 'evt1', until: new Date(Date.now() + 86_400_000).toISOString() } as any,
+      { id: 'staff', role: 'cashier' },
       arquivar,
     );
 
@@ -1157,7 +1209,7 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
     (svc as any).balanceRepository.save = vi.fn().mockImplementation((e: any) => Promise.resolve(e));
     const arquivar = vi.fn();
 
-    await svc.unarchiveBalance('u1', 'evt1', arquivar);
+    await svc.unarchiveBalance('u1', 'evt1', { id: 'staff', role: 'cashier' }, arquivar);
 
     expect(arquivar).toHaveBeenCalledWith({
       antes: { archivedAt },
@@ -1172,7 +1224,7 @@ describe('BalanceService — snapshot anterior para auditoria (arquivar)', () =>
     (svc as any).balanceRepository.save = vi.fn().mockImplementation((e: any) => Promise.resolve(e));
     const arquivar = vi.fn();
 
-    await svc.markNotified('u1', 'evt1', arquivar);
+    await svc.markNotified('u1', 'evt1', { id: 'staff', role: 'cashier' }, arquivar);
 
     expect(arquivar).toHaveBeenCalledWith({
       antes: { notifiedAt: null },
