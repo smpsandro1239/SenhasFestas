@@ -1170,11 +1170,15 @@ describe('CatalogService', () => {
     beforeEach(() => {
       mockProductRepository.manager.transaction = transacao;
       manager.findOne.mockReset();
+      manager.findOne.mockImplementation(async (entity: any) => {
+        if (entity?.name === 'EventUserEntity') return { id: 'membership-1', role: 'organizer' };
+        return null;
+      });
       manager.save.mockClear();
     });
 
     it('delta soma ao stock com lock pessimista e arquiva o estado anterior com motivo', async () => {
-      manager.findOne.mockResolvedValue({ id: 'p1', stock: 3, event: { id: 'evt1' } });
+      manager.findOne.mockImplementation(async (entity: any) => entity?.name === 'EventUserEntity' ? { id: 'membership-1', role: 'organizer' } : { id: 'p1', stock: 3, event: { id: 'evt1' } });
       const arquivar = vi.fn();
       const r = await service.ajustarStock('p1', MEMBRO, { delta: 10, motivo: 'repo' }, arquivar);
       expect(manager.findOne).toHaveBeenCalledWith(
@@ -1192,13 +1196,13 @@ describe('CatalogService', () => {
     });
 
     it('delta não desce abaixo de zero', async () => {
-      manager.findOne.mockResolvedValue({ id: 'p1', stock: 2, event: { id: 'evt1' } });
+      manager.findOne.mockImplementation(async (entity: any) => entity?.name === 'EventUserEntity' ? { id: 'membership-1', role: 'organizer' } : { id: 'p1', stock: 2, event: { id: 'evt1' } });
       const r = await service.ajustarStock('p1', MEMBRO, { delta: -50 });
       expect(r.stock).toBe(0);
     });
 
     it('novoValor define stock absoluto (acerto)', async () => {
-      manager.findOne.mockResolvedValue({ id: 'p1', stock: 2, event: { id: 'evt1' } });
+      manager.findOne.mockImplementation(async (entity: any) => entity?.name === 'EventUserEntity' ? { id: 'membership-1', role: 'organizer' } : { id: 'p1', stock: 2, event: { id: 'evt1' } });
       const arquivar = vi.fn();
       const r = await service.ajustarStock('p1', MEMBRO, { novoValor: 24, motivo: 'contagem' }, arquivar);
       expect(r.stock).toBe(24);
@@ -1212,21 +1216,21 @@ describe('CatalogService', () => {
     });
 
     it('delta e novoValor juntos → 400', async () => {
-      manager.findOne.mockResolvedValue({ id: 'p1', stock: 5, event: { id: 'evt1' } });
+      manager.findOne.mockImplementation(async (entity: any) => entity?.name === 'EventUserEntity' ? { id: 'membership-1', role: 'organizer' } : { id: 'p1', stock: 5, event: { id: 'evt1' } });
       await expect(
         service.ajustarStock('p1', MEMBRO, { delta: 1, novoValor: 5 } as any),
       ).rejects.toThrow('Indique delta ou novoValor (não ambos)');
     });
 
     it('delta zero → 400', async () => {
-      manager.findOne.mockResolvedValue({ id: 'p1', stock: 5, event: { id: 'evt1' } });
+      manager.findOne.mockImplementation(async (entity: any) => entity?.name === 'EventUserEntity' ? { id: 'membership-1', role: 'organizer' } : { id: 'p1', stock: 5, event: { id: 'evt1' } });
       await expect(service.ajustarStock('p1', MEMBRO, { delta: 0 })).rejects.toThrow(
         'Delta tem de ser diferente de zero',
       );
     });
 
     it('delta em produto sem controlo → 400', async () => {
-      manager.findOne.mockResolvedValue({ id: 'p1', stock: null, event: { id: 'evt1' } });
+      manager.findOne.mockImplementation(async (entity: any) => entity?.name === 'EventUserEntity' ? { id: 'membership-1', role: 'organizer' } : { id: 'p1', stock: null, event: { id: 'evt1' } });
       await expect(service.ajustarStock('p1', MEMBRO, { delta: 10 })).rejects.toThrow(
         'Produto sem controlo de stock',
       );
@@ -1237,6 +1241,34 @@ describe('CatalogService', () => {
       await expect(service.ajustarStock('p1', MEMBRO, { delta: 10 })).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('recusa acerto de stock quando a event-role actual já foi reduzida para cashier', async () => {
+      manager.findOne.mockImplementation(async (entity: any) =>
+        entity?.name === 'EventUserEntity'
+          ? { id: 'membership-1', role: 'cashier' }
+          : { id: 'p1', stock: 3, event: { id: 'evt1' } },
+      );
+
+      await expect(service.ajustarStock('p1', MEMBRO, { delta: 5 })).rejects.toThrow(
+        'A tua função neste evento não permite gerir o catálogo',
+      );
+      expect(manager.findOne).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({ lock: { mode: 'pessimistic_read' } }),
+      );
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    it('recusa acerto de stock quando a membership foi removida', async () => {
+      manager.findOne.mockImplementation(async (entity: any) =>
+        entity?.name === 'EventUserEntity' ? null : { id: 'p1', stock: 3, event: { id: 'evt1' } },
+      );
+
+      await expect(service.ajustarStock('p1', MEMBRO, { delta: 5 })).rejects.toThrow(
+        'Não pertence a este evento',
+      );
+      expect(manager.save).not.toHaveBeenCalled();
     });
 
     it('a rota exige MANAGEMENT_ROLES', () => {

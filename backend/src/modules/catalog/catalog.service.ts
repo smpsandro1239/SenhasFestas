@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ProductEntity, CategoryEntity, UserEntity, EventEntity, OrderItemEntity } from '../../entities';
+import { ProductEntity, CategoryEntity, UserEntity, EventEntity, EventUserEntity, OrderItemEntity } from '../../entities';
+import { MANAGEMENT_ROLES } from '../../common/roles';
 import { In, ILike } from 'typeorm';
 import { CreateProductDto, UpdateProductDto, AdjustStockDto } from './dto';
 import { MembershipService } from '../../common/membership.service';
@@ -254,8 +255,19 @@ export class CatalogService {
       if (!product) {
         throw new NotFoundException('Produto não encontrado');
       }
-      if (product.event?.id) {
-        await this.membershipService.assertMember(user, product.event.id);
+      if (product.event?.id && user?.role !== 'superadmin') {
+        // O lock partilhado com alterações de membership impede que um
+        // downgrade/removal concorrente passe entre a autorização e a escrita.
+        const membership = await manager.findOne(EventUserEntity, {
+          where: { event: { id: product.event.id }, user: { id: user?.id } },
+          lock: { mode: 'pessimistic_read' },
+        });
+        if (!membership) {
+          throw new ForbiddenException('Não pertence a este evento');
+        }
+        if (!MANAGEMENT_ROLES.includes(membership.role)) {
+          throw new ForbiddenException('A tua função neste evento não permite gerir o catálogo');
+        }
       }
 
       const antes = product.stock ?? null;

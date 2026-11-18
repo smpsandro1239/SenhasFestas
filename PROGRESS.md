@@ -1,3 +1,17 @@
+## 2026-11-18 — T44: autorização transaccional no acerto de stock
+
+**Problema confirmado**
+- A rota de stock estava protegida por RolesGuard, mas o serviço apenas confirmava a existência da membership depois de bloquear o produto. Uma role reduzida entre o guard e a escrita ainda permitia o acerto.
+
+**Alterações**
+- CatalogService.ajustarStock() bloqueia a membership com pessimistic_read dentro da mesma transacção do produto e exige MANAGEMENT_ROLES na role actual.
+- Acrescentados testes para downgrade para cashier e remoção da membership; em ambos os casos não pode haver escrita.
+
+**Validação**
+- Alteração ainda não integrada nem validada pela CI. T44 permanece aberta.
+
+---
+
 ## 2026-11-18 — T44: revalidar permissões em caixa, cozinha e entrega
 
 **Problema confirmado**
