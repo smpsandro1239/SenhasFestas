@@ -814,13 +814,23 @@ describe('CatalogService', () => {
     const ORGANIZADOR_X = { id: 'organizadorX', role: 'organizer' } as any;
 
     it('rejeita criar produto num evento fora do scope do ator', async () => {
-      mockMembershipService.assertMember.mockRejectedValue(
-        new ForbiddenException('Não pertence a este evento'),
-      );
+      const manager = {
+        findOne: vi.fn().mockResolvedValue(null),
+        save: vi.fn(),
+      };
+      mockProductRepository.manager.transaction.mockImplementation(async (fn: any) => fn(manager));
+
       await expect(
         service.create(ORGANIZADOR_X, { eventId: 'eventoY' } as any),
       ).rejects.toBeInstanceOf(ForbiddenException);
-      expect(mockMembershipService.assertMember).toHaveBeenCalledWith(ORGANIZADOR_X, 'eventoY');
+      expect(manager.findOne).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          where: { event: { id: 'eventoY' }, user: { id: 'organizadorX' } },
+          lock: { mode: 'pessimistic_read' },
+        }),
+      );
+      expect(manager.save).not.toHaveBeenCalled();
     });
 
     it('rejeita atualizar produto de um evento fora do scope do ator', async () => {

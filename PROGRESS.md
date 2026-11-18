@@ -1,3 +1,18 @@
+## 2026-11-18 — T44: autorização transaccional na criação de produtos
+
+**Problema confirmado**
+- `POST /products` tinha `@Roles(MANAGEMENT_ROLES)`, mas o serviço só confirmava membership, permitindo uma janela entre a validação do guard e a escrita se a event-role fosse reduzida.
+
+**Alterações**
+- A criação de produtos associados a um evento passou a validar a event-role actual sob `pessimistic_read` dentro da transacção de escrita.
+- Superadmin mantém o bypass explícito; utilizadores sem membership ou sem função de gestão são recusados.
+- Acrescentados testes para downgrade para cashier e remoção da membership; ambos verificam que não há escrita.
+
+**Validação**
+- Alteração ainda não integrada nem validada pela CI. T44 permanece aberta.
+
+---
+
 ## 2026-11-18 — T44: validação do acerto de stock e estado dos gates
 
 **Validação do commit `4a6d1f1`**

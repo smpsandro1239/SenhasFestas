@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProductEntity, CategoryEntity, UserEntity, EventEntity, EventUserEntity, OrderItemEntity } from '../../entities';
 import { MANAGEMENT_ROLES } from '../../common/roles';
-import { In, ILike } from 'typeorm';
+import { In, ILike, EntityManager } from 'typeorm';
 import { CreateProductDto, UpdateProductDto, AdjustStockDto } from './dto';
 import { MembershipService } from '../../common/membership.service';
 import { SnapshotAuditoria } from '../../common/interceptors/audit.interceptor';
@@ -21,6 +21,27 @@ export class CatalogService {
     private readonly orderItemRepository: Repository<OrderItemEntity>,
     private readonly membershipService: MembershipService,
   ) {}
+
+  private async assertManagementMembershipInTransaction(
+    manager: EntityManager,
+    user: UserEntity,
+    eventId: string,
+  ): Promise<void> {
+    if (user?.role === 'superadmin') return;
+    if (!user?.id) {
+      throw new ForbiddenException('Não autenticado');
+    }
+    const membership = await manager.findOne(EventUserEntity, {
+      where: { event: { id: eventId }, user: { id: user.id } },
+      lock: { mode: 'pessimistic_read' },
+    });
+    if (!membership) {
+      throw new ForbiddenException('Não pertence a este evento');
+    }
+    if (!MANAGEMENT_ROLES.includes(membership.role)) {
+      throw new ForbiddenException('A tua função neste evento não permite gerir o catálogo');
+    }
+  }
 
   async findAll(
     eventId?: string,
@@ -183,27 +204,34 @@ export class CatalogService {
   }
 
   async create(user: UserEntity, dto: CreateProductDto): Promise<ProductEntity> {
-    let event: EventEntity | undefined;
-    if (dto.eventId) {
-      await this.membershipService.assertMember(user, dto.eventId);
-      event = await this.eventRepository.findOne({ where: { id: dto.eventId } });
+    const criarProduto = (event?: EventEntity) =>
+      this.productRepository.create({
+        name: dto.name,
+        description: dto.description,
+        imageUrl: dto.imageUrl,
+        price: dto.price,
+        availability: dto.availability,
+        kitchenName: dto.kitchenName,
+        category: dto.categoryId ? ({ id: dto.categoryId } as any) : undefined,
+        stock: dto.stock,
+        isActive: true,
+        ...(event ? { event } : {}),
+      });
+
+    if (!dto.eventId) {
+      return this.productRepository.save(criarProduto());
+    }
+
+    return this.productRepository.manager.transaction(async (manager) => {
+      // A role actual é bloqueada na mesma transacção da criação. A role do
+      // JWT/guard pode ter ficado desactualizada após um downgrade concorrente.
+      await this.assertManagementMembershipInTransaction(manager, user, dto.eventId!);
+      const event = await manager.findOne(EventEntity, { where: { id: dto.eventId } });
       if (!event) {
         throw new NotFoundException('Evento não encontrado');
       }
-    }
-    const product = this.productRepository.create({
-      name: dto.name,
-      description: dto.description,
-      imageUrl: dto.imageUrl,
-      price: dto.price,
-      availability: dto.availability,
-      kitchenName: dto.kitchenName,
-      category: dto.categoryId ? ({ id: dto.categoryId } as any) : undefined,
-      stock: dto.stock,
-      isActive: true,
-      ...(event ? { event } : {}),
+      return manager.save(ProductEntity, criarProduto(event));
     });
-    return this.productRepository.save(product);
   }
 
   async update(
