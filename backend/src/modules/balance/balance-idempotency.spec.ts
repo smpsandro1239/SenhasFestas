@@ -20,6 +20,14 @@ function criarService(manager: any) {
     dataSource as any,
     eventService as any,
   );
+  (service as any).eventRepository = {
+    findOne: vi.fn().mockImplementation(({ where }: any) =>
+      Promise.resolve({ id: where.id, status: 'active' }),
+    ),
+  };
+  (service as any).eventUserRepository = {
+    findOne: vi.fn().mockResolvedValue({ id: 'membership-1', role: 'cashier' }),
+  };
   return { service, eventService, dataSource };
 }
 
@@ -139,6 +147,158 @@ describe('BalanceService — idempotência de operações financeiras', () => {
     expect(manager.query).toHaveBeenCalledTimes(1);
     expect(manager.save).not.toHaveBeenCalled();
     expect(eventService.vincularCliente).toHaveBeenCalledWith('client-1', 'evt1');
+  });
+
+  it('reproduz um estorno confirmado sem voltar a reduzir o saldo', async () => {
+    const actor = { id: 'cashier-1', role: 'cashier' };
+    const balance = { id: 'balance-1', currentBalance: 65 };
+    const original = {
+      id: 'load-1',
+      type: MovementType.LOAD,
+      amount: 50,
+      balance: { user: { id: 'client-1' }, event: { id: 'evt1' } },
+    };
+    const seedManager = {
+      query: vi.fn(),
+      findOne: vi.fn(),
+      save: vi.fn(),
+      create: vi.fn(),
+    };
+    const { service } = criarService(seedManager);
+    const storedKey = (service as any).hashChaveIdempotencia('reverse', 'reverse-key-123');
+    const requestHash = (service as any).hashOperacaoFinanceira(
+      'reverse', actor.id, 'client-1', 'load-1', { amount: 20 },
+    );
+    const previous = {
+      id: 'reverse-1',
+      type: MovementType.CANCEL,
+      amount: 20,
+      idempotencyKey: storedKey,
+      requestHash,
+      balance: { id: balance.id },
+    };
+    seedManager.findOne.mockImplementation(async (entity: any, options: any) => {
+      if (entity === BalanceMovementEntity) {
+        if (options.where.id === 'load-1') return original;
+        if (options.where.type === MovementType.CANCEL) return previous;
+      }
+      if (entity === EventUserEntity) return { id: 'membership-1', role: 'cashier' };
+      if (entity.name === 'BalanceEntity') return balance;
+      return null;
+    });
+
+    const result = await service.reverseLoad(
+      'client-1', 'load-1', actor, { amount: 20 } as any, undefined, 'reverse-key-123',
+    );
+
+    expect(result.balance).toEqual({ id: 'balance-1', currentBalance: 65 });
+    expect(result.movement.id).toBe('reverse-1');
+    expect(result.reversedMovementId).toBe('load-1');
+    expect(seedManager.query).toHaveBeenCalledTimes(1);
+    expect(seedManager.save).not.toHaveBeenCalled();
+    expect(seedManager.create).not.toHaveBeenCalled();
+  });
+
+  it('reproduz uma transferência confirmada sem repetir os dois movimentos', async () => {
+    const actor = { id: 'cashier-1', role: 'cashier' };
+    const origem = { id: 'balance-origin', currentBalance: 30 };
+    const destino = { id: 'balance-destination', currentBalance: 40 };
+    const seedManager = {
+      query: vi.fn(),
+      findOne: vi.fn(),
+      save: vi.fn(),
+      create: vi.fn(),
+    };
+    const { service, eventService } = criarService(seedManager);
+    const storedKey = (service as any).hashChaveIdempotencia('transfer', 'transfer-key-123');
+    const requestHash = (service as any).hashOperacaoFinanceira(
+      'transfer', actor.id, 'client-1', 'evt1', { toEventId: 'evt2', amount: 10 },
+    );
+    const movementDestination = {
+      id: 'movement-destination',
+      type: MovementType.LOAD,
+      amount: 10,
+      idempotencyKey: storedKey,
+      requestHash,
+      balance: { id: destino.id },
+    };
+    const movementOrigin = {
+      id: 'movement-origin',
+      type: MovementType.CANCEL,
+      amount: 10,
+      idempotencyKey: storedKey,
+      requestHash,
+      balance: { id: origem.id },
+    };
+    seedManager.findOne.mockImplementation(async (entity: any, options: any) => {
+      if (entity === EventUserEntity) return { id: 'membership-1', role: 'cashier' };
+      if (entity === BalanceMovementEntity) {
+        return options.where.type === MovementType.LOAD
+          ? movementDestination
+          : movementOrigin;
+      }
+      if (entity.name === 'BalanceEntity') {
+        return options.where.id === origem.id ? origem : destino;
+      }
+      return null;
+    });
+
+    const result = await service.transferBalance(
+      'client-1',
+      { fromEventId: 'evt1', toEventId: 'evt2', amount: 10 } as any,
+      actor,
+      undefined,
+      'transfer-key-123',
+    );
+
+    expect(result).toMatchObject({
+      balance: { id: destino.id, currentBalance: 40 },
+      originBalance: { id: origem.id, currentBalance: 30 },
+      movement: { id: movementDestination.id },
+      fromEventId: 'evt1',
+      toEventId: 'evt2',
+    });
+    expect(seedManager.query).toHaveBeenCalledTimes(1);
+    expect(seedManager.save).not.toHaveBeenCalled();
+    expect(seedManager.create).not.toHaveBeenCalled();
+    expect(eventService.assertEventOperavelById).not.toHaveBeenCalled();
+  });
+
+  it('rejeita reutilização da chave de estorno com outro montante', async () => {
+    const actor = { id: 'cashier-1', role: 'cashier' };
+    const original = {
+      id: 'load-1',
+      type: MovementType.LOAD,
+      amount: 50,
+      balance: { user: { id: 'client-1' }, event: { id: 'evt1' } },
+    };
+    let service: BalanceService;
+    const manager = {
+      query: vi.fn(),
+      findOne: vi.fn().mockImplementation(async (entity: any, options: any) => {
+        if (entity === BalanceMovementEntity) {
+          if (options.where.id === 'load-1') return original;
+          if (options.where.type === MovementType.CANCEL) {
+            return {
+              id: 'reverse-1',
+              type: MovementType.CANCEL,
+              idempotencyKey: (service as any).hashChaveIdempotencia('reverse', 'reverse-key-123'),
+              requestHash: 'different-hash',
+              balance: { id: 'balance-1' },
+            };
+          }
+        }
+        if (entity === EventUserEntity) return { id: 'membership-1', role: 'cashier' };
+        return null;
+      }),
+      save: vi.fn(),
+      create: vi.fn(),
+    };
+    service = criarService(manager).service;
+    await expect(service.reverseLoad(
+      'client-1', 'load-1', actor, { amount: 20 } as any, undefined, 'reverse-key-123',
+    )).rejects.toBeInstanceOf(ConflictException);
+    expect(manager.save).not.toHaveBeenCalled();
   });
 
   it('não aceita uma chave sem utilizador autenticado ou fora do formato', async () => {

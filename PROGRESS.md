@@ -1,3 +1,28 @@
+## 2026-11-19 — T45: reforço dos testes de idempotência financeira
+
+**Auditoria**
+- Criação de pedidos: chave por evento/actor, hash SHA-256 do payload, advisory lock PostgreSQL, índice UNIQUE parcial e recuperação do vencedor em colisão.
+- Carregamentos e descontos: advisory lock por actor/operação, hash do pedido, movimentos idempotentes e índice UNIQUE parcial.
+- Estornos: chave namespaced para não colidir com outros tipos de movimento; lock do movimento original e do saldo; estornos parciais acumulam no original.
+- Transferências: chave namespaced partilhada pelos movimentos de origem/destino; ambos os movimentos são verificados antes de qualquer alteração; saldos são bloqueados por ordem de evento.
+- Cancelamentos de pedidos: lock do pedido, reposição de stock e reembolso na mesma transacção.
+
+**Alterações desta sequência**
+- Acrescentados testes ao replay idempotente de estorno, sem nova escrita no saldo.
+- Acrescentados testes ao replay idempotente de transferência, sem duplicar os movimentos de origem/destino.
+- Acrescentado teste que rejeita a reutilização da chave de estorno com montante diferente.
+
+**Lacunas ainda abertas**
+- Falta executar testes concorrentes reais em PostgreSQL para duas requisições simultâneas com a mesma chave.
+- Falta verificar invariantes de fecho de caixa e reconciliação entre movimentos, saldos, pedidos e stock.
+- A cobertura de estornos/transferências ainda é unitária; não substitui os testes de concorrência com DB real.
+
+**Validação**
+- Alterações preparadas para CI; não foram executadas localmente nesta sessão.
+- Sem alterações de esquema ou migrations.
+
+---
+
 ## 2026-11-19 — T44: alinhar testes legados à autorização transaccional
 
 **Resultado da primeira CI do commit `0bd3ca7`**
