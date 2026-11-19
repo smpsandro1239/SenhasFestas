@@ -221,15 +221,19 @@ recebido → a preparar → pronto → entregue
 ✅ Ecrã público
 ✅ Relatório simples de vendas
 
-## Próximos Passos
+## Estado de Desenvolvimento e Próximas Prioridades
 
-1. Configurar ambiente de desenvolvimento
-2. Criar modelos de dados básicos
-3. Implementar autenticação e perfis
-4. Desenvolver API de pedido principal
-5. Implementar visualizações em tempo real
-6. Testar fluxos completos
-7. Documentar e preparar para testes beta
+O MVP funcional e os principais fluxos de operação já estão implementados. O trabalho actual está concentrado na segurança multi-evento, integridade financeira, auditoria e preparação operacional.
+
+**Fonte de verdade das tarefas:** [TODO.md](TODO.md), com prioridades, dependências e evidência por tarefa. O [PLAN.md](PLAN.md) contém o roadmap e a dívida técnica; o [PROGRESS.md](PROGRESS.md) regista os blocos executados e os resultados de validação.
+
+Prioridades críticas em curso:
+1. T42 — rate limiting distribuído e comportamento perante indisponibilidade do Redis.
+2. T43 — cobertura integral e fiabilidade da auditoria financeira/administrativa.
+3. T44 — autorização transaccional e isolamento entre eventos.
+4. T45 — concorrência PostgreSQL e invariantes financeiros ponta-a-ponta.
+
+**Estado de produção:** não considerar o sistema pronto para operações financeiras de produção enquanto as tarefas P0 acima não estiverem concluídas e a validação do deploy/migrações no ambiente-alvo não estiver comprovada. O modo offline descrito neste README limita-se ao fallback e cache de assets; pedidos e pagamentos offline não são suportados.
 
 ## Documentação Adicional
 

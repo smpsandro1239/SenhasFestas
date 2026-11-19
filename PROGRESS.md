@@ -1,3 +1,26 @@
+## 2026-11-19 — Relatórios: leitura de movimentos com autorização transaccional
+
+**Objectivo**
+Eliminar a janela TOCTOU em `GET /reports/saldo`: a membership e a função financeira têm de permanecer válidas durante a leitura dos movimentos.
+
+**Feito**
+- `ReportsService.obterSaldo` passou a executar a leitura do saldo, validação da membership e consulta dos movimentos no mesmo `DataSource.transaction`.
+- A membership é consultada através do mesmo `EntityManager`, com `pessimistic_read`, e a função actual é revalidada contra `FINANCE_ROLES`.
+- Superadmin mantém o acesso sem membership; saldo inexistente continua a devolver lista vazia.
+- A consulta dos movimentos usa o `EntityManager` da transacção e mantém ordenação por `createdAt ASC`.
+- Testes acrescentados para acesso válido, membership removida, downgrade para client, superadmin, saldo inexistente e ausência de ID.
+- README alinhado com o estado real do projecto e com o TODO como fonte de verdade.
+
+**Decisões**
+- A leitura dos movimentos usa `manager.find` em vez de um QueryBuilder ligado ao repositório global, garantindo que a operação permanece no mesmo contexto transaccional.
+- Não é criada migration: a correcção não altera o esquema PostgreSQL.
+
+**Validação**
+- A CI do commit anterior confirmou backend, frontend, docs, Security e CodeQL; Browser E2E ainda estava em execução na última consulta.
+- Os novos testes e a alteração de produção ficam sujeitos a lint, testes, build e E2E na CI do commit seguinte.
+
+---
+
 ## 2026-11-19 — Correcção dos testes do fecho de caixa após CI
 
 **Falha detectada na CI do commit `eab8016`**

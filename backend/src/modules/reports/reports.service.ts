@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, SelectQueryBuilder } from 'typeorm';
-import { OrderEntity, OrderItemEntity, BalanceMovementEntity, BalanceEntity } from '../../entities';
+import { ForbiddenException, Injectable } from '@nestjs/common';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, EntityManager, Repository, SelectQueryBuilder } from 'typeorm';
+import { OrderEntity, OrderItemEntity, BalanceMovementEntity, BalanceEntity, EventUserEntity } from '../../entities';
 import { MembershipService } from '../../common/membership.service';
 import { sanitizarCelulaCsv } from '../../common/csv';
 import { saldoDeadlineUtc } from '../../common/balance-guard';
+import { FINANCE_ROLES } from '../../common/roles';
 import { OrdensQueryDto, SaldoQueryDto, TopProductsQueryDto, TotalQueryDto } from './dto';
 
 const LIMITE_EXPORTACAO = 5000;
@@ -22,6 +23,7 @@ export class ReportsService {
     @InjectRepository(BalanceEntity)
     private readonly balanceRepository: Repository<BalanceEntity>,
     private readonly membershipService: MembershipService,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
   private construirQueryOrdens(
@@ -123,25 +125,53 @@ export class ReportsService {
     return [cabecalho.join(','), ...linhas].join('\n');
   }
 
+  private async assertFinanceMembershipInTransaction(
+    manager: EntityManager,
+    utilizador: any,
+    eventId: string,
+  ): Promise<void> {
+    if (!utilizador?.id) {
+      throw new ForbiddenException('Não autenticado');
+    }
+    if (utilizador.role === 'superadmin') {
+      return;
+    }
+
+    const membership = await manager.findOne(EventUserEntity, {
+      where: { event: { id: eventId }, user: { id: utilizador.id } },
+      lock: { mode: 'pessimistic_read' },
+    });
+    if (!membership) {
+      throw new ForbiddenException('Não pertence a este evento');
+    }
+    if (!FINANCE_ROLES.includes(membership.role as (typeof FINANCE_ROLES)[number])) {
+      throw new ForbiddenException('A tua função neste evento não permite consultar relatórios financeiros');
+    }
+  }
+
   async obterSaldo(filtros: SaldoQueryDto, utilizador: any) {
     if (!filtros?.id) {
       return [];
     }
-    if (utilizador?.role !== 'superadmin') {
-      const balance = await this.balanceRepository.findOne({
+
+    return this.dataSource.transaction(async (manager) => {
+      const balance = await manager.findOne(BalanceEntity, {
         where: { id: filtros.id },
         relations: { event: true },
       });
       if (!balance || !balance.event?.id) {
         return [];
       }
-      await this.membershipService.assertMember(utilizador, balance.event.id);
-    }
-    return this.movementRepository
-      .createQueryBuilder('movimentacao')
-      .where('movimentacao.balanceId = :id', { id: filtros.id })
-      .orderBy('movimentacao.createdAt', 'ASC')
-      .getMany();
+
+      // A membership fica bloqueada até terminar a leitura dos movimentos.
+      // Assim, uma revogação ou downgrade não pode ocorrer entre autorização e consulta.
+      await this.assertFinanceMembershipInTransaction(manager, utilizador, balance.event.id);
+
+      return manager.find(BalanceMovementEntity, {
+        where: { balance: { id: filtros.id } },
+        order: { createdAt: 'ASC' },
+      });
+    });
   }
 
   async topProducts(filtros: TopProductsQueryDto, utilizador?: any) {

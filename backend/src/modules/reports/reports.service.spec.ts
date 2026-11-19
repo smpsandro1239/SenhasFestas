@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi } from 'vitest';
+import { ForbiddenException } from '@nestjs/common';
 import { ReportsService } from './reports.service';
+import { BalanceEntity, BalanceMovementEntity, EventUserEntity } from '../../entities';
 
 // RED(A5): exportOrdensCsv escreve valores sem sanitizar — um nome de produto
 // começado por '=' acaba como fórmula no Excel/Sheets.
@@ -64,6 +66,7 @@ function makeService(mocks: {
   movementRepository?: any;
   balanceRepository?: any;
   membership?: any;
+  dataSource?: any;
 } = {}) {
   const orderRepo = mocks.orderRepository ?? {
     createQueryBuilder: vi.fn().mockReturnValue({
@@ -84,6 +87,7 @@ function makeService(mocks: {
       eventColumnFor: vi.fn().mockReturnValue(null),
       roleEfetiva: vi.fn().mockResolvedValue('superadmin'),
     }) as any,
+    (mocks.dataSource ?? { transaction: vi.fn(async (callback: any) => callback({ findOne: vi.fn(), find: vi.fn() })) }) as any,
   );
 }
 
@@ -273,5 +277,106 @@ describe('ReportsService — Fila B: balances', () => {
     const predicates = movementRepo.createQueryBuilder.mock.results[0].value.andWhere.mock.calls.map((c: any[]) => String(c[0]));
     expect(predicates).toContainEqual('saldo.eventId = :scopeNoEvent');
     expect(predicates.some((p: string) => p === 'saldo.eventId')).toBe(false);
+  });
+});
+
+describe('ReportsService.obterSaldo — autorização e leitura transaccionais (T44)', () => {
+  const balance = {
+    id: 'balance-1',
+    event: { id: 'event-1' },
+  };
+  const movements = [
+    { id: 'movement-1', createdAt: new Date('2026-01-01T10:00:00.000Z') },
+    { id: 'movement-2', createdAt: new Date('2026-01-01T11:00:00.000Z') },
+  ];
+
+  function serviceCom({
+    saldo = balance,
+    membership = { id: 'membership-1', role: 'cashier' },
+    movimentos = movements,
+  }: {
+    saldo?: any;
+    membership?: any;
+    movimentos?: any[];
+  } = {}) {
+    const manager = {
+      findOne: vi.fn(async (entity: any) => {
+        if (entity === BalanceEntity) return saldo;
+        if (entity === EventUserEntity) return membership;
+        return null;
+      }),
+      find: vi.fn().mockResolvedValue(movimentos),
+    };
+    const dataSource = {
+      transaction: vi.fn(async (callback: any) => callback(manager)),
+    };
+    const svc = makeService({ dataSource });
+    return { svc, manager, dataSource };
+  }
+
+  it('consulta saldo e movimentos na mesma transacção e bloqueia a membership até terminar', async () => {
+    const { svc, manager, dataSource } = serviceCom();
+
+    const result = await svc.obterSaldo({ id: 'balance-1' } as any, { id: 'user-1', role: 'cashier' });
+
+    expect(result).toEqual(movements);
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(manager.findOne).toHaveBeenNthCalledWith(1, BalanceEntity, expect.objectContaining({
+      where: { id: 'balance-1' },
+      relations: { event: true },
+    }));
+    expect(manager.findOne).toHaveBeenNthCalledWith(2, EventUserEntity, expect.objectContaining({
+      where: { event: { id: 'event-1' }, user: { id: 'user-1' } },
+      lock: { mode: 'pessimistic_read' },
+    }));
+    expect(manager.find).toHaveBeenCalledWith(BalanceMovementEntity, {
+      where: { balance: { id: 'balance-1' } },
+      order: { createdAt: 'ASC' },
+    });
+  });
+
+  it('recusa a leitura quando a membership foi removida antes da transacção', async () => {
+    const { svc, manager } = serviceCom({ membership: null });
+
+    await expect(
+      svc.obterSaldo({ id: 'balance-1' } as any, { id: 'user-1', role: 'cashier' }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(manager.find).not.toHaveBeenCalled();
+  });
+
+  it('recusa a leitura quando a função foi reduzida para client', async () => {
+    const { svc, manager } = serviceCom({ membership: { id: 'membership-1', role: 'client' } });
+
+    await expect(
+      svc.obterSaldo({ id: 'balance-1' } as any, { id: 'user-1', role: 'cashier' }),
+    ).rejects.toThrow(/não permite consultar relatórios financeiros/i);
+    expect(manager.find).not.toHaveBeenCalled();
+  });
+
+  it('permite superadmin sem membership, mantendo a consulta na transacção', async () => {
+    const { svc, manager, dataSource } = serviceCom({ membership: null });
+
+    const result = await svc.obterSaldo({ id: 'balance-1' } as any, { id: 'root-1', role: 'superadmin' });
+
+    expect(result).toEqual(movements);
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(manager.findOne).toHaveBeenCalledTimes(1);
+    expect(manager.find).toHaveBeenCalledTimes(1);
+  });
+
+  it('não consulta movimentos quando o saldo não existe', async () => {
+    const { svc, manager } = serviceCom({ saldo: null });
+
+    await expect(
+      svc.obterSaldo({ id: 'missing' } as any, { id: 'root-1', role: 'superadmin' }),
+    ).resolves.toEqual([]);
+    expect(manager.find).not.toHaveBeenCalled();
+  });
+
+  it('não abre transacção quando não foi fornecido um identificador de saldo', async () => {
+    const { svc, dataSource } = serviceCom();
+
+    await expect(svc.obterSaldo({} as any, { id: 'user-1', role: 'cashier' })).resolves.toEqual([]);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 });
