@@ -42,6 +42,26 @@ export class CashClosureService {
     }
   }
 
+  private async assertEventMembershipInTransaction(
+    manager: import('typeorm').EntityManager,
+    utilizador: any,
+    eventId: string,
+  ): Promise<void> {
+    if (!utilizador?.id) {
+      throw new ForbiddenException('Não autenticado');
+    }
+    if (utilizador.role === 'superadmin') {
+      return;
+    }
+    const membership = await manager.findOne(EventUserEntity, {
+      where: { event: { id: eventId }, user: { id: utilizador.id } },
+      lock: { mode: 'pessimistic_read' },
+    });
+    if (!membership) {
+      throw new ForbiddenException('Não pertence a este evento');
+    }
+  }
+
   async abrirCaixa(
     operadorId: string,
     utilizador: any,
@@ -136,31 +156,37 @@ export class CashClosureService {
   }
 
   async listarPorEvento(eventoId: string, utilizador: any): Promise<CashClosureEntity[]> {
-    await this.membershipService.assertMember(utilizador, eventoId);
-    return this.cashClosureRepository.find({
-      where: { eventId: eventoId },
-      order: { openedAt: 'DESC' },
+    return this.dataSource.transaction(async (manager) => {
+      await this.assertEventMembershipInTransaction(manager, utilizador, eventoId);
+      return manager.find(CashClosureEntity, {
+        where: { eventId: eventoId },
+        order: { openedAt: 'DESC' },
+      });
     });
   }
 
   async obterPorId(id: string, utilizador: any): Promise<CashClosureEntity> {
-    const fecho = await this.cashClosureRepository.findOne({ where: { id } });
-    if (!fecho) {
-      throw new NotFoundException('Caixa não encontrado');
-    }
-    await this.membershipService.assertMember(utilizador, fecho.eventId);
-    return fecho;
+    return this.dataSource.transaction(async (manager) => {
+      const fecho = await manager.findOne(CashClosureEntity, { where: { id } });
+      if (!fecho) {
+        throw new NotFoundException('Caixa não encontrado');
+      }
+      await this.assertEventMembershipInTransaction(manager, utilizador, fecho.eventId);
+      return fecho;
+    });
   }
 
   async obterCaixaAberta(eventoId: string, utilizador: any): Promise<CashClosureEntity> {
-    await this.membershipService.assertMember(utilizador, eventoId);
-    return this.cashClosureRepository.findOne({
-      where: { eventId: eventoId, status: 'open' },
-      // A9: com o índice único nunca há duas abertas, mas caixas duplicadas
-      // legadas podem existir em produção — sem order, o findOne devolve uma
-      // arbitrária. Ordenar torna o comportamento determinístico até a migração
-      // as fechar.
-      order: { openedAt: 'DESC' },
+    return this.dataSource.transaction(async (manager) => {
+      await this.assertEventMembershipInTransaction(manager, utilizador, eventoId);
+      return manager.findOne(CashClosureEntity, {
+        where: { eventId: eventoId, status: 'open' },
+        // A9: com o índice único nunca há duas abertas, mas caixas duplicadas
+        // legadas podem existir em produção — sem order, o findOne devolve uma
+        // arbitrária. Ordenar torna o comportamento determinístico até a migração
+        // as fechar.
+        order: { openedAt: 'DESC' },
+      });
     });
   }
 }

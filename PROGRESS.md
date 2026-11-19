@@ -1,3 +1,26 @@
+## 2026-11-19 — T44: isolamento transaccional nas consultas de caixa
+
+**Problema confirmado**
+- As consultas `listarPorEvento`, `obterPorId` e `obterCaixaAberta` validavam membership através do serviço global e executavam a leitura depois, fora de uma transacção comum.
+- Uma remoção/revogação de membership podia intercalar-se entre a validação e a consulta.
+
+**Alterações**
+- Criado helper de autorização de leitura que exige membership actual e bloqueia a linha com `pessimistic_read`; superadmin mantém acesso sem membership.
+- As três consultas passaram a executar autorização e leitura com o mesmo EntityManager transaccional.
+- A ordenação determinística da caixa aberta foi preservada.
+- Testes cobrem consulta com membership válida, revogação/remoção e acesso de superadmin.
+
+**Revisão**
+- **O que está bem:** autorização e leitura deixam de ter uma janela TOCTOU; as operações de escrita de abertura/fecho já estavam transaccionais.
+- **O que falta:** verificar endpoints de caixa agregados e restantes módulos que consultam recursos por ID; confirmar CI e E2E.
+- **Veredicto:** alteração focada e sem mudanças de esquema; T44 permanece em curso até auditoria global.
+
+**Validação**
+- Verificação estrutural dos mocks e dos novos testes concluída.
+- Testes executáveis serão confirmados pela CI após o commit.
+
+---
+
 ## 2026-11-19 — T45: reforço dos testes de idempotência financeira
 
 **Auditoria**

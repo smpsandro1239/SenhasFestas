@@ -11,6 +11,7 @@ function criarDataSource(repository: any, membershipRole = 'cashier') {
       entity === EventUserEntity ? { id: 'membership', role: membershipRole } : repository.findOne(options),
     ),
     save: vi.fn(async (_entity: any, value: any) => repository.save(value)),
+    find: vi.fn(async (_entity: any, options: any) => repository.find(options)),
   };
   const dataSource = {
     transaction: vi.fn(async (callback: any) => callback(manager)),
@@ -29,6 +30,7 @@ function criarServico(overrides: { jaAberta?: any } = {}, membershipRole = 'cash
 
   const repository = {
     findOne: vi.fn().mockResolvedValue(overrides.jaAberta ?? null),
+    find: vi.fn().mockResolvedValue([]),
     create: vi.fn().mockImplementation((dto) => dto),
     save: vi.fn().mockImplementation(async (v) => ({ id: 'c1', ...v })),
   } as any;
@@ -144,10 +146,58 @@ describe('A9 — unicidade de caixa aberta por evento', () => {
 
     await service.obterCaixaAberta('evt1', { id: 'op1', role: 'cashier' });
 
-    expect(repository.findOne).toHaveBeenCalledWith({
-      where: { eventId: 'evt1', status: 'open' },
-      order: { openedAt: 'DESC' },
-    });
+    expect(manager.findOne).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        where: { eventId: 'evt1', status: 'open' },
+        order: { openedAt: 'DESC' },
+      },
+    );
+    expect(manager.findOne).toHaveBeenCalledWith(
+      EventUserEntity,
+      expect.objectContaining({ lock: { mode: 'pessimistic_read' } }),
+    );
+  });
+});
+
+describe('T44 — isolamento transaccional das consultas de caixa', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('lista fechos apenas enquanto a membership está bloqueada na transacção', async () => {
+    const { service, manager, repository } = criarServico();
+    await service.listarPorEvento('evt1', { id: 'member-1', role: 'client' });
+    expect(manager.findOne).toHaveBeenCalledWith(
+      EventUserEntity,
+      expect.objectContaining({
+        where: { event: { id: 'evt1' }, user: { id: 'member-1' } },
+        lock: { mode: 'pessimistic_read' },
+      }),
+    );
+    expect(manager.find).toHaveBeenCalledWith(
+      expect.anything(),
+      { where: { eventId: 'evt1' }, order: { openedAt: 'DESC' } },
+    );
+    expect(repository.find).not.toHaveBeenCalled();
+  });
+
+  it('não devolve um fecho quando a membership já foi removida', async () => {
+    const { service, manager, repository } = criarServico();
+    manager.findOne.mockImplementation(async (entity: any) =>
+      entity === EventUserEntity ? null : { id: 'c1', eventId: 'evt1' },
+    );
+    await expect(service.obterPorId('c1', { id: 'member-1', role: 'client' }))
+      .rejects.toThrow('Não pertence a este evento');
+    expect(repository.findOne).not.toHaveBeenCalled();
+  });
+
+  it('permite ao superadmin consultar sem membership de evento', async () => {
+    const { service, manager } = criarServico();
+    await service.obterCaixaAberta('evt1', { id: 'root', role: 'superadmin' });
+    expect(manager.findOne).toHaveBeenCalledTimes(1);
+    expect(manager.findOne).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ where: { eventId: 'evt1', status: 'open' } }),
+    );
   });
 });
 
