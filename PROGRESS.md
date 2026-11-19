@@ -16,8 +16,8 @@ Eliminar a janela TOCTOU em `GET /reports/saldo`: a membership e a função fina
 - Não é criada migration: a correcção não altera o esquema PostgreSQL.
 
 **Validação**
-- A CI do commit anterior confirmou backend, frontend, docs, Security e CodeQL; Browser E2E ainda estava em execução na última consulta.
-- Os novos testes e a alteração de produção ficam sujeitos a lint, testes, build e E2E na CI do commit seguinte.
+- CI concluída com sucesso no commit `1e438900f89981950f4f8e90ea9d3269d67ce0a7`: backend 50 ficheiros/648 testes unitários e 17 testes E2E; frontend lint/typecheck/build e 20 ficheiros/333 testes; Browser E2E, documentação, Security e CodeQL também passaram.
+- O job `Deploy produção` terminou success, mas os passos `Correr migrações de base de dados` e `Deploy via SSH` foram `skipped`; não existe prova de deploy em produção.
 
 ---
 

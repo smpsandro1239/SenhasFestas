@@ -233,7 +233,9 @@ Prioridades críticas em curso:
 3. T44 — autorização transaccional e isolamento entre eventos.
 4. T45 — concorrência PostgreSQL e invariantes financeiros ponta-a-ponta.
 
-**Estado de produção:** não considerar o sistema pronto para operações financeiras de produção enquanto as tarefas P0 acima não estiverem concluídas e a validação do deploy/migrações no ambiente-alvo não estiver comprovada. O modo offline descrito neste README limita-se ao fallback e cache de assets; pedidos e pagamentos offline não são suportados.
+**Última revisão técnica (2026-11-19):** a leitura de movimentos em `GET /reports/saldo` passou a validar membership e `FINANCE_ROLES` na mesma transacção. O commit `1e438900` passou backend (648 testes unitários + 17 E2E), frontend (333 testes), Browser E2E, documentação, Security e CodeQL.
+
+**Estado de produção:** não considerar o sistema pronto para operações financeiras de produção enquanto as tarefas P0 acima não estiverem concluídas e a validação do deploy/migrações no ambiente-alvo não estiver comprovada. Na execução CI desta revisão, o job de deploy terminou sem erro, mas os passos de migração e SSH foram ignorados; não há deploy de produção confirmado. O modo offline descrito neste README limita-se ao fallback e cache de assets; pedidos e pagamentos offline não são suportados.
 
 ## Documentação Adicional
 
