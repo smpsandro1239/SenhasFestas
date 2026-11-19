@@ -27,6 +27,7 @@ describe('ReportsService.exportOrdensCsv — sanitização contra injeção de f
         eventIdsFor: vi.fn().mockResolvedValue(null),
         eventColumnFor: vi.fn().mockReturnValue(null),
       } as any,
+      { transaction: vi.fn(async (callback: any) => callback({ findOne: vi.fn(), find: vi.fn() })) } as any,
     );
   }
 
