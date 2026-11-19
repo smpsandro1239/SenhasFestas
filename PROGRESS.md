@@ -1,3 +1,21 @@
+## 2026-11-19 — Correcção dos testes do fecho de caixa após CI
+
+**Falha detectada na CI do commit `eab8016`**
+- Backend: 640/642 testes passaram; dois testes do spec de fecho de caixa falharam.
+- Um teste referenciava `manager` sem o extrair de `criarServico()`.
+- Outro teste verificava que o repositório não era chamado, embora o mock de `EntityManager.find` delegue deliberadamente nesse repositório; a asserção não representava o contrato transaccional.
+
+**Correcção**
+- O teste de ordenação passa a obter explicitamente o `manager` devolvido pelo fixture.
+- O teste de listagem confirma a chamada ao `manager.find` transaccional, em vez de inferir incorretamente a implementação interna do mock.
+- Não foi alterado o comportamento de produção nem a autorização implementada.
+
+**Validação**
+- A CI anterior confirmou 640/642 testes backend, frontend, Browser E2E, documentação, Security e CodeQL verdes; apenas os dois testes acima falharam.
+- A correcção fica sujeita a nova execução integral da CI após o commit.
+
+---
+
 ## 2026-11-19 — T44: isolamento transaccional nas consultas de caixa
 
 **Problema confirmado**

@@ -142,7 +142,7 @@ describe('A9 — unicidade de caixa aberta por evento', () => {
   });
 
   it('obterCaixaAberta ordena por openedAt DESC (determinístico mesmo com duplicados legados)', async () => {
-    const { service, repository } = criarServico();
+    const { service, manager } = criarServico();
 
     await service.obterCaixaAberta('evt1', { id: 'op1', role: 'cashier' });
 
@@ -177,7 +177,7 @@ describe('T44 — isolamento transaccional das consultas de caixa', () => {
       expect.anything(),
       { where: { eventId: 'evt1' }, order: { openedAt: 'DESC' } },
     );
-    expect(repository.find).not.toHaveBeenCalled();
+    expect(manager.find).toHaveBeenCalledTimes(1);
   });
 
   it('não devolve um fecho quando a membership já foi removida', async () => {
