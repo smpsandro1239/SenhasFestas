@@ -44,6 +44,14 @@ const mockMembershipService = {
   roleEfetiva: vi.fn(),
 };
 
+const mockTransactionManager = {
+  findOne: vi.fn(),
+  find: vi.fn(),
+  create: vi.fn(),
+  save: vi.fn(),
+  softDelete: vi.fn(),
+};
+
 describe('CatalogService', () => {
   let service: CatalogService;
   let mockCooccurrenceQueryBuilder: any;
@@ -62,6 +70,32 @@ describe('CatalogService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockTransactionManager.findOne.mockImplementation(async (entity: any, options: any) => {
+      if (entity?.name === 'EventUserEntity') return { id: 'membership-1', role: 'organizer' };
+      if (entity?.name === 'EventEntity') return mockEventRepository.findOne(options);
+      return mockProductRepository.findOne(options);
+    });
+    mockTransactionManager.find.mockImplementation(async (entity: any, options: any) =>
+      entity?.name === 'CategoryEntity'
+        ? mockCategoryRepository.find(options)
+        : mockProductRepository.find(options),
+    );
+    mockTransactionManager.create.mockImplementation((entity: any, data: any) =>
+      entity?.name === 'CategoryEntity'
+        ? mockCategoryRepository.create(data)
+        : mockProductRepository.create(data),
+    );
+    mockTransactionManager.save.mockImplementation(async (entity: any, data: any) =>
+      entity?.name === 'CategoryEntity'
+        ? mockCategoryRepository.save(data)
+        : mockProductRepository.save(data),
+    );
+    mockTransactionManager.softDelete.mockImplementation(async (_entity: any, id: string) =>
+      mockProductRepository.softDelete(id),
+    );
+    mockProductRepository.manager.transaction = vi.fn(async (callback: any) =>
+      callback(mockTransactionManager),
+    );
     mockMembershipService.assertMember.mockResolvedValue(undefined);
     mockMembershipService.eventIdsFor.mockResolvedValue(['e1']);
     mockMembershipService.rolesEfetivas.mockResolvedValue(['organizer']);
@@ -655,6 +689,52 @@ describe('CatalogService', () => {
     });
   });
 
+  describe('autorização transaccional das mutações do catálogo', () => {
+    it('recusa update após downgrade da event-role para cashier', async () => {
+      mockTransactionManager.findOne.mockImplementation(async (entity: any) =>
+        entity?.name === 'EventUserEntity'
+          ? { id: 'membership-1', role: 'cashier' }
+          : { id: 'p1', name: 'Bifana', event: { id: 'evt1' } },
+      );
+      await expect(service.update('p1', MEMBRO, { price: 4 } as any))
+        .rejects.toThrow('A tua função neste evento não permite gerir o catálogo');
+      expect(mockTransactionManager.save).not.toHaveBeenCalled();
+    });
+
+    it('recusa duplicar quando a membership foi removida', async () => {
+      mockTransactionManager.findOne.mockImplementation(async (entity: any) =>
+        entity?.name === 'EventUserEntity' ? null : {
+          id: 'p1', name: 'Bifana', event: { id: 'evt1' },
+        },
+      );
+      await expect(service.duplicate('p1', MEMBRO)).rejects.toThrow('Não pertence a este evento');
+      expect(mockTransactionManager.save).not.toHaveBeenCalled();
+    });
+
+    it('recusa apagar quando a membership foi removida', async () => {
+      mockTransactionManager.findOne.mockImplementation(async (entity: any) =>
+        entity?.name === 'EventUserEntity' ? null : {
+          id: 'p1', name: 'Bifana', event: { id: 'evt1' },
+        },
+      );
+      await expect(service.softRemove('p1', MEMBRO)).rejects.toThrow('Não pertence a este evento');
+      expect(mockTransactionManager.softDelete).not.toHaveBeenCalled();
+    });
+
+    it('executa soft delete dentro da transacção de autorização', async () => {
+      mockTransactionManager.findOne.mockImplementation(async (entity: any) =>
+        entity?.name === 'EventUserEntity'
+          ? { id: 'membership-1', role: 'organizer' }
+          : { id: 'p1', name: 'Bifana', event: { id: 'evt1' } },
+      );
+      mockProductRepository.softDelete.mockResolvedValue({ affected: 1 });
+      await expect(service.softRemove('p1', MEMBRO)).resolves.toEqual({
+        deleted: true, softDelete: true,
+      });
+      expect(mockTransactionManager.softDelete).toHaveBeenCalled();
+    });
+  });
+
   describe('update', () => {
     it('merges dto into the found product and saves', async () => {
       const existing = { id: 'p1', name: 'Bifana', price: 3.5 };
@@ -1065,9 +1145,29 @@ describe('CatalogService', () => {
     it('membro verifica membership nos dois eventos', async () => {
       await service.importProducts(MEMBRO, ORIGEM.id, DESTINO.id);
 
-      expect(mockMembershipService.assertMember).toHaveBeenCalledTimes(2);
-      expect(mockMembershipService.assertMember).toHaveBeenNthCalledWith(1, MEMBRO, ORIGEM.id);
-      expect(mockMembershipService.assertMember).toHaveBeenNthCalledWith(2, MEMBRO, DESTINO.id);
+      const eventosAutorizados = mockTransactionManager.findOne.mock.calls
+        .filter(([entity]) => entity?.name === 'EventUserEntity')
+        .map(([, options]) => options.where.event.id);
+      expect(eventosAutorizados).toEqual([DESTINO.id, ORIGEM.id].sort());
+    });
+
+    it('não importa se a role da origem foi reduzida para cashier', async () => {
+      mockTransactionManager.findOne.mockImplementation(async (entity: any, options: any) => {
+        if (entity?.name === 'EventUserEntity') {
+          return {
+            id: 'membership-1',
+            role: options.where.event.id === ORIGEM.id ? 'cashier' : 'organizer',
+          };
+        }
+        if (entity?.name === 'EventEntity') {
+          return options.where.id === ORIGEM.id ? { ...ORIGEM } : { ...DESTINO };
+        }
+        return null;
+      });
+      await expect(service.importProducts(MEMBRO, ORIGEM.id, DESTINO.id))
+        .rejects.toThrow('A tua função neste evento não permite gerir o catálogo');
+      expect(mockProductRepository.save).not.toHaveBeenCalled();
+      expect(mockCategoryRepository.save).not.toHaveBeenCalled();
     });
 
     it('superadmin salta a verificação de membership', async () => {

@@ -1,3 +1,27 @@
+## 2026-11-19 — T44: autorização transaccional nas mutações restantes do catálogo
+
+**Problema confirmado**
+- `update`, `duplicate`, `importProducts` e `softRemove` verificavam membership fora da transacção de escrita e não confirmavam a event-role actual.
+- Um utilizador cuja função fosse reduzida para `cashier` (ou cuja membership fosse removida) podia passar a verificação anterior e concluir uma mutação depois da revogação.
+
+**Alterações**
+- `update`, `duplicate` e `softRemove` bloqueiam o produto com `pessimistic_write`, revalidam `MANAGEMENT_ROLES` com `pessimistic_read` na membership e escrevem na mesma transacção.
+- `importProducts` bloqueia as memberships dos eventos de origem e destino por ordem determinística, confirma permissões de gestão em ambos e executa criação de categorias/produtos na mesma transacção.
+- O callback de auditoria continua a receber o snapshot anterior antes da escrita.
+- Foram acrescentados testes para downgrade de role, membership removida e soft delete transaccional; os testes de importação verificam os locks das duas memberships.
+
+**Revisão do batch**
+- **O que está bem:** autorização e escrita partilham a mesma transacção; importações cruzadas bloqueiam memberships por ordem estável; duplicação mantém o produto inactivo e com stock zero.
+- **O que está mal / a verificar:** os novos testes ainda precisam de CI; falta rever os restantes endpoints com IDs directos, a integridade da categoria em updates e a cobertura financeira T43/T45.
+- **O que acrescentar:** continuar a auditoria de isolamento em endpoints agregados e depois avançar para concorrência/idempotência de pedidos e movimentos financeiros.
+- **Veredicto:** alteração preparada para integração directa na main; T44 permanece em curso até CI e auditoria residual.
+
+**Validação**
+- O ambiente desta sessão não consegue clonar GitHub; a validação executável será feita pela CI após o commit.
+- Sem migrations ou alterações de esquema.
+
+---
+
 ## 2026-11-18 — T44: corrigir mocks e completar testes de criação de produtos
 
 **Falha da CI**

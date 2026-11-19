@@ -239,20 +239,25 @@ export class CatalogService {
     dto: UpdateProductDto,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<ProductEntity> {
-    const product = await this.findOne(id, user);
-    if (product.event?.id) {
-      await this.membershipService.assertMember(user, product.event.id);
-    }
-    // A relação `event` traria o evento inteiro para o log; com >8000 chars o
-    // snapshot era cortado e perdia-se. Guarda-se o resto e o id do evento.
-    const { event, ...camposProduto } = product;
-    arquivar?.({ antes: camposProduto, eventId: event?.id });
-    const { categoryId, ...rest } = dto;
-    Object.assign(product, rest);
-    if (categoryId !== undefined) {
-      product.category = categoryId === null ? null : ({ id: categoryId } as CategoryEntity);
-    }
-    return this.productRepository.save(product);
+    return this.productRepository.manager.transaction(async (manager) => {
+      const product = await manager.findOne(ProductEntity, {
+        where: { id },
+        relations: { event: true, category: true },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!product) throw new NotFoundException('Produto não encontrado');
+      if (product.event?.id) {
+        await this.assertManagementMembershipInTransaction(manager, user, product.event.id);
+      }
+      const { event, ...camposProduto } = product;
+      arquivar?.({ antes: camposProduto, eventId: event?.id });
+      const { categoryId, ...rest } = dto;
+      Object.assign(product, rest);
+      if (categoryId !== undefined) {
+        product.category = categoryId === null ? null : ({ id: categoryId } as CategoryEntity);
+      }
+      return manager.save(ProductEntity, product);
+    });
   }
 
   // Reabastecimento rápido (+N) e acerto de stock físico (novoValor). O delta
@@ -323,59 +328,52 @@ export class CatalogService {
     return resultado;
   }
 
-  // "Bifana (cópia)" e "Bifana (cópia 2)" reduzem ambos a "Bifana", para que
-  // duplicar uma cópia não produza "Bifana (cópia) (cópia)".
+  // "Bifana (cópia)" e "Bifana (cópia 2)" reduzem ambos a "Bifana".
   private static readonly SUFIXO_COPIA = /^(.*?)\s*\(cópia(?:\s+\d+)?\)\s*$/;
 
   async duplicate(id: string, user: UserEntity): Promise<ProductEntity> {
-    const source = await this.findOne(id, user);
-    if (source.event?.id) {
-      await this.membershipService.assertMember(user, source.event.id);
-    }
-
-    const base = (CatalogService.SUFIXO_COPIA.exec(source.name)?.[1] ?? source.name).trim()
-      || source.name;
-
-    const existentes = await this.productRepository.find({
-      where: {
-        ...(source.event?.id ? { event: { id: source.event.id } } : {}),
-        // Like não escapa nada: um nome com % ou _ no meio passaria a
-        // ser wildcard e a contagem de cópias saía errada.
-        name: ILike(`${escaparLike(base)} (cópia%`),
-      },
+    return this.productRepository.manager.transaction(async (manager) => {
+      const source = await manager.findOne(ProductEntity, {
+        where: { id },
+        relations: { event: true, category: true },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!source) throw new NotFoundException('Produto não encontrado');
+      if (source.event?.id) {
+        await this.assertManagementMembershipInTransaction(manager, user, source.event.id);
+      }
+      const base = (CatalogService.SUFIXO_COPIA.exec(source.name)?.[1] ?? source.name).trim() || source.name;
+      const existentes = await manager.find(ProductEntity, {
+        where: {
+          ...(source.event?.id ? { event: { id: source.event.id } } : {}),
+          name: ILike(escaparLike(base) + ' (cópia%'),
+        },
+      });
+      const padrao = new RegExp('^' + escaparRegExp(base) + ' \\(cópia(?: (\\d+))?\\)$', 'i');
+      let maior = 0;
+      for (const p of existentes) {
+        const m = padrao.exec(p.name ?? '');
+        if (!m) continue;
+        const n = m[1] ? Number.parseInt(m[1], 10) : 1;
+        if (Number.isFinite(n)) maior = Math.max(maior, n);
+      }
+      const sufixo = maior === 0 ? ' (cópia)' : ' (cópia ' + (maior + 1) + ')';
+      const copy = manager.create(ProductEntity, {
+        name: base + sufixo,
+        description: source.description,
+        imageUrl: source.imageUrl,
+        price: source.price,
+        availability: source.availability,
+        stock: 0,
+        isActive: false,
+        category: source.category ? ({ id: source.category.id } as any) : undefined,
+        ...(source.event?.id ? { event: { id: source.event.id } as any } : {}),
+        options: source.options ? { ...source.options } : undefined,
+        modifiers: source.modifiers ? { ...source.modifiers } : undefined,
+        kitchenName: source.kitchenName,
+      });
+      return manager.save(ProductEntity, copy);
     });
-
-    const padrao = new RegExp(`^${escaparRegExp(base)} \\(cópia(?: (\\d+))?\\)$`, 'i');
-    let maior = 0;
-    for (const p of existentes) {
-      const m = padrao.exec(p.name ?? '');
-      if (!m) continue;
-      const n = m[1] ? Number.parseInt(m[1], 10) : 1;
-      if (Number.isFinite(n)) maior = Math.max(maior, n);
-    }
-    // maximo + 1 e nao o primeiro livre: se o admin apagou a cópia 2, a nova
-    // cópia 3 nao reutiliza o número, e o histórico continua legível.
-    const sufixo = maior === 0 ? ' (cópia)' : ` (cópia ${maior + 1})`;
-
-    const copy = this.productRepository.create({
-      name: `${base}${sufixo}`,
-      description: source.description,
-      imageUrl: source.imageUrl,
-      price: source.price,
-      availability: source.availability,
-      // stock a 0 e isActive a false: uma cópia nascia comprável e com o
-      // stock do original. Escondida, o admin decide quando a activate.
-      stock: 0,
-      isActive: false,
-      category: source.category ? ({ id: source.category.id } as any) : undefined,
-      ...(source.event?.id ? { event: { id: source.event.id } as any } : {}),
-      // cópias próprias: se o admin editar os options da cópia, a fonte não
-      // pode mudar por baixo.
-      options: source.options ? { ...source.options } : undefined,
-      modifiers: source.modifiers ? { ...source.modifiers } : undefined,
-      kitchenName: source.kitchenName,
-    });
-    return this.productRepository.save(copy);
   }
 
   async findCategories(eventIds?: string[]): Promise<CategoryEntity[]> {
@@ -398,85 +396,68 @@ export class CatalogService {
     targetEventId: string,
     productIds?: string[],
   ): Promise<{ importedCount: number; products: ProductEntity[] }> {
-    if (user.role !== "superadmin") {
-      await this.membershipService.assertMember(user, sourceEventId);
-      await this.membershipService.assertMember(user, targetEventId);
-    }
-
-    const sourceEvent = await this.eventRepository.findOne({ where: { id: sourceEventId } });
-    const targetEvent = await this.eventRepository.findOne({ where: { id: targetEventId } });
-
-    if (!sourceEvent || !targetEvent) {
-      throw new NotFoundException("Evento de origem ou destino não encontrado");
-    }
-
-    const where: Record<string, unknown> = {
-      event: { id: sourceEventId },
-      isActive: true,
-    };
-    if (productIds && productIds.length > 0) {
-      where.id = In(productIds);
-    }
-
-    const sourceProducts = await this.productRepository.find({
-      where,
-      relations: { category: true },
-    });
-
-    if (sourceProducts.length === 0) {
-      return { importedCount: 0, products: [] };
-    }
-
-    // Mapear categorias existentes no evento destino por nome
-    const targetCategories = await this.categoryRepository.find({
-      where: { event: { id: targetEventId } },
-    });
-    const categoryMap = new Map<string, CategoryEntity>();
-    for (const cat of targetCategories) {
-      categoryMap.set(cat.name.toLowerCase().trim(), cat);
-    }
-
-    const newProducts: ProductEntity[] = [];
-
-    for (const srcProd of sourceProducts) {
-      let targetCategory: CategoryEntity | undefined;
-      if (srcProd.category) {
-        const catName = srcProd.category.name.toLowerCase().trim();
-        if (categoryMap.has(catName)) {
-          targetCategory = categoryMap.get(catName)!;
-        } else {
-          targetCategory = this.categoryRepository.create({
-            event: targetEvent,
-            name: srcProd.category.name,
-            description: srcProd.category.description,
-            sortOrder: srcProd.category.sortOrder,
-            isActive: true,
-          });
-          targetCategory = await this.categoryRepository.save(targetCategory);
-          categoryMap.set(catName, targetCategory);
+    return this.productRepository.manager.transaction(async (manager) => {
+      if (user?.role !== 'superadmin') {
+        // Ordem estável para evitar deadlocks em importações cruzadas.
+        for (const eventId of [...new Set([sourceEventId, targetEventId])].sort()) {
+          await this.assertManagementMembershipInTransaction(manager, user, eventId);
         }
       }
-
-      const cloned = this.productRepository.create({
-        name: srcProd.name,
-        description: srcProd.description,
-        imageUrl: srcProd.imageUrl,
-        price: srcProd.price,
-        availability: srcProd.availability,
-        stock: srcProd.stock,
-        isActive: true,
-        category: targetCategory,
-        event: targetEvent,
-        options: srcProd.options ? { ...srcProd.options } : undefined,
-        modifiers: srcProd.modifiers ? { ...srcProd.modifiers } : undefined,
-        kitchenName: srcProd.kitchenName,
+      const sourceEvent = await manager.findOne(EventEntity, { where: { id: sourceEventId } });
+      const targetEvent = await manager.findOne(EventEntity, { where: { id: targetEventId } });
+      if (!sourceEvent || !targetEvent) {
+        throw new NotFoundException('Evento de origem ou destino não encontrado');
+      }
+      const where: Record<string, unknown> = { event: { id: sourceEventId }, isActive: true };
+      if (productIds && productIds.length > 0) where.id = In(productIds);
+      const sourceProducts = await manager.find(ProductEntity, {
+        where, relations: { category: true },
       });
+      if (sourceProducts.length === 0) return { importedCount: 0, products: [] };
 
-      newProducts.push(cloned);
-    }
-
-    const savedProducts = await this.productRepository.save(newProducts);
-    return { importedCount: savedProducts.length, products: savedProducts };
+      const targetCategories = await manager.find(CategoryEntity, {
+        where: { event: { id: targetEventId } },
+      });
+      const categoryMap = new Map<string, CategoryEntity>();
+      for (const category of targetCategories) {
+        categoryMap.set(category.name.toLowerCase().trim(), category);
+      }
+      const newProducts: ProductEntity[] = [];
+      for (const sourceProduct of sourceProducts) {
+        let targetCategory: CategoryEntity | undefined;
+        if (sourceProduct.category) {
+          const categoryName = sourceProduct.category.name.toLowerCase().trim();
+          targetCategory = categoryMap.get(categoryName);
+          if (!targetCategory) {
+            targetCategory = manager.create(CategoryEntity, {
+              event: targetEvent,
+              name: sourceProduct.category.name,
+              description: sourceProduct.category.description,
+              sortOrder: sourceProduct.category.sortOrder,
+              isActive: true,
+            });
+            targetCategory = await manager.save(CategoryEntity, targetCategory);
+            categoryMap.set(categoryName, targetCategory);
+          }
+        }
+        newProducts.push(manager.create(ProductEntity, {
+          name: sourceProduct.name,
+          description: sourceProduct.description,
+          imageUrl: sourceProduct.imageUrl,
+          price: sourceProduct.price,
+          availability: sourceProduct.availability,
+          stock: sourceProduct.stock,
+          isActive: true,
+          category: targetCategory,
+          event: targetEvent,
+          options: sourceProduct.options ? { ...sourceProduct.options } : undefined,
+          modifiers: sourceProduct.modifiers ? { ...sourceProduct.modifiers } : undefined,
+          kitchenName: sourceProduct.kitchenName,
+        }));
+      }
+      const savedProducts = await manager.save(ProductEntity, newProducts);
+      return { importedCount: savedProducts.length, products: savedProducts };
+    });
   }
 
   async softRemove(
@@ -484,15 +465,24 @@ export class CatalogService {
     user: UserEntity,
     arquivar?: (snapshot: SnapshotAuditoria) => void,
   ): Promise<{ deleted: boolean; softDelete: boolean }> {
-    const product = await this.findOne(id, user);
-    if (product.event?.id) {
-      await this.membershipService.assertMember(user, product.event.id);
-    }
-    const { event, ...camposProduto } = product;
-    arquivar?.({ antes: camposProduto, eventId: event?.id });
-    await this.productRepository.softDelete(product.id);
-    return { deleted: true, softDelete: true };
+    return this.productRepository.manager.transaction(async (manager) => {
+      const product = await manager.findOne(ProductEntity, {
+        where: { id },
+        relations: { event: true },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!product) throw new NotFoundException('Produto não encontrado');
+      if (product.event?.id) {
+        await this.assertManagementMembershipInTransaction(manager, user, product.event.id);
+      }
+      const { event, ...camposProduto } = product;
+      arquivar?.({ antes: camposProduto, eventId: event?.id });
+      await manager.softDelete(ProductEntity, product.id);
+      return { deleted: true, softDelete: true };
+    });
   }
+
+
 }
 // ILIKE trata % e _ como wildcards, e \ como escape. Um nome de produto pode
 // conter qualquer um dos três, e sem escapar o filtro de cópias contaria
