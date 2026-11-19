@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, ILike, Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, In, ILike, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { UserEntity, EventUserEntity } from '../../entities';
 import { CreateUserDto, UpdateUserDto } from './dto';
@@ -21,6 +21,7 @@ export class UserService {
     @InjectRepository(EventUserEntity)
     private readonly eventUserRepository: Repository<EventUserEntity>,
     private readonly membershipService: MembershipService,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
   private async idsDeMembros(eventoIds: string[]): Promise<string[]> {
@@ -66,21 +67,44 @@ export class UserService {
   }
 
   async findOne(id: string, utilizador?: any): Promise<Partial<UserEntity>> {
-    const scope = await this.membershipService.eventIdsFor(utilizador);
-    const user = await this.userRepository.findOne({
-      where: { id },
-      select: CAMPOS_PUBLICOS as any,
-    });
-    if (!user) {
-      throw new NotFoundException('Utilizador não encontrado');
-    }
-    if (scope !== null) {
-      const ids = scope.length > 0 ? await this.idsDeMembros(scope) : [];
-      if (!ids.includes(id)) {
+    return this.dataSource.transaction(async (manager) => {
+      let eventIds: string[] | null = null;
+      if (utilizador?.id && utilizador.role !== 'superadmin') {
+        // Bloqueia as memberships do operador e do utilizador consultado até ao fim
+        // da leitura, impedindo que uma revogação intercale a autorização.
+        const memberships = await manager.find(EventUserEntity, {
+          where: { user: { id: utilizador.id } },
+          select: { event: { id: true } },
+          relations: { event: true },
+          lock: { mode: 'pessimistic_read' },
+        });
+        eventIds = memberships
+          .map((membership) => membership.event?.id)
+          .filter((eventId): eventId is string => Boolean(eventId));
+      }
+
+      const user = await manager.findOne(UserEntity, {
+        where: { id },
+        select: CAMPOS_PUBLICOS as any,
+      });
+      if (!user) {
         throw new NotFoundException('Utilizador não encontrado');
       }
-    }
-    return user;
+
+      if (eventIds !== null) {
+        if (eventIds.length === 0) {
+          throw new NotFoundException('Utilizador não encontrado');
+        }
+        const membership = await manager.findOne(EventUserEntity, {
+          where: { event: { id: In(eventIds) }, user: { id } },
+          lock: { mode: 'pessimistic_read' },
+        });
+        if (!membership) {
+          throw new NotFoundException('Utilizador não encontrado');
+        }
+      }
+      return user;
+    });
   }
 
   async findByAccessCode(code: string, utilizador?: any): Promise<Partial<UserEntity>> {

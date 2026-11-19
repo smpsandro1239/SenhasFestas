@@ -1,3 +1,24 @@
+## 2026-11-19 — T44: leitura directa de utilizadores com membership bloqueada
+
+**Problema confirmado**
+- `UserService.findOne` obtinha os IDs de eventos do operador, carregava o utilizador e só depois verificava se este partilhava um evento. As consultas estavam separadas e não protegiam contra remoção concorrente da membership.
+
+**Correcção**
+- A leitura passou a decorrer numa única transacção `DataSource.transaction`.
+- As memberships do operador são consultadas e bloqueadas com `pessimistic_read`; a membership do utilizador-alvo também é bloqueada antes de devolver os dados.
+- Se o operador não tiver memberships ou o alvo não pertencer a nenhum dos seus eventos, a resposta mantém-se `404` para não revelar a existência do utilizador.
+- Superadmin mantém o acesso sem membership.
+- Foram acrescentados testes para memberships bloqueadas, ausência de memberships e bypass de superadmin.
+
+**Limites**
+- Esta alteração cobre a leitura directa `findOne`. `findAll` e `findByAccessCode` continuam a merecer auditoria transaccional própria; não são marcados como resolvidos neste batch.
+- A transacção garante a estabilidade da autorização apenas durante esta leitura. Operações de escrita subsequentes têm de validar e bloquear a membership dentro da sua própria transacção.
+
+**Validação**
+- A validar pela CI após integração. Não foi executado deploy de produção.
+
+---
+
 ## 2026-11-19 — Relatórios: leitura de movimentos com autorização transaccional
 
 **Objectivo**

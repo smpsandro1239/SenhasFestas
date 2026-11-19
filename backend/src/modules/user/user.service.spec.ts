@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { UserService } from './user.service';
+import { EventUserEntity, UserEntity } from '../../entities';
 
 const mockUserRepository = {
   find: vi.fn(),
@@ -16,6 +17,15 @@ const mockEventUserRepository = {
 
 const mockMembershipService = {
   eventIdsFor: vi.fn(),
+};
+
+const mockManager = {
+  find: vi.fn(),
+  findOne: vi.fn(),
+};
+
+const mockDataSource = {
+  transaction: vi.fn(async (callback: (manager: typeof mockManager) => unknown) => callback(mockManager)),
 };
 
 const UTILIZADOR_PUBLICO = {
@@ -35,6 +45,7 @@ describe('UserService', () => {
       mockUserRepository as any,
       mockEventUserRepository as any,
       mockMembershipService as any,
+      mockDataSource as any,
     );
   });
 
@@ -113,6 +124,59 @@ describe('UserService', () => {
       await expect(service.findByAccessCode('123456')).resolves.toEqual(UTILIZADOR_PUBLICO);
       const select = mockUserRepository.findOne.mock.calls[0][0].select;
       expect(select.accessCode).toBe(true);
+    });
+  });
+
+  describe('findOne — autorização transaccional', () => {
+    it('mantém bloqueadas as memberships do operador e do utilizador durante a leitura', async () => {
+      mockManager.find.mockResolvedValue([{ event: { id: 'evt1' } }]);
+      mockManager.findOne
+        .mockResolvedValueOnce(UTILIZADOR_PUBLICO)
+        .mockResolvedValueOnce({ id: 'membership-target' });
+
+      await expect(
+        service.findOne('u1', { id: 'staff', role: 'cashier' }),
+      ).resolves.toEqual(UTILIZADOR_PUBLICO);
+
+      expect(mockManager.find).toHaveBeenCalledWith(
+        EventUserEntity,
+        expect.objectContaining({
+          where: { user: { id: 'staff' } },
+          lock: { mode: 'pessimistic_read' },
+        }),
+      );
+      expect(mockManager.findOne).toHaveBeenNthCalledWith(
+        2,
+        EventUserEntity,
+        expect.objectContaining({
+          where: { event: { id: expect.anything() }, user: { id: 'u1' } },
+          lock: { mode: 'pessimistic_read' },
+        }),
+      );
+      expect(mockDataSource.transaction).toHaveBeenCalledOnce();
+    });
+
+    it('não devolve o utilizador quando o operador já não tem memberships', async () => {
+      mockManager.find.mockResolvedValue([]);
+      mockManager.findOne.mockResolvedValue(UTILIZADOR_PUBLICO);
+
+      await expect(
+        service.findOne('u1', { id: 'staff', role: 'cashier' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(mockManager.findOne).toHaveBeenCalledOnce();
+    });
+
+    it('permite superadmin sem consultar memberships', async () => {
+      mockManager.findOne.mockResolvedValue(UTILIZADOR_PUBLICO);
+
+      await expect(
+        service.findOne('u1', { id: 'root', role: 'superadmin' }),
+      ).resolves.toEqual(UTILIZADOR_PUBLICO);
+      expect(mockManager.find).not.toHaveBeenCalled();
+      expect(mockManager.findOne).toHaveBeenCalledWith(
+        UserEntity,
+        expect.objectContaining({ where: { id: 'u1' } }),
+      );
     });
   });
 
