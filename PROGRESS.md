@@ -1,3 +1,23 @@
+## 2026-11-19 — T44: alinhar testes legados à autorização transaccional
+
+**Resultado da primeira CI do commit `0bd3ca7`**
+- Lint backend passou.
+- Frontend (lint, typecheck, Vitest e build) passou.
+- Documentação passou.
+- Backend Vitest: 631/636 passaram; 5 falhas concentradas no spec do catálogo.
+- As falhas eram expectativas/mocks desactualizados: dois testes de auditoria passavam actor vazio; os restantes cenários de isolamento ainda simulavam `MembershipService.assertMember` em vez da leitura bloqueada da membership pelo `EntityManager`.
+
+**Correcção**
+- Os testes de auditoria usam agora um actor autenticado.
+- Os cenários cross-event simulam a ausência da membership no `EntityManager` transaccional e verificam o lock `pessimistic_read`.
+- O teste de duplicação de produto de outro evento verifica a mesma autorização transaccional.
+
+**Validação**
+- Correcção preparada para nova CI; ainda não validada.
+- O build backend e os E2E foram ignorados pela falha anterior nos testes unitários.
+
+---
+
 ## 2026-11-19 — T44: autorização transaccional nas mutações restantes do catálogo
 
 **Problema confirmado**

@@ -548,7 +548,9 @@ describe('CatalogService', () => {
     });
 
     it('não duplica um produto de outro evento', async () => {
-      mockMembershipService.assertMember.mockRejectedValue(new ForbiddenException());
+      mockTransactionManager.findOne.mockImplementation(async (entity: any) =>
+        entity?.name === 'EventUserEntity' ? null : { id: 'p1', ...FONTE },
+      );
 
       await expect(service.duplicate('p1', MEMBRO)).rejects.toThrow(ForbiddenException);
       expect(mockProductRepository.create).not.toHaveBeenCalled();
@@ -804,7 +806,7 @@ describe('CatalogService', () => {
       mockProductRepository.save.mockImplementation(async (data: any) => data);
       const arquivar = vi.fn();
 
-      await service.update('p1', {} as any, { price: 4 } as any, arquivar);
+      await service.update('p1', MEMBRO, { price: 4 } as any, arquivar);
 
       expect(arquivar).toHaveBeenCalledWith({
         antes: { id: 'p1', name: 'Bifana', price: 3.5 },
@@ -818,7 +820,7 @@ describe('CatalogService', () => {
       mockProductRepository.softDelete.mockResolvedValue({ affected: 1 });
       const arquivar = vi.fn();
 
-      await service.softRemove('p1', {} as any, arquivar);
+      await service.softRemove('p1', MEMBRO, arquivar);
 
       expect(arquivar).toHaveBeenCalledWith({
         antes: { id: 'p1', name: 'Bifana' },
@@ -947,24 +949,36 @@ describe('CatalogService', () => {
 
     it('rejeita atualizar produto de um evento fora do scope do ator', async () => {
       mockProductRepository.findOne.mockResolvedValue({ id: 'produtoY', event: { id: 'eventoY' } });
-      mockMembershipService.assertMember.mockRejectedValue(
-        new ForbiddenException('Não pertence a este evento'),
+      mockTransactionManager.findOne.mockImplementation(async (entity: any) =>
+        entity?.name === 'EventUserEntity' ? null : { id: 'produtoY', event: { id: 'eventoY' } },
       );
       await expect(
         service.update('produtoY', ORGANIZADOR_X, { price: 1 } as any),
       ).rejects.toBeInstanceOf(ForbiddenException);
-      expect(mockMembershipService.assertMember).toHaveBeenCalledWith(ORGANIZADOR_X, 'eventoY');
+      expect(mockTransactionManager.findOne).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          where: { event: { id: 'eventoY' }, user: { id: ORGANIZADOR_X.id } },
+          lock: { mode: 'pessimistic_read' },
+        }),
+      );
     });
 
     it('rejeita eliminar produto de um evento fora do scope do ator', async () => {
       mockProductRepository.findOne.mockResolvedValue({ id: 'produtoY', event: { id: 'eventoY' } });
-      mockMembershipService.assertMember.mockRejectedValue(
-        new ForbiddenException('Não pertence a este evento'),
+      mockTransactionManager.findOne.mockImplementation(async (entity: any) =>
+        entity?.name === 'EventUserEntity' ? null : { id: 'produtoY', event: { id: 'eventoY' } },
       );
       await expect(service.softRemove('produtoY', ORGANIZADOR_X)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
-      expect(mockMembershipService.assertMember).toHaveBeenCalledWith(ORGANIZADOR_X, 'eventoY');
+      expect(mockTransactionManager.findOne).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          where: { event: { id: 'eventoY' }, user: { id: ORGANIZADOR_X.id } },
+          lock: { mode: 'pessimistic_read' },
+        }),
+      );
     });
 
     it('sugestões sem eventId ficam limitadas ao evento do produto alvo (fallback de categoria)', async () => {
