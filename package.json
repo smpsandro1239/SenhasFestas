@@ -34,7 +34,7 @@
   "devDependencies": {
     "@isaacs/nonrecursive-glob-match": "^1.1.0",
     "concurrently": "^8.2.2",
-    "eslint": "^9.39.2",
+    "eslint": "^10.15.0",
     "ts-node": "~10.9.2",
     "typescript": "~6.0.3"
   },
