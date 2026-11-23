@@ -53,7 +53,7 @@ jobs:
           node -e "const r=require('./npm-audit-report.json'); console.log(JSON.stringify(r.metadata?.vulnerabilities || {}, null, 2))"
       - name: Upload lockfile and audit report for review
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: security-dependency-remediation
           path: |
